@@ -2,6 +2,11 @@ import fs from 'fs';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync, getAccount, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 
+// Connection pool singleton
+const connectionPool = new Map(); // url -> connection instance
+const CONNECTION_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+const connectionMetadata = new Map(); // url -> { createdAt, lastUsed }
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -61,30 +66,57 @@ async function withRetry(
   throw last;
 }
 
+function getPooledConnection(url) {
+  const now = Date.now();
+  
+  // Check if we have a connection and it's not stale
+  if (connectionPool.has(url)) {
+    const meta = connectionMetadata.get(url);
+    if (meta && (now - meta.createdAt) < CONNECTION_MAX_AGE_MS) {
+      meta.lastUsed = now;
+      return connectionPool.get(url);
+    }
+    // Connection is stale, remove it
+    connectionPool.delete(url);
+    connectionMetadata.delete(url);
+  }
+  
+  // Create new connection
+  const conn = new Connection(url, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60_000,
+    disableRetryOnRateLimit: true,
+    httpHeaders: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  connectionPool.set(url, conn);
+  connectionMetadata.set(url, { createdAt: now, lastUsed: now });
+  
+  return conn;
+}
+
 export function makeConnection(rpcUrl) {
   // If rpcUrl is a comma-separated list, treat as failover chain.
   const urls = String(rpcUrl || '').split(',').map(s => s.trim()).filter(Boolean);
   if (!urls.length) throw new Error('No RPC url provided');
 
-  // Create a connection wrapper that attempts URLs in order until one succeeds.
-  let conn = null;
-  for (const u of urls) {
-    try {
-      conn = new Connection(u, {
-        commitment: 'confirmed',
-        confirmTransactionInitialTimeout: 60_000,
-        disableRetryOnRateLimit: true,
-      });
-      // Quick health check: don't await network calls here; just return the connection
-      // and rely on withRetry wrapper to handle failures and trigger failover higher up.
-      return conn;
-    } catch (e) {
-      // Try next
+  // Return pooled connection for the first URL
+  // Failover logic should be handled at higher level by retrying with different URLs
+  return getPooledConnection(urls[0]);
+}
+
+// Cleanup stale connections periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [url, meta] of connectionMetadata.entries()) {
+    if (now - meta.lastUsed > CONNECTION_MAX_AGE_MS) {
+      connectionPool.delete(url);
+      connectionMetadata.delete(url);
     }
   }
-  // Fallback: return connection to first URL (will error later)
-  return new Connection(urls[0], { commitment: 'confirmed', disableRetryOnRateLimit: true });
-}
+}, 10 * 60 * 1000).unref(); // Cleanup every 10 minutes
 
 export async function getSolBalanceLamports(conn, owner) {
   return await withRetry(

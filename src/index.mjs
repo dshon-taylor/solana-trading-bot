@@ -48,6 +48,25 @@ import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const wsmgr = require('../../src/services/wsSubscriptionManager.js');
+
+// Global timer registry for proper cleanup
+const globalTimers = {
+  birdeyeWsPoll: null,
+  scanLoop: null,
+  positionsLoop: null,
+  heartbeatLoop: null,
+  telegramPoll: null,
+  watchlistCleanup: null,
+};
+
+function clearAllTimers() {
+  for (const [name, timer] of Object.entries(globalTimers)) {
+    if (timer) {
+      clearInterval(timer);
+      globalTimers[name] = null;
+    }
+  }
+}
 // bind clients/listeners exactly once (prevents duplicate handlers on reconnect/restart cycles)
 if (!globalThis.__WSMGR_BOUND__) {
   wsmgr.bindClients({ wsClient: birdEyeWs, restClient: { fetchSnapshot: snapshotFromBirdseye } });
@@ -73,8 +92,8 @@ if (!globalThis.__WSMGR_SUB_EVENTS_BOUND__) {
   globalThis.__WSMGR_SUB_EVENTS_BOUND__ = true;
 }
 
-if (!globalThis.__BIRDEYE_WS_POLL_TIMER__) {
-  globalThis.__BIRDEYE_WS_POLL_TIMER__ = setInterval(() => {
+if (!globalTimers.birdeyeWsPoll) {
+  globalTimers.birdeyeWsPoll = setInterval(() => {
     try {
       const subs = Array.from(birdEyeWs.subscribed || []);
       const now = Date.now();
@@ -2910,23 +2929,11 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     row.lastTriggerHitAtMs = nowMs;
     row.staleCycles = 0;
 
+    // Parallelize independent API calls (rugcheck + mcap computation)
     let report = null;
-    if (cfg.RUGCHECK_ENABLED) {
-      try {
-        report = await getRugcheckReport(mint);
-        const safe = isTokenSafe(report);
-        if (!safe.ok) {
-          if (fail('rugUnsafe', { stage: 'safety', cooldownMs: Math.min(cfg.WATCHLIST_MINT_TTL_MS, 5 * 60_000) }) === 'break') break;
-          continue;
-        }
-      } catch {
-        if (fail('rugcheckFetch', { stage: 'safety' }) === 'break') break;
-        continue;
-      }
-    }
-
     let mcap = { ok: true, reason: 'skipped', mcapUsd: null, decimals: null };
     let mcapComputed = { ok: false, reason: 'not_attempted', mcapUsd: null, decimals: null };
+    
     const mcapCandidates = [
       { source: 'row.latest.mcapUsd', value: Number(row?.latest?.mcapUsd ?? 0) || 0 },
       { source: 'snapshot.marketCapUsd', value: Number(snapshot?.marketCapUsd ?? 0) || 0 },
@@ -2943,17 +2950,51 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       }
     }
 
-    if ((cfg.MCAP_FILTER_ENABLED || cfg.LIQ_RATIO_FILTER_ENABLED) && !(mcapForFilters > 0)) {
-      try {
-        mcapComputed = await computeMcapUsd(cfg, pair, cfg.SOLANA_RPC_URL);
-        mcap = mcapComputed;
-      } catch {
-        if (fail('mcapFetch', { stage: 'filters' }) === 'break') break;
+    const needsMcapComputation = (cfg.MCAP_FILTER_ENABLED || cfg.LIQ_RATIO_FILTER_ENABLED) && !(mcapForFilters > 0);
+    
+    // Run rugcheck and mcap computation in parallel
+    const parallelResults = await Promise.allSettled([
+      cfg.RUGCHECK_ENABLED ? getRugcheckReport(mint).catch(err => ({ _error: err })) : Promise.resolve(null),
+      needsMcapComputation ? computeMcapUsd(cfg, pair, cfg.SOLANA_RPC_URL).catch(err => ({ ok: false, reason: 'error', _error: err })) : Promise.resolve({ ok: false, reason: 'not_needed' })
+    ]);
+    
+    // Process rugcheck result
+    if (cfg.RUGCHECK_ENABLED) {
+      if (parallelResults[0].status === 'fulfilled') {
+        report = parallelResults[0].value;
+        if (report && !report._error) {
+          const safe = isTokenSafe(report);
+          if (!safe.ok) {
+            if (fail('rugUnsafe', { stage: 'safety', cooldownMs: Math.min(cfg.WATCHLIST_MINT_TTL_MS, 5 * 60_000) }) === 'break') break;
+            continue;
+          }
+        } else {
+          if (fail('rugcheckFetch', { stage: 'safety' }) === 'break') break;
+          continue;
+        }
+      } else {
+        if (fail('rugcheckFetch', { stage: 'safety' }) === 'break') break;
         continue;
       }
-      if (mcapComputed.ok && Number(mcapComputed.mcapUsd || 0) > 0) {
-        mcapForFilters = Number(mcapComputed.mcapUsd);
-        preConfirmMcapSourceUsed = 'computeMcapUsd';
+    }
+    
+    // Process mcap result
+    if (needsMcapComputation) {
+      if (parallelResults[1].status === 'fulfilled') {
+        mcapComputed = parallelResults[1].value;
+        if (!mcapComputed._error) {
+          mcap = mcapComputed;
+          if (mcapComputed.ok && Number(mcapComputed.mcapUsd || 0) > 0) {
+            mcapForFilters = Number(mcapComputed.mcapUsd);
+            preConfirmMcapSourceUsed = 'computeMcapUsd';
+          }
+        } else {
+          if (fail('mcapFetch', { stage: 'filters' }) === 'break') break;
+          continue;
+        }
+      } else {
+        if (fail('mcapFetch', { stage: 'filters' }) === 'break') break;
+        continue;
       }
     }
 
@@ -4228,6 +4269,23 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
     entryPriceSource: Number.isFinite(Number(liveEntryPriceUsd)) && Number(liveEntryPriceUsd) > 0 ? 'jupiter_fill' : (resolved.priceSource || null),
   };
 
+  // Persist trade entry to TimescaleDB
+  if (process.env.TIMESCALE_ENABLED === 'true') {
+    import('./timeseries_db.mjs').then(({ insertTradeEntry }) => {
+      insertTradeEntry({
+        timestamp: now,
+        mint,
+        entryPriceUsd,
+        sizeUsd: usdTarget,
+        signature: res?.signature || null,
+        momentumScore: signal?.score || null,
+        liquidityUsd: liqUsdAtEntry || null,
+        source: 'live',
+        metadata: { symbol, mcapUsdAtEntry, signalBuyDominance }
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
   // Ensure BirdEye WS remains subscribed to active positions for live updates
   try {
     cache.set(`birdeye:sub:${mint}`, true, Math.ceil((cfg.BIRDEYE_LITE_CACHE_TTL_MS || 45000)/1000));
@@ -4812,20 +4870,22 @@ async function main() {
   });
 
   // detect stale live mints and trigger restResync once-per-incident
-  setInterval(async ()=>{
-    try{
-      const now = Date.now();
-      let anyStale=false;
-      for(const [mint,pos] of wsmgr.live.entries()){
-        const d = wsmgr.diag[mint] || {};
-        const last = Number(d.last_ws_ts || 0);
-        if(last && (now - last) > (wsmgr.staleMs||1200)){
-          anyStale = true; break;
+  if (!globalTimers.watchlistCleanup) {
+    globalTimers.watchlistCleanup = setInterval(async ()=>{
+      try{
+        const now = Date.now();
+        let anyStale=false;
+        for(const [mint,pos] of wsmgr.live.entries()){
+          const d = wsmgr.diag[mint] || {};
+          const last = Number(d.last_ws_ts || 0);
+          if(last && (now - last) > (wsmgr.staleMs||1200)){
+            anyStale = true; break;
+          }
         }
-      }
-      if(anyStale){ await wsmgr.restResync(); }
-    }catch(e){}
-  }, Math.max(300, Number(process.env.BIRDEYE_WS_STALE_POLL_MS||500)));
+        if(anyStale){ await wsmgr.restResync(); }
+      }catch(e){}
+    }, Math.max(300, Number(process.env.BIRDEYE_WS_STALE_POLL_MS||500)));
+  }
 
   state.positions ||= {};
   state.portfolio ||= { maxEquityUsd: cfg.STARTING_CAPITAL_USDC };
@@ -5204,12 +5264,15 @@ async function main() {
 
   // Timer-based safety net: ensures stops/trailing enforcement continues even when scan loop is slow.
   const _posTimerEveryMs = Math.max(500, Math.min(2_000, Math.floor(cfg.POSITIONS_EVERY_MS / 4) || 1_000));
-  setInterval(() => {
-    const nowMs = Date.now();
-    if (nowMs - lastPos >= cfg.POSITIONS_EVERY_MS) {
-      runPositionsLoop(nowMs).catch(() => {});
-    }
-  }, _posTimerEveryMs).unref?.();
+  if (!globalTimers.positionsLoop) {
+    globalTimers.positionsLoop = setInterval(() => {
+      const nowMs = Date.now();
+      if (nowMs - lastPos >= cfg.POSITIONS_EVERY_MS) {
+        runPositionsLoop(nowMs).catch(() => {});
+      }
+    }, _posTimerEveryMs);
+    if (globalTimers.positionsLoop.unref) globalTimers.positionsLoop.unref();
+  }
 
   // Lightweight in-memory /diag snapshot cache (keeps command path fast during heavy scans).
   const DIAG_SNAPSHOT_EVERY_MS = Math.max(1_000, Number(process.env.DIAG_SNAPSHOT_EVERY_MS || 5_000));
@@ -6569,23 +6632,26 @@ async function main() {
   refreshDiagSnapshot(Date.now());
 
   // Periodic observability summary (every 5 minutes)
-  setInterval(() => {
-    try {
-      const entriesMinute = (counters.watchlist && counters.watchlist.funnelMinute) ? counters.watchlist.funnelMinute.watchlistSeen : (counters.scanned || 0);
-      const entriesHourEstimate = entriesMinute * 60;
-      const queueSize = Number(state.exposure?.queue?.length || 0);
-      const snapshotFailures = Number(state.marketData?.providers?.birdeye?.rejects || 0) + Number(state.marketData?.providers?.dexscreener?.rejects || 0) + Number(state.marketData?.providers?.jupiter?.rejects || 0);
-      const cuStats = (birdseye && typeof birdseye.getStats === 'function') ? birdseye.getStats(Date.now()) : null;
-      const cuEstimate = cuStats ? Number(cuStats.projectedDailyCu || 0) : null;
-      const regimeExposure = state.exposure?.activeRunnerCount || 0;
-      const msg = `OBSERVABILITY ─ entries/hour≈${entriesHourEstimate} queueSize=${queueSize} snapshotFailures=${snapshotFailures} projectedDailyCu=${cuEstimate || 'n/a'} activeRunners=${regimeExposure}`;
-      console.log(msg);
-      pushDebug(state, { t: nowIso(), reason: 'observability', msg, counters: { entriesMinute, queueSize, snapshotFailures, cuEstimate, regimeExposure } });
-      saveState(cfg.STATE_PATH, state);
-    } catch (e) {
-      console.warn('[observability] failed', e?.message || e);
-    }
-  }, 5 * 60_000).unref?.();
+  if (!globalTimers.heartbeatLoop) {
+    globalTimers.heartbeatLoop = setInterval(() => {
+      try {
+        const entriesMinute = (counters.watchlist && counters.watchlist.funnelMinute) ? counters.watchlist.funnelMinute.watchlistSeen : (counters.scanned || 0);
+        const entriesHourEstimate = entriesMinute * 60;
+        const queueSize = Number(state.exposure?.queue?.length || 0);
+        const snapshotFailures = Number(state.marketData?.providers?.birdeye?.rejects || 0) + Number(state.marketData?.providers?.dexscreener?.rejects || 0) + Number(state.marketData?.providers?.jupiter?.rejects || 0);
+        const cuStats = (birdseye && typeof birdseye.getStats === 'function') ? birdseye.getStats(Date.now()) : null;
+        const cuEstimate = cuStats ? Number(cuStats.projectedDailyCu || 0) : null;
+        const regimeExposure = state.exposure?.activeRunnerCount || 0;
+        const msg = `OBSERVABILITY ─ entries/hour≈${entriesHourEstimate} queueSize=${queueSize} snapshotFailures=${snapshotFailures} projectedDailyCu=${cuEstimate || 'n/a'} activeRunners=${regimeExposure}`;
+        console.log(msg);
+        pushDebug(state, { t: nowIso(), reason: 'observability', msg, counters: { entriesMinute, queueSize, snapshotFailures, cuEstimate, regimeExposure } });
+        saveState(cfg.STATE_PATH, state);
+      } catch (e) {
+        console.warn('[observability] failed', e?.message || e);
+      }
+    }, 5 * 60_000);
+    if (globalTimers.heartbeatLoop.unref) globalTimers.heartbeatLoop.unref();
+  }
 
   // Cached spend summaries to keep /spend off the hot loop path.
   const SPEND_CACHE_TTL_MS = Math.max(60_000, Number(process.env.SPEND_CACHE_TTL_MS || 5 * 60_000));
@@ -6669,10 +6735,12 @@ async function main() {
     if (_shuttingDown) return;
     _shuttingDown = true;
     console.warn('[shutdown] signal=' + signal);
+    try { clearAllTimers(); } catch {}
     try { saveState(cfg.STATE_PATH, state); } catch {}
     try { streamingProvider?.stop?.(); } catch {}
     try { birdEyeWs?.stop?.(); } catch {}
     try { healthServer?.close(); } catch {}
+    try { const { closeTimescaleDB } = await import('./timeseries_db.mjs'); await closeTimescaleDB(); } catch {}
     // Allow a brief tick for any in-flight I/O, then exit.
     setTimeout(() => process.exit(0), 250).unref();
   }
@@ -6697,6 +6765,17 @@ async function main() {
   state.flags ||= {};
   state.filterOverrides ||= state.filterOverrides || null;
   state.modelOverrides ||= state.modelOverrides || null;
+
+  // Initialize TimescaleDB for historical data persistence
+  if (process.env.TIMESCALE_ENABLED === 'true') {
+    import('./timeseries_db.mjs').then(({ initializeTimescaleDB }) => {
+      initializeTimescaleDB().catch(err => {
+        console.warn('[TimescaleDB] Failed to initialize (bot will continue without it):', err.message);
+      });
+    }).catch(err => {
+      console.warn('[TimescaleDB] Import failed:', err.message);
+    });
+  }
 
   let lastRpcAlertAt = 0;
   let lastLowSolAlertAt = 0;
@@ -9551,12 +9630,13 @@ function pruneRuntimeMaps() {
   }
 }
 
-setInterval(() => {
-  const m = process.memoryUsage();
+if (!globalTimers.memoryMonitor) {
+  globalTimers.memoryMonitor = setInterval(() => {
+    const m = process.memoryUsage();
 
-  console.log("[memory]", {
-    rss_mb: Math.round(m.rss / 1024 / 1024),
-    heap_used_mb: Math.round(m.heapUsed / 1024 / 1024),
+    console.log("[memory]", {
+      rss_mb: Math.round(m.rss / 1024 / 1024),
+      heap_used_mb: Math.round(m.heapUsed / 1024 / 1024),
     heap_total_mb: Math.round(m.heapTotal / 1024 / 1024),
     external_mb: Math.round(m.external / 1024 / 1024),
   });
@@ -9582,4 +9662,5 @@ setInterval(() => {
   } catch (e) {
     console.log("[mem-debug] failed", e?.message || e);
   }
-}, 60000);
+  }, 60000);
+}
