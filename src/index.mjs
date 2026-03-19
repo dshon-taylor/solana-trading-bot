@@ -75,9 +75,49 @@ if (!globalThis.__WSMGR_BOUND__) {
 
 if (!globalThis.__BIRDEYE_PRICE_HANDLER_BOUND__) {
   try {
+    // Primary event handler - processes WS price events instantly (no polling)
     birdEyeWs.on?.('price', ({ mint, price, ts, volume }) => {
-      try { wsmgr.onWsEvent(mint, { price: Number(price), ts: Number(ts) || Date.now(), volume }); } catch {}
+      try { 
+        wsmgr.onWsEvent(mint, { 
+          price: Number(price), 
+          ts: Number(ts) || Date.now(), 
+          volume 
+        }); 
+      } catch {}
     });
+    
+    // Fallback: poll cache only if WS events aren't flowing
+    // This provides redundancy if event emitter has issues
+    const FALLBACK_POLL_MS = Math.max(5000, Number(process.env.BIRDEYE_WS_FALLBACK_POLL_MS || 10000));
+    let lastEventTime = Date.now();
+    
+    // Track event flow
+    const originalOnWsEvent = wsmgr.onWsEvent;
+    wsmgr.onWsEvent = function(...args) {
+      lastEventTime = Date.now();
+      return originalOnWsEvent.apply(this, args);
+    };
+    
+    // Fallback polling (only if events stopped)
+    if (!globalTimers.birdeyeWsPoll) {
+      globalTimers.birdeyeWsPoll = setInterval(() => {
+        try {
+          const timeSinceLastEvent = Date.now() - lastEventTime;
+          // Only poll if no events received in last 5 seconds
+          if (timeSinceLastEvent < 5000) return;
+          
+          const subs = Array.from(birdEyeWs.subscribed || []);
+          const now = Date.now();
+          for (const mint of subs) {
+            const p = cache.get(`birdeye:ws:price:${mint}`) || null;
+            if (p && p.priceUsd != null) {
+              wsmgr.onWsEvent(mint, { price: Number(p.priceUsd), ts: Number(p.tsMs) || now });
+            }
+          }
+        } catch {}
+      }, FALLBACK_POLL_MS);
+    }
+    
     globalThis.__BIRDEYE_PRICE_HANDLER_BOUND__ = true;
   } catch {}
 }
@@ -90,21 +130,6 @@ if (!globalThis.__WSMGR_SUB_EVENTS_BOUND__) {
     try { cache.delete && cache.delete(`birdeye:sub:${mint}`); } catch {}
   });
   globalThis.__WSMGR_SUB_EVENTS_BOUND__ = true;
-}
-
-if (!globalTimers.birdeyeWsPoll) {
-  globalTimers.birdeyeWsPoll = setInterval(() => {
-    try {
-      const subs = Array.from(birdEyeWs.subscribed || []);
-      const now = Date.now();
-      for (const mint of subs) {
-        const p = cache.get(`birdeye:ws:price:${mint}`) || null;
-        if (p && p.priceUsd != null) {
-          wsmgr.onWsEvent(mint, { price: Number(p.priceUsd), ts: Number(p.tsMs) || now });
-        }
-      }
-    } catch {}
-  }, Math.max(100, Number(process.env.BIRDEYE_WS_POLL_MS || 150)));
 }
 
 
@@ -728,41 +753,87 @@ function watchlistEntriesSorted(state) {
 
 function watchlistEntriesPrioritized({ state, cfg, limit, nowMs }) {
   const wl = ensureWatchlistState(state);
-  const activeMints = new Set(Object.keys(wl.mints || {}));
-  const queue = (wl.hotQueue || [])
-    .filter(item => activeMints.has(item?.mint) && Number(item?.hotUntilMs || 0) > nowMs)
-    .sort((a, b) => (Number(b?.priority || 0) - Number(a?.priority || 0)) || (Number(b?.atMs || 0) - Number(a?.atMs || 0)));
+  const mints = wl.mints || {};
+  const activeMints = new Set(Object.keys(mints));
+  
+  // Single-pass filter and collect valid hot queue items with extracted numbers
+  const validHotItems = [];
+  const hotQueue = wl.hotQueue || [];
+  
+  for (let i = 0; i < hotQueue.length; i++) {
+    const item = hotQueue[i];
+    const mint = item?.mint;
+    const hotUntil = Number(item?.hotUntilMs || 0);
+    
+    if (mint && activeMints.has(mint) && hotUntil > nowMs) {
+      validHotItems.push({
+        mint,
+        priority: Number(item?.priority || 0),
+        atMs: Number(item?.atMs || 0),
+        hotUntilMs: hotUntil,
+        item
+      });
+    }
+  }
+  
+  // Sort once with pre-extracted numbers (avoids Number() calls in comparator)
+  validHotItems.sort((a, b) => {
+    const priorityDiff = b.priority - a.priority;
+    return priorityDiff !== 0 ? priorityDiff : b.atMs - a.atMs;
+  });
+  
+  // Pick from hot queue first
   const picked = [];
   const seen = new Set();
-
-  for (const item of queue) {
-    if (picked.length >= limit) break;
-    const mint = item?.mint;
-    if (!mint || seen.has(mint)) continue;
-    const row = wl.mints[mint];
+  
+  for (let i = 0; i < validHotItems.length && picked.length < limit; i++) {
+    const { mint } = validHotItems[i];
+    if (seen.has(mint)) continue;
+    
+    const row = mints[mint];
     if (!row) continue;
+    
     picked.push([mint, row, true]);
     seen.add(mint);
   }
-
+  
+  // Fill remaining with non-hot mints if needed
   if (picked.length < limit) {
-    for (const [mint, row] of watchlistEntriesSorted(state)) {
-      if (picked.length >= limit) break;
+    const mintsWithTime = [];
+    
+    for (const mint in mints) {
       if (seen.has(mint)) continue;
+      const row = mints[mint];
+      mintsWithTime.push({
+        mint,
+        row,
+        time: Number(row?.lastEvaluatedAtMs || 0)
+      });
+    }
+    
+    // Sort by evaluation time (oldest first)
+    mintsWithTime.sort((a, b) => a.time - b.time);
+    
+    for (let i = 0; i < mintsWithTime.length && picked.length < limit; i++) {
+      const { mint, row } = mintsWithTime[i];
       picked.push([mint, row, false]);
       seen.add(mint);
     }
   }
-
-  wl.hotQueue = queue
-    .filter(item => {
-      const mint = item?.mint;
-      if (!mint || !activeMints.has(mint)) return false;
-      if (seen.has(mint)) return false;
-      return Number(item?.hotUntilMs || 0) > nowMs;
-    })
-    .slice(0, watchlistHotQueueMax(cfg));
-
+  
+  // Rebuild hotQueue efficiently - filter items not yet seen
+  const maxHotQueue = watchlistHotQueueMax(cfg);
+  const newHotQueue = [];
+  
+  for (let i = 0; i < validHotItems.length && newHotQueue.length < maxHotQueue; i++) {
+    const { mint, item } = validHotItems[i];
+    if (!seen.has(mint)) {
+      newHotQueue.push(item);
+    }
+  }
+  
+  wl.hotQueue = newHotQueue;
+  
   return picked;
 }
 
