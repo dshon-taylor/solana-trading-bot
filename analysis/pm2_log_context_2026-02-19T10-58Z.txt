@@ -1,0 +1,48 @@
+### ~/.pm2/pm2.log context around 2026-02-19T02:05
+   840	2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+   841	2026-02-18T03:50:57: PM2 log: pid=662580 msg=process killed
+   842	2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+   843	2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] online
+   844	2026-02-18T03:52:31: PM2 log: Stopping app:solana-momentum-bot id:0
+   845	2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+   846	2026-02-18T03:52:31: PM2 log: pid=663531 msg=process killed
+   847	2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+   848	2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] online
+   849	2026-02-18T03:54:29: PM2 log: Stopping app:solana-momentum-bot id:0
+   850	2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+   851	2026-02-18T03:54:29: PM2 log: pid=663634 msg=process killed
+   852	2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+   853	2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] online
+   854	2026-02-18T04:12:14: PM2 log: Process 0 in a stopped status, starting it
+   855	2026-02-18T04:12:14: PM2 log: Stopping app:solana-momentum-bot id:0
+   856	2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+   857	2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+   858	2026-02-18T04:12:14: PM2 log: pid=664187 msg=process killed
+   859	2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+   860	2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] online
+   861	2026-02-18T04:12:54: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+   862	2026-02-19T02:05:38: PM2 log: Stopping app:solana-momentum-bot id:0
+   863	2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+   864	2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+   865	2026-02-19T02:05:38: PM2 log: pid=665263 msg=process killed
+   866	2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+   867	2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] online
+   868	2026-02-19T02:06:25: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+
+### grep 2026-02-19T02:05
+862:2026-02-19T02:05:38: PM2 log: Stopping app:solana-momentum-bot id:0
+863:2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+864:2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+865:2026-02-19T02:05:38: PM2 log: pid=665263 msg=process killed
+866:2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+867:2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] online
+
+### grep 2026-02-15T02:05
+532:2026-02-15T02:05:10: PM2 log: Stopping app:solana-momentum-bot id:0
+533:2026-02-15T02:05:10: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+534:2026-02-15T02:05:10: PM2 log: pid=372935 msg=process killed
+535:2026-02-15T02:05:10: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+536:2026-02-15T02:05:10: PM2 log: App [solana-momentum-bot:0] online
+537:2026-02-15T02:05:20: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+538:2026-02-15T02:05:25: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+539:2026-02-15T02:05:25: PM2 log: App [solana-momentum-bot:0] online

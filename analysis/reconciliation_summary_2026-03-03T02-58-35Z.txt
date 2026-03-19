@@ -1,0 +1,3 @@
+onchain-reconcile-subagent-2 run at 2026-03-03T02:58:35+00:00
+- reconciled trades: 0
+- progress log: trading-bot/analysis/reconcile_progress.log

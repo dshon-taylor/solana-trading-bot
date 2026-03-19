@@ -1,0 +1,270 @@
+{
+  "generatedAt": "2026-03-03T19:49:29.788Z",
+  "windowStart": "2026-03-02T19:49:29.787Z",
+  "totalEntriesLast24h": 29,
+  "withMcap": 0,
+  "missingMcap": 29,
+  "rows": [
+    {
+      "mint": "912bDe1V8kHkTJrZy26Q5zEQXpuXHbZPQXZ9bv4Mpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:23:58.976Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "5oNg9crcdPjKk9ueBS72PHD7iMMBUHreeQ2pVwDvuJmoGuJz3uT5t5yPCZAaReheYgPzgTR1FDcsP25bWv2HhQ1d"
+    },
+    {
+      "mint": "tQ9sGjymCyBnFt2CPPnMwNEo8faKU8oYQires92pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:27:05.185Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "2aWVtVDoNyBCLn3ccEf98DAEvYenpotvdcUq8wrxuqgzKiG6avLCfx8mXM83bVbvqprgsqJshaKEyiCWz1sUqho9"
+    },
+    {
+      "mint": "kLf5mp1wpHfJPhHxgM1DEDwJherwWrz91txmQagpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:30:10.052Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "SsBihXn1o51uEiZqHNcmWXK94X2urNbHwPYh17K5oWEkgRWBF8WtRn8VXAcUjRR4x2DoiFNV2S79YX5AuJiWg2N"
+    },
+    {
+      "mint": "GezzbAEccVfnQ1du7WDUcDrh6DTFG86EzvLWPV52pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:30:43.357Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "3qXmhgoKqHoVaFEAgJ9CbUBsgMogt7chvaSKxXDZ2BieWRg1vLLF4Bs9qXJD3FNJdjLYvmtca9ysnehubKP2pECL"
+    },
+    {
+      "mint": "HPDxt29MdHhSrSeeXBLjFh2nZQ8F431fTQheywLapump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:41:30.413Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "fxhWR9MiUB5B8TCHcyb15DkZrU5vkStGk99mmweQX1wuakqAJnAb8E3X5FnoWsvCLzJemw6cgNQqDiEo6Nsvkhb"
+    },
+    {
+      "mint": "2vkqXbHXaCMDR5N7n6khT8oBVn9ifvHXhvTM4bKFpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:46:05.862Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "2e1ERgQ7RVkqdemaXULjLFCjEGtUCqGXXi5nyLhoYrLswKQHWbJjF4uYNfrxbLQHAmuZwHUhsMRmj4udPfXy8hsu"
+    },
+    {
+      "mint": "H74CYmXgMkYHYuSRsZt6RJb4NYp2u72Vw8BS5huApump",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:46:09.015Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "32JqnQWiXHDoBmxxHVMw5yiYtFd5Sq9hJ9q9Ly9eiZHbBYkpw4f88BGC5igv4vR6ysJBdk3PBvhbsYakRfv3ZGrP"
+    },
+    {
+      "mint": "D67BSPqECWv8GEozzFT4KCMtT9aFkswK5fC3oeBBbonk",
+      "symbol": null,
+      "entryAt": "2026-03-03T17:49:00.708Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "4ikLJaQ26vZqhmzJpz9KBvn3MSXx1JH8xmGGTHUmQoxXkn2bXE2DaF43mYeJshojdt2Y13AxfEvEsF1kfmobSemR"
+    },
+    {
+      "mint": "4c1HzBShCHc1EckQTVXZZ5feDCgkDweaw3t3JQQqpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:07:05.443Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "3S7GzQghNHUeoN24Sa2fWyKbajNwr79fU2RxGvZftBrT4MpYiMeVKQvUJtwunYAHsR1SweQjwfa4kdxiNppqSZcG"
+    },
+    {
+      "mint": "AffGxvoEmVHx3hRpsZUVwqikjVxaEx27ThVo9Vehpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:13:48.025Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "3ra4i3JmpuS1XTrZJFrifmpkcyuTaS3F9RPqZMiC7y6PMiw8VmCS8Aj8p26BMiS9gvRBwp1YPeuG14UzzJKYin2W"
+    },
+    {
+      "mint": "8jiVXftnn2ZG6bugK7HAH5j2G3D6TpsG521gqsWwpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:16:15.072Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "2U44kggJXyyTKhKWDR5uYFqXVyvr8u5brCfHJ2jo9jobi8xNgUYYVVXkGD6LBeSmomZQ5HjmamaYjH9PwEYG9jUu"
+    },
+    {
+      "mint": "24ZrsDdsQTbtLq8YMzn3s97seu6HU5odWAmevuE4pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:19:21.412Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "5KtwnEjuMaJFfXkja8RmFfAQeYRGz66BdYLAovy5gU79kb9U2Mv6ZQWkxxzAQRRBaJVX7sjzb1pptHhRCg3cgk21"
+    },
+    {
+      "mint": "9oxGicd5KXNcthYM6yD23X9zcznQVnHjrAEN38fFpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:22:20.285Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "3qhcyZT9W81WEtvLAG9we754JUSEdY8zKBZWjrT92T5GAQJ6tsd99QtGmE5QHUGgDgEvQoYABeshPz9m735vYzDY"
+    },
+    {
+      "mint": "EKwF2HD6X4rHHr4322EJeK9QBGkqhpHZQSanSUmWkecG",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:22:29.142Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "5aVGgrBuntnX5knPxPWGFnuwM9dHmmL77kKxTA63GgpHJExsUx96RAmeiDs5Vvrs2aqFvEaB8uDhFGTrX6sJoU7c"
+    },
+    {
+      "mint": "68BP5NewaavQSTDYbtgxq6o4XtMikXHw2CinKoU3pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:25:43.251Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "n3wsgEEkwqeWUbXYnzB2V1jM5KfJ86hz884CSYJRpp6Kznr7FKj7EWgp6MGkZjNLkKDDhPMbGFz5BW5jbDt3ZJr"
+    },
+    {
+      "mint": "HwATAjwv3DmZQ4aBoJp5ksBpQqfYb7R98GDhpbELpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:31:11.734Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "53xbZWFQvWj3kSpYGbyP3vsaXuiemo4AorNowCTwpSXmpXBsq9tPiVfHnt1ZoKCVcMXNr31thzR7qNpVvP7EGuDQ"
+    },
+    {
+      "mint": "EmmE4vNbe4MH8UxRPpMMax2HgfsZUcuMu5utern7pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:31:18.631Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "27ESzAFiQQk6AWde33Ew4eLzeEudKwL9YUu6iF9GKJmi8ipiSWDfWLEFSAbxCYAFGGLFE5YH968FGXKxRmhVTmTd"
+    },
+    {
+      "mint": "DTozGGgjDH5oosWcS9jxH6tnAedDP9gY12uqEeW2pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:34:17.488Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "2J1CP1UQDntaV5GRUQ4TQQjZ7CKtMfJ7kP6B9wa4dYqcRviZVYqvMNdnckVzDYq8nWB7qjp1Bdiuzevxvp8XYsjW"
+    },
+    {
+      "mint": "4xB2NGznSwQXAAjRsyAputhonM2uDD1FYwnGo92pdoge",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:34:20.468Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "2oZGX9XjhSCePJt9WGnC4csRxBnabdaDg3C4M5dXvp1VVKPV5RFSfanCKbgAbA8BstprpVHQpLYM27hxnnA354Bs"
+    },
+    {
+      "mint": "84yCF7hyUuRNAra9BjFHVDpnRdGXmfsV2emyZwLjpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T18:39:00.595Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "2LFGFHoPuW273g6Btj94xsbJdoDXiSxAuEH1EtAuwnJW3usTtfDUqa3sZb8nbPEeDoDiJk3S3PoMJ6XTAXuSrswF"
+    },
+    {
+      "mint": "GbqbsRyBHVPHEv7xLEsikXmdpPPiApLTJesDBbL5pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:01:51.989Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "4zsP67ZFtFXpezp4tbKjsUCkwn8xEAEPX7LhEfir6sgC85FZqgYubJQfrUexTGckGZDh9erQncGyobTyYywsT59r"
+    },
+    {
+      "mint": "D1f5aWrNjBWQ5vAom2dTSeWqrWrTaJuGkQemfYVxpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:06:49.315Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "4TRvKybm1RogGMVCQQKshiUB3r665VLVGs2zWkiwEkdt34GKasFdbZ2sVXdbeUvmuV8aMSHu2kaEr2zz64nRXmdW"
+    },
+    {
+      "mint": "4jTRFGPZGjb6KzanywwiChBEUPrKRkhFxJgSS9Tdpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:13:26.786Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "2LXVqenTJfTXZLroM3mK1kPBQ83zzdYszfkEuVezrCRbJqmgttB4h7WNF1hbF9oSdMq3D2PAH1Atcc39SptLAn5T"
+    },
+    {
+      "mint": "9Hq5qCSnpo8c7jXv2BJhK1TRsbHswr8cAA8H2Tkdpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:19:25.592Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "3smEjg6RTGoqktfrQW3xy126t3YQGKJrfHZxxxwC3ApKph4kNmvqvGmP45GspYdcJApruC3Uocu1FYN14qn7jumt"
+    },
+    {
+      "mint": "4AaQh4GhzNWMtDt3BpNhKf1BiH784pkoh5P3KeMupump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:39:02.295Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "BKdf2UjXSuNT6iSvEoUNCqjjjx9VCDGo86geeRBDR498t61GU7SAHQUDF9PVPb1y8veagJfCJ1ywr5EAGN77wfW"
+    },
+    {
+      "mint": "4gK9tQosQbuQH5hW6JteKjE43mZcjTtzrGmjihf2pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:41:27.459Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "5D7T7tGcVvXCiJzCidmgA88r2o4r9MjFjsvW8kU2XyL3oFyEsJcaHFLTmX8i6QSrKr4dQpyYaPtNB943YXT6KKmc"
+    },
+    {
+      "mint": "8opvqaWysX1oYbXuTL8PHaoaTiXD69VFYAX4smPebonk",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:44:32.398Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "closed",
+      "entryTx": "5F9DTm7JCV5ErKaBH78NPxTkxAMrMjumo89ZgPWhRDCUVtK1eyUSJJdYAKZmYM6qeHqevfj8j6FENxUu4oEiYZ9r"
+    },
+    {
+      "mint": "7dhGp76mvAaYmkbC7jSgnwByQUZGCiuro11MqKNbpump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:44:36.488Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "LCymt9f7jZ4E76qAZ24qQvtGA1jXp2fz5C5TA6bHMUXd8qfVECLM6hdqAZrXwkULyZAU6Chbwzo1CCzfGKEZMVE"
+    },
+    {
+      "mint": "4NVXJYwhPJ8j5ojbgD7EenW8jM9yg1YvZzjQqdH3pump",
+      "symbol": null,
+      "entryAt": "2026-03-03T19:44:53.311Z",
+      "mcapUsdAtEntry": null,
+      "liquidityUsdAtEntry": null,
+      "status": "open",
+      "entryTx": "bkiBBxBJFdcUjuoeC8K8uvw1WsgaGDa1qbcXTzRytyuDHNJxtUTqeMixebnzJYx78dNL2zUNBb3DHqgFttPsbZi"
+    }
+  ]
+}

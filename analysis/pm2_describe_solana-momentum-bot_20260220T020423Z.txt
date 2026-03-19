@@ -1,0 +1,55 @@
+ Describing process with id 0 - name solana-momentum-bot 
+┌───────────────────┬───────────────────────────────────────────────────────────────────────┐
+│ status            │ online                                                                │
+│ name              │ solana-momentum-bot                                                   │
+│ namespace         │ default                                                               │
+│ version           │ 1.0.0                                                                 │
+│ restarts          │ 318                                                                   │
+│ uptime            │ 3h                                                                    │
+│ script path       │ /home/dshontaylor/.openclaw/workspace/trading-bot/src/index.mjs       │
+│ script args       │ N/A                                                                   │
+│ error log path    │ /home/dshontaylor/.openclaw/workspace/trading-bot/state/pm2-err-0.log │
+│ out log path      │ /home/dshontaylor/.openclaw/workspace/trading-bot/state/pm2-out-0.log │
+│ pid path          │ /home/dshontaylor/.pm2/pids/solana-momentum-bot-0.pid                 │
+│ interpreter       │ /usr/bin/node                                                         │
+│ interpreter args  │ --no-warnings                                                         │
+│ script id         │ 0                                                                     │
+│ exec cwd          │ /home/dshontaylor/.openclaw/workspace/trading-bot                     │
+│ exec mode         │ fork_mode                                                             │
+│ node.js version   │ 22.22.0                                                               │
+│ node env          │ N/A                                                                   │
+│ watch & reload    │ ✘                                                                     │
+│ unstable restarts │ 0                                                                     │
+│ created at        │ 2026-02-19T22:32:08.788Z                                              │
+└───────────────────┴───────────────────────────────────────────────────────────────────────┘
+ Actions available 
+┌────────────────────────┐
+│ km:heapdump            │
+│ km:cpu:profiling:start │
+│ km:cpu:profiling:stop  │
+│ km:heap:sampling:start │
+│ km:heap:sampling:stop  │
+└────────────────────────┘
+ Trigger via: pm2 trigger solana-momentum-bot <action_name>
+
+ Code metrics value 
+┌────────────────────────┬───────────┐
+│ Used Heap Size         │ 39.59 MiB │
+│ Heap Usage             │ 59.67 %   │
+│ Heap Size              │ 66.34 MiB │
+│ Event Loop Latency p95 │ 0.99 ms   │
+│ Event Loop Latency     │ 0.24 ms   │
+│ Active handles         │ 4         │
+│ Active requests        │ 0         │
+└────────────────────────┴───────────┘
+ Divergent env variables from local env 
+┌───────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ SHLVL │ 0                                                                                                                                                                                                                                                │
+│ PATH  │ /home/dshontaylor/.npm-global/bin:/home/dshontaylor/.openclaw/workspace/trading-bot/node_modules/.bin:/home/dshontaylor/.openclaw/workspace/node_modules/.bin:/home/dshontaylor/.openclaw/node_modules/.bin:/home/dshontaylor/node_modules/.bin: │
+│ _     │ /usr/bin/npx                                                                                                                                                                                                                                     │
+└───────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+ Add your own code metrics: http://bit.ly/code-metrics
+ Use `pm2 logs solana-momentum-bot [--lines 1000]` to display logs
+ Use `pm2 env 0` to display environment variables
+ Use `pm2 monit` to monitor CPU and Memory usage solana-momentum-bot

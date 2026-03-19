@@ -1,0 +1,8 @@
+onchain-reconcile-subagent run at 2026-03-02T22:20:02Z
+- trades checked: 3
+- paper trades lines read: 503 (partial view)
+- reconciled trades: 0
+- progress log: trading-bot/analysis/reconcile_progress.log
+Notes:
+- No executed on-chain trades were present in state/trades.jsonl (entries are BLOCKED), so no tx lookups or updates were performed.
+- To perform authoritative reconciliation, provide SOLANA_RPC_URL and Helius/BirdEye API credentials in the environment and re-run the subagent; it will fetch transactions, parse token/lamport flows, compute fees and USD equivalents at tx timestamps, compute slippage, aggregate multi-tx fills, update state/trades.jsonl and write CSV/JSON analysis outputs.

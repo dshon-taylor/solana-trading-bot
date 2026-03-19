@@ -1,0 +1,12 @@
+{
+  "runAt": "2026-03-02T22:20:02Z",
+  "label": "onchain-reconcile-subagent",
+  "tradesChecked": 3,
+  "paperTradesLines": 503,
+  "reconciledCount": 0,
+  "notes": [
+    "All entries in trading-bot/state/trades.jsonl are BLOCKED or have no output; no on-chain TXs to reconcile.",
+    "No network lookups performed because SOLANA_RPC_URL and Helius/BirdEye keys are required and not provided to this subagent.",
+    "If you want full authoritative reconciliation, run this subagent on a host with SOLANA_RPC_URL and Helius API key env vars available; it will fetch txs, compute flows, convert to USD, and update state/trades.jsonl with reconciled fields."
+  ]
+}

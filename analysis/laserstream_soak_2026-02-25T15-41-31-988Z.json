@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-02-25T15:40:31.845Z",
+  "endedAt": "2026-02-25T15:41:31.988Z",
+  "durationMin": 1,
+  "summary": {
+    "status": "warming",
+    "lastMessageAgeMs": null,
+    "disconnects": 0,
+    "reconnects": 0,
+    "replayedMessages": 0,
+    "liveMessages": 0,
+    "receivedCandidates": 0,
+    "queueDepth": 0,
+    "lagMs": 0,
+    "reconnectsPerHour": 0
+  },
+  "health": {
+    "mode": "laserstream-devnet",
+    "status": "warming",
+    "lastMessageAtMs": null,
+    "lastMessageAgeMs": null,
+    "heartbeatStaleMs": 15000,
+    "queueDepth": 0
+  },
+  "metrics": {
+    "startedAtMs": 1772034031845,
+    "disconnects": 0,
+    "reconnects": 0,
+    "replayedMessages": 0,
+    "liveMessages": 0,
+    "receivedCandidates": 0,
+    "queueDrops": 0,
+    "lastMessageAtMs": 0,
+    "lagMs": 0,
+    "queueDepth": 0,
+    "uptimeMs": 60142
+  }
+}

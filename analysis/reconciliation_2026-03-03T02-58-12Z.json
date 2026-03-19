@@ -1,0 +1,12 @@
+{
+  "runAt": "2026-03-03T02:58:12.698Z",
+  "label": "onchain-reconcile-subagent-2",
+  "tradesChecked": 2,
+  "paperTradesLines": 502,
+  "reconciledCount": 0,
+  "notes": [
+    "All entries in trading-bot/state/trades.jsonl are BLOCKED or have no output; no on-chain TXs to reconcile.",
+    "Env keys present (HELIUS_API_KEY,SOLANA_RPC_URL); no network lookups performed by this offline subagent run.",
+    "Run this on a host with network egress to Helius/BirdEye for authoritative reconciliation."
+  ]
+}

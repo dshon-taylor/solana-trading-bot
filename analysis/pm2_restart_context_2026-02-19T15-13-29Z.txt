@@ -1,0 +1,799 @@
+# PM2 restart context capture
+ts_utc=2026-02-19T15-13-29Z
+app=solana-momentum-bot
+
+## pm2 status
+┌────┬─────────────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name                            │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼─────────────────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 2  │ derek-healthz                   │ default     │ N/A     │ fork    │ 359156   │ 4D     │ 0    │ online    │ 0%       │ 42.8mb   │ dshonta… │ disabled │
+│ 3  │ derek-watchdog                  │ default     │ N/A     │ fork    │ 359157   │ 4D     │ 0    │ online    │ 0%       │ 38.1mb   │ dshonta… │ disabled │
+│ 1  │ social-pulse-editorial-agent    │ default     │ 1.0.0   │ fork    │ 826735   │ 23m    │ 59   │ online    │ 0%       │ 87.4mb   │ dshonta… │ disabled │
+│ 0  │ solana-momentum-bot             │ default     │ 1.0.0   │ fork    │ 772438   │ 13h    │ 142  │ online    │ 0%       │ 126.2mb  │ dshonta… │ disabled │
+└────┴─────────────────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+Module
+┌────┬──────────────────────────────┬───────────────┬──────────┬──────────┬──────┬──────────┬──────────┬──────────┐
+│ id │ module                       │ version       │ pid      │ status   │ ↺    │ cpu      │ mem      │ user     │
+├────┼──────────────────────────────┼───────────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┤
+│ 4  │ pm2-logrotate                │ 3.0.0         │ 660431   │ online   │ 5    │ 0%       │ 50.5mb   │ dshonta… │
+└────┴──────────────────────────────┴───────────────┴──────────┴──────────┴──────┴──────────┴──────────┴──────────┘
+
+## pm2 describe (redacted via pm2_snapshot_safe.sh)
+{"name":"solana-momentum-bot","pm_id":0,"pid":772438,"monit":{"memory":132321280,"cpu":0},"pm2_version":null,"created_at":1771466738320,"restart_time":142,"unstable_restarts":0,"status":"online","pm_uptime":1771466738442,"uptime_ms":47271953.97705078,"min_uptime":10000,"max_restarts":20,"exp_backoff_restart_delay":1000}
+
+## last 200 lines of app stderr (state/pm2-err-0.log or state/pm2-err.log)
+2026-02-19T15:06:43: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:06:49: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:06:50: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:06:51: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:06:53: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:06:57: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:06:57: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:06:58: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:00: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:05: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:06: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:07: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:09: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:15: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:15: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:16: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:18: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:25: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:25: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:27: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:29: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:33: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:33: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:34: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:36: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:41: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:42: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:43: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:45: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:50: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:07:50: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:07:51: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:07:54: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:07:59: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:00: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:01: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:03: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:07: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:08: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:09: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:11: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:16: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:16: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:17: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:19: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:25: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:26: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:27: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:29: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:35: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:36: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:37: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:39: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:43: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:44: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:45: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:47: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:08:52: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:08:52: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:08:53: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:08:56: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:01: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:01: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:03: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:05: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:11: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:11: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:12: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:14: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:18: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:19: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:20: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:22: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:28: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:28: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:29: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:31: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:37: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:38: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:39: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:41: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:47: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:48: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:49: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:51: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:09:55: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:09:55: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:09:56: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:09:58: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:03: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:04: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:05: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:07: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:12: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:13: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:14: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:16: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:21: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:22: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:23: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:25: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:29: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:30: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:31: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:33: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:38: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:38: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:39: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:41: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:47: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:47: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:48: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:10:50: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:10:57: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:10:58: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:10:59: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:01: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:05: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:06: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:07: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:09: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:13: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:14: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:15: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:17: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:22: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:23: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:24: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:26: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:32: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:32: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:33: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:35: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:42: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:42: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:43: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:45: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:50: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:50: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:50: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:50: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:51: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:51: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:11:53: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:53: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:11:58: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:58: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:11:59: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:11:59: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:00: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:00: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:02: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:02: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:07: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:08: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:08: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:08: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:09: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:09: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:11: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:11: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:18: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:18: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:18: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:18: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:19: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:19: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:21: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:21: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:25: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:26: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:27: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:29: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:33: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:34: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:35: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:37: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:42: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:43: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:44: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:46: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:12:52: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:12:52: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:12:53: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:12:55: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:13:00: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:13:00: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:13:01: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:13:03: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:13:08: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:13:09: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:13:10: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:13:12: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:13:17: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:13:18: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:13:19: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+2026-02-19T15:13:21: Server responded with 429 Too Many Requests.  Retrying after 4000ms delay...
+2026-02-19T15:13:27: Server responded with 429 Too Many Requests.  Retrying after 500ms delay...
+2026-02-19T15:13:28: Server responded with 429 Too Many Requests.  Retrying after 1000ms delay...
+2026-02-19T15:13:29: Server responded with 429 Too Many Requests.  Retrying after 2000ms delay...
+
+## last 200 lines of app stdout (state/pm2-out-0.log if present)
+2026-02-19T00:03:15: [hb] 2026-02-19T00:03:15.161Z open_positions=0
+2026-02-19T00:08:15: [hb] 2026-02-19T00:08:15.170Z open_positions=0
+2026-02-19T00:13:15: [hb] 2026-02-19T00:13:15.437Z open_positions=0
+2026-02-19T00:18:15: [hb] 2026-02-19T00:18:15.747Z open_positions=0
+2026-02-19T00:23:15: [hb] 2026-02-19T00:23:15.796Z open_positions=0
+2026-02-19T00:28:16: [hb] 2026-02-19T00:28:16.257Z open_positions=0
+2026-02-19T00:33:16: [hb] 2026-02-19T00:33:16.421Z open_positions=0
+2026-02-19T00:38:16: [hb] 2026-02-19T00:38:16.512Z open_positions=0
+2026-02-19T00:43:16: [hb] 2026-02-19T00:43:16.844Z open_positions=0
+2026-02-19T00:48:17: [hb] 2026-02-19T00:48:17.041Z open_positions=0
+2026-02-19T00:53:17: [hb] 2026-02-19T00:53:17.371Z open_positions=0
+2026-02-19T00:58:17: [hb] 2026-02-19T00:58:17.704Z open_positions=0
+2026-02-19T01:03:17: [hb] 2026-02-19T01:03:17.753Z open_positions=0
+2026-02-19T01:08:17: [hb] 2026-02-19T01:08:17.893Z open_positions=0
+2026-02-19T01:13:18: [hb] 2026-02-19T01:13:18.095Z open_positions=0
+2026-02-19T01:18:18: [hb] 2026-02-19T01:18:18.361Z open_positions=0
+2026-02-19T01:23:18: [hb] 2026-02-19T01:23:18.427Z open_positions=0
+2026-02-19T01:28:18: [hb] 2026-02-19T01:28:18.618Z open_positions=0
+2026-02-19T01:33:19: [hb] 2026-02-19T01:33:19.001Z open_positions=0
+2026-02-19T01:38:19: [hb] 2026-02-19T01:38:19.246Z open_positions=0
+2026-02-19T01:43:19: [hb] 2026-02-19T01:43:19.567Z open_positions=0
+2026-02-19T01:48:19: [hb] 2026-02-19T01:48:19.701Z open_positions=0
+2026-02-19T01:53:20: [hb] 2026-02-19T01:53:20.020Z open_positions=0
+2026-02-19T01:58:20: [hb] 2026-02-19T01:58:20.342Z open_positions=0
+2026-02-19T02:03:20: [hb] 2026-02-19T02:03:20.519Z open_positions=0
+2026-02-19T02:05:39: [config] effective
+2026-02-19T02:05:39:   rpc=set
+2026-02-19T02:05:39:   modes: live_momo=true paper=false scanner_entries=false tracking=true
+2026-02-19T02:05:39:   cadence: scanEveryMs=20000 positionsEveryMs=10000 heartbeatEveryMs=300000
+2026-02-19T02:05:39:   jup: tokenlist=true prefilter=false amountUsd=5
+2026-02-19T02:05:39:   circuit: enabled=true cooldownMs=1800000 fails(dex=8, rpc=5, jup=10)
+2026-02-19T02:05:39:   risk: stopAtEntry=true bufferPct=0.0005 trailActivatePct=0.12 trailDistancePct=0.12
+2026-02-19T02:05:39:   slippageBps=250 maxPriceImpactPct=2.5
+2026-02-19T02:05:39:   paths: state=./state/state.json tradesLedger=./state/trades.jsonl costLedger=./state/cost.jsonl
+2026-02-19T02:05:39: [wallet] publicKey=GZ4DYkMNm7vLdsHAAqhTv6hPY847eiFQxwKhVn2bT3uY
+2026-02-19T02:05:39: [boot] live_momo=true scanner_entries=false scanner_tracking=true stopAtEntry=true bufferPct=0.0005 trailActivatePct=0.12 trailDistancePct=0.12
+2026-02-19T02:05:41: [hb] 2026-02-19T02:05:41.083Z open_positions=0
+2026-02-19T02:05:41: [health] listening on http://127.0.0.1:8787/healthz
+2026-02-19T02:10:41: [hb] 2026-02-19T02:10:41.100Z open_positions=0
+2026-02-19T02:15:41: [hb] 2026-02-19T02:15:41.108Z open_positions=0
+2026-02-19T02:20:42: [hb] 2026-02-19T02:20:42.451Z open_positions=0
+2026-02-19T02:25:42: [hb] 2026-02-19T02:25:42.762Z open_positions=0
+2026-02-19T02:30:43: [hb] 2026-02-19T02:30:43.497Z open_positions=0
+2026-02-19T02:35:44: [hb] 2026-02-19T02:35:44.025Z open_positions=0
+2026-02-19T02:40:51: [hb] 2026-02-19T02:40:51.348Z open_positions=0
+2026-02-19T02:45:51: [hb] 2026-02-19T02:45:51.936Z open_positions=0
+2026-02-19T02:50:55: [hb] 2026-02-19T02:50:55.311Z open_positions=0
+2026-02-19T02:55:55: [hb] 2026-02-19T02:55:55.359Z open_positions=0
+2026-02-19T03:00:57: [hb] 2026-02-19T03:00:57.830Z open_positions=0
+2026-02-19T03:06:04: [hb] 2026-02-19T03:06:04.187Z open_positions=0
+2026-02-19T03:11:04: [hb] 2026-02-19T03:11:04.977Z open_positions=0
+2026-02-19T03:16:12: [hb] 2026-02-19T03:16:12.534Z open_positions=0
+2026-02-19T03:21:12: [hb] 2026-02-19T03:21:12.792Z open_positions=0
+2026-02-19T03:26:19: [hb] 2026-02-19T03:26:19.540Z open_positions=0
+2026-02-19T03:31:20: [hb] 2026-02-19T03:31:20.315Z open_positions=0
+2026-02-19T03:36:20: [hb] 2026-02-19T03:36:20.719Z open_positions=0
+2026-02-19T03:41:21: [hb] 2026-02-19T03:41:21.114Z open_positions=0
+2026-02-19T03:46:27: [hb] 2026-02-19T03:46:27.256Z open_positions=0
+2026-02-19T03:51:27: [hb] 2026-02-19T03:51:27.320Z open_positions=0
+2026-02-19T03:56:34: [hb] 2026-02-19T03:56:34.595Z open_positions=0
+2026-02-19T04:01:35: [hb] 2026-02-19T04:01:35.184Z open_positions=0
+2026-02-19T04:06:37: [hb] 2026-02-19T04:06:37.132Z open_positions=0
+2026-02-19T04:11:37: [hb] 2026-02-19T04:11:37.499Z open_positions=0
+2026-02-19T04:16:42: [hb] 2026-02-19T04:16:42.409Z open_positions=0
+2026-02-19T04:21:42: [hb] 2026-02-19T04:21:42.462Z open_positions=0
+2026-02-19T04:26:45: [hb] 2026-02-19T04:26:45.357Z open_positions=0
+2026-02-19T04:31:45: [hb] 2026-02-19T04:31:45.726Z open_positions=0
+2026-02-19T04:36:46: [hb] 2026-02-19T04:36:46.146Z open_positions=0
+2026-02-19T04:41:51: [hb] 2026-02-19T04:41:51.199Z open_positions=0
+2026-02-19T04:46:51: [hb] 2026-02-19T04:46:51.256Z open_positions=0
+2026-02-19T04:51:57: [hb] 2026-02-19T04:51:57.952Z open_positions=0
+2026-02-19T04:57:04: [hb] 2026-02-19T04:57:04.880Z open_positions=0
+2026-02-19T05:02:04: [hb] 2026-02-19T05:02:04.933Z open_positions=0
+2026-02-19T05:07:11: [hb] 2026-02-19T05:07:11.552Z open_positions=0
+2026-02-19T05:12:11: [hb] 2026-02-19T05:12:11.595Z open_positions=0
+2026-02-19T05:17:18: [hb] 2026-02-19T05:17:18.695Z open_positions=0
+2026-02-19T05:22:18: [hb] 2026-02-19T05:22:18.755Z open_positions=0
+2026-02-19T05:27:22: [hb] 2026-02-19T05:27:22.137Z open_positions=0
+2026-02-19T05:32:22: [hb] 2026-02-19T05:32:22.142Z open_positions=0
+2026-02-19T05:37:28: [hb] 2026-02-19T05:37:28.019Z open_positions=0
+2026-02-19T05:42:33: [hb] 2026-02-19T05:42:33.491Z open_positions=0
+2026-02-19T05:47:37: [hb] 2026-02-19T05:47:37.906Z open_positions=0
+2026-02-19T05:52:37: [hb] 2026-02-19T05:52:37.992Z open_positions=0
+2026-02-19T05:57:43: [hb] 2026-02-19T05:57:43.162Z open_positions=0
+2026-02-19T06:02:43: [hb] 2026-02-19T06:02:43.312Z open_positions=0
+2026-02-19T06:07:51: [hb] 2026-02-19T06:07:51.085Z open_positions=0
+2026-02-19T06:12:51: [hb] 2026-02-19T06:12:51.170Z open_positions=0
+2026-02-19T06:17:51: [hb] 2026-02-19T06:17:51.462Z open_positions=0
+2026-02-19T06:22:52: [hb] 2026-02-19T06:22:52.735Z open_positions=0
+2026-02-19T06:27:59: [hb] 2026-02-19T06:27:59.512Z open_positions=0
+2026-02-19T06:33:03: [hb] 2026-02-19T06:33:03.964Z open_positions=0
+2026-02-19T06:38:04: [hb] 2026-02-19T06:38:04.009Z open_positions=0
+2026-02-19T06:43:11: [hb] 2026-02-19T06:43:11.756Z open_positions=0
+2026-02-19T06:48:11: [hb] 2026-02-19T06:48:11.798Z open_positions=0
+2026-02-19T06:53:19: [hb] 2026-02-19T06:53:19.275Z open_positions=0
+2026-02-19T06:58:19: [hb] 2026-02-19T06:58:19.312Z open_positions=0
+2026-02-19T07:03:26: [hb] 2026-02-19T07:03:26.439Z open_positions=0
+2026-02-19T07:08:27: [hb] 2026-02-19T07:08:27.282Z open_positions=0
+2026-02-19T07:13:27: [hb] 2026-02-19T07:13:27.407Z open_positions=0
+2026-02-19T07:18:27: [hb] 2026-02-19T07:18:27.447Z open_positions=0
+2026-02-19T07:23:27: [hb] 2026-02-19T07:23:27.612Z open_positions=0
+2026-02-19T07:28:27: [hb] 2026-02-19T07:28:27.922Z open_positions=0
+2026-02-19T07:33:35: [hb] 2026-02-19T07:33:35.240Z open_positions=0
+2026-02-19T07:38:35: [hb] 2026-02-19T07:38:35.274Z open_positions=0
+2026-02-19T07:43:36: [hb] 2026-02-19T07:43:36.367Z open_positions=0
+2026-02-19T07:48:36: [hb] 2026-02-19T07:48:36.725Z open_positions=0
+2026-02-19T07:53:43: [hb] 2026-02-19T07:53:43.337Z open_positions=0
+2026-02-19T07:58:43: [hb] 2026-02-19T07:58:43.899Z open_positions=0
+2026-02-19T08:03:45: [hb] 2026-02-19T08:03:45.366Z open_positions=0
+2026-02-19T08:08:45: [hb] 2026-02-19T08:08:45.827Z open_positions=0
+2026-02-19T08:13:45: [hb] 2026-02-19T08:13:45.889Z open_positions=0
+2026-02-19T08:18:46: [hb] 2026-02-19T08:18:46.220Z open_positions=0
+2026-02-19T08:23:50: [hb] 2026-02-19T08:23:50.666Z open_positions=0
+2026-02-19T08:28:51: [hb] 2026-02-19T08:28:51.123Z open_positions=0
+2026-02-19T08:33:58: [hb] 2026-02-19T08:33:58.859Z open_positions=0
+2026-02-19T08:39:03: [hb] 2026-02-19T08:39:03.635Z open_positions=0
+2026-02-19T08:44:06: [hb] 2026-02-19T08:44:06.096Z open_positions=0
+2026-02-19T08:49:11: [hb] 2026-02-19T08:49:11.529Z open_positions=0
+2026-02-19T08:54:11: [hb] 2026-02-19T08:54:11.565Z open_positions=0
+2026-02-19T08:59:18: [hb] 2026-02-19T08:59:18.501Z open_positions=0
+2026-02-19T09:04:18: [hb] 2026-02-19T09:04:18.561Z open_positions=0
+2026-02-19T09:14:44: [hb] 2026-02-19T09:14:44.231Z open_positions=0
+2026-02-19T09:23:00: [hb] 2026-02-19T09:23:00.837Z open_positions=0
+2026-02-19T09:31:17: [hb] 2026-02-19T09:31:17.939Z open_positions=0
+2026-02-19T09:39:34: [hb] 2026-02-19T09:39:34.598Z open_positions=0
+2026-02-19T09:47:51: [hb] 2026-02-19T09:47:51.991Z open_positions=0
+2026-02-19T09:56:08: [hb] 2026-02-19T09:56:08.722Z open_positions=0
+2026-02-19T10:04:25: [hb] 2026-02-19T10:04:25.953Z open_positions=0
+2026-02-19T10:12:42: [hb] 2026-02-19T10:12:42.696Z open_positions=0
+2026-02-19T10:21:00: [hb] 2026-02-19T10:21:00.608Z open_positions=0
+2026-02-19T10:29:17: [hb] 2026-02-19T10:29:17.901Z open_positions=0
+2026-02-19T10:37:35: [hb] 2026-02-19T10:37:35.692Z open_positions=0
+2026-02-19T10:45:53: [hb] 2026-02-19T10:45:53.049Z open_positions=0
+2026-02-19T10:54:10: [hb] 2026-02-19T10:54:10.970Z open_positions=0
+2026-02-19T11:02:27: [hb] 2026-02-19T11:02:27.682Z open_positions=0
+2026-02-19T11:10:45: [hb] 2026-02-19T11:10:45.012Z open_positions=0
+2026-02-19T11:19:01: [hb] 2026-02-19T11:19:01.979Z open_positions=0
+2026-02-19T11:27:19: [hb] 2026-02-19T11:27:19.991Z open_positions=0
+2026-02-19T11:35:37: [hb] 2026-02-19T11:35:37.123Z open_positions=0
+2026-02-19T11:43:54: [hb] 2026-02-19T11:43:54.724Z open_positions=0
+2026-02-19T11:52:11: [hb] 2026-02-19T11:52:11.839Z open_positions=0
+2026-02-19T12:00:29: [hb] 2026-02-19T12:00:29.806Z open_positions=0
+2026-02-19T12:08:46: [hb] 2026-02-19T12:08:46.861Z open_positions=0
+2026-02-19T12:17:04: [hb] 2026-02-19T12:17:04.554Z open_positions=0
+2026-02-19T12:25:21: [hb] 2026-02-19T12:25:21.609Z open_positions=0
+2026-02-19T12:33:40: [hb] 2026-02-19T12:33:40.549Z open_positions=0
+2026-02-19T12:41:57: [hb] 2026-02-19T12:41:57.823Z open_positions=0
+2026-02-19T12:50:16: [hb] 2026-02-19T12:50:16.484Z open_positions=0
+2026-02-19T12:58:34: [hb] 2026-02-19T12:58:34.733Z open_positions=0
+2026-02-19T13:06:55: [hb] 2026-02-19T13:06:55.170Z open_positions=0
+2026-02-19T13:15:13: [hb] 2026-02-19T13:15:13.245Z open_positions=0
+2026-02-19T13:23:31: [hb] 2026-02-19T13:23:31.040Z open_positions=0
+2026-02-19T13:31:48: [hb] 2026-02-19T13:31:48.532Z open_positions=0
+2026-02-19T13:40:07: [hb] 2026-02-19T13:40:07.409Z open_positions=0
+2026-02-19T13:48:26: [hb] 2026-02-19T13:48:26.240Z open_positions=0
+2026-02-19T13:56:45: [hb] 2026-02-19T13:56:45.970Z open_positions=0
+2026-02-19T14:05:05: [hb] 2026-02-19T14:05:05.557Z open_positions=0
+2026-02-19T14:13:26: [hb] 2026-02-19T14:13:26.300Z open_positions=0
+2026-02-19T14:21:46: [hb] 2026-02-19T14:21:46.321Z open_positions=0
+2026-02-19T14:30:06: [hb] 2026-02-19T14:30:06.962Z open_positions=0
+2026-02-19T14:38:27: [hb] 2026-02-19T14:38:27.305Z open_positions=0
+2026-02-19T14:46:46: [hb] 2026-02-19T14:46:46.909Z open_positions=0
+2026-02-19T14:55:06: [hb] 2026-02-19T14:55:06.501Z open_positions=0
+2026-02-19T15:03:26: [hb] 2026-02-19T15:03:26.927Z open_positions=0
+2026-02-19T15:11:50: [hb] 2026-02-19T15:11:50.227Z open_positions=0
+
+## last 200 lines of pm2 daemon log (~/.pm2/pm2.log)
+2026-02-17T05:24:59: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:28:58: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:28:58: PM2 log: pid=574417 msg=process killed
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:33:04: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:33:04: PM2 log: pid=574539 msg=process killed
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:37:53: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:37:53: PM2 log: pid=575122 msg=process killed
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:48:55: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:48:55: PM2 log: pid=575279 msg=process killed
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:00:25: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:00:25: PM2 log: pid=575992 msg=process killed
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:08:45: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:08:45: PM2 log: pid=576723 msg=process killed
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:14:44: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:14:44: PM2 log: pid=577478 msg=process killed
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:26:55: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:26:55: PM2 log: pid=578141 msg=process killed
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:33:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:33:14: PM2 log: pid=578898 msg=process killed
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:33:50: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:33:50: PM2 log: pid=579520 msg=process killed
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T08:46:12: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T08:46:12: PM2 log: pid=579562 msg=process killed
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T08:47:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T08:47:31: PM2 log: pid=588099 msg=process killed
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T13:58:20: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T13:58:20: PM2 log: pid=588155 msg=process killed
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T14:14:03: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T14:14:03: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T14:14:04: PM2 log: pid=608159 msg=process killed
+2026-02-17T14:14:04: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T14:14:04: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:03:06: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:03:06: PM2 log: pid=609431 msg=process killed
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:07:07: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:07:07: PM2 log: pid=616375 msg=process killed
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:13:13: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:13:13: PM2 log: pid=616493 msg=process killed
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:14:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:14:57: PM2 log: pid=617097 msg=process killed
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:23:16: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:23:16: PM2 log: pid=617156 msg=process killed
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:24:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:24:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:24:58: PM2 log: pid=617826 msg=process killed
+2026-02-17T16:24:58: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:24:58: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T00:15:49: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T00:15:49: PM2 log: pid=617886 msg=process killed
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T01:59:44: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T01:59:44: PM2 log: pid=647900 msg=process killed
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:00:10: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:00:10: PM2 log: pid=654326 msg=process killed
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:14:14: PM2 log: pid=654369 msg=process killed
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:24: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:29: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:29: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:39: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:54: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:59: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:59: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:44:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:44:31: PM2 log: pid=655602 msg=process killed
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:13:03: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:03: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:09: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:09: PM2 log: pid=660301 msg=process killed
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:10: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:10: PM2 log: pid=660339 msg=process killed
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:10: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:11: PM2 log: pid=660362 msg=process killed
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:11: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:11: PM2 log: pid=660386 msg=process killed
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:12: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:12: PM2 log: pid=660409 msg=process killed
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:38:12: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:38:12: PM2 log: pid=658174 msg=process killed
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:50:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:50:57: PM2 log: pid=662580 msg=process killed
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:52:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:52:31: PM2 log: pid=663531 msg=process killed
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:54:29: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:54:29: PM2 log: pid=663634 msg=process killed
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T04:12:14: PM2 log: Process 0 in a stopped status, starting it
+2026-02-18T04:12:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+2026-02-18T04:12:14: PM2 log: pid=664187 msg=process killed
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T04:12:54: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+2026-02-19T02:05:38: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+2026-02-19T02:05:38: PM2 log: pid=665263 msg=process killed
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] online
+2026-02-19T02:06:25: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+2026-02-19T14:49:45: PM2 log: App [social-pulse-editorial-agent:1] exited with code [1] via signal [SIGINT]
+2026-02-19T14:49:50: PM2 log: App [social-pulse-editorial-agent:1] starting in -fork mode-
+2026-02-19T14:49:50: PM2 log: App [social-pulse-editorial-agent:1] online
+
+## last 200 lines of syslog (if present)
+2026-02-19T08:13:28.549070+00:00 instance-20260211-041952 crontab[799486]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T08:14:11.451710+00:00 instance-20260211-041952 node[5247]: 2026-02-19T08:14:11.450Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T08:14:11.487031+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T08:14:11.487731+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T08:14:13.861875+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:13.8607Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T08:14:13.952800+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:13.9525Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T08:14:13.984236+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:13.9838Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T08:14:13.985641+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:13.9844Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T08:14:13.985867+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:13.9846Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T08:14:14.006056+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:14.0058Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T08:14:14.008204+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:14.0068Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T08:14:14.008648+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:14.0070Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T08:14:14.046803+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T08:14:14.0465Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T08:17:01.091331+00:00 instance-20260211-041952 CRON[799609]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T08:23:40.473587+00:00 instance-20260211-041952 kernel: [705626.719067] virtio_balloon virtio2: Out of puff! Can't get 1 pages
+2026-02-19T08:24:36.286305+00:00 instance-20260211-041952 node[5247]: 2026-02-19T08:24:36.284Z [tools] edit failed: Missing required parameter: newText (newText or new_string)
+2026-02-19T08:24:40.841308+00:00 instance-20260211-041952 node[5247]: 2026-02-19T08:24:40.840Z [tools] edit failed: Missing required parameter: newText (newText or new_string)
+2026-02-19T08:24:44.726293+00:00 instance-20260211-041952 node[5247]: 2026-02-19T08:24:44.725Z [tools] edit failed: Missing required parameter: newText (newText or new_string)
+2026-02-19T08:24:50.952315+00:00 instance-20260211-041952 node[5247]: 2026-02-19T08:24:50.951Z [tools] exec failed: /bin/bash: line 1: python: command not found
+2026-02-19T08:24:50.953823+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T08:43:25.967965+00:00 instance-20260211-041952 crontab[801583]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T08:53:23.021096+00:00 instance-20260211-041952 crontab[802246]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T09:14:44.615279+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.6138Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T09:14:44.695256+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.6949Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T09:14:44.733957+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7336Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T09:14:44.734444+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7342Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T09:14:44.734674+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7345Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T09:14:44.756061+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7557Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T09:14:44.758767+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7569Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T09:14:44.759098+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7571Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T09:14:44.797172+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:14:44.7961Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T09:17:01.148636+00:00 instance-20260211-041952 CRON[803657]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T09:38:50.980098+00:00 instance-20260211-041952 crontab[805030]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T09:43:48.030265+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T09:43:48.0292Z OSConfigAgent Warning: Error waiting for task (attempt 1 of 10): rpc error: code = Unavailable desc = 502:Bad Gateway
+2026-02-19T09:48:10.858148+00:00 instance-20260211-041952 node[5247]: 2026-02-19T09:48:10.856Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/MEMORY.md'
+2026-02-19T09:53:23.620700+00:00 instance-20260211-041952 crontab[806251]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T10:15:15.381067+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.3795Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T10:15:15.455145+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.4547Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T10:15:15.489556+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.4892Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T10:15:15.489959+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.4898Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T10:15:15.490227+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.4900Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T10:15:15.509251+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.5089Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T10:15:15.510279+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.5092Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T10:15:15.510559+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.5104Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T10:15:15.547450+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T10:15:15.5471Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T10:17:01.150112+00:00 instance-20260211-041952 CRON[807652]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T10:23:31.923612+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:23:31.922Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T10:23:31.928904+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T10:28:28.781343+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:28:28.780Z [ws] ⇄ res ✓ status 62ms conn=a29195e7…d924 id=d280d41b…a936
+2026-02-19T10:31:54.955287+00:00 instance-20260211-041952 systemd[1]: Starting google-oslogin-cache.service - NSS cache refresh...
+2026-02-19T10:31:54.974144+00:00 instance-20260211-041952 google_oslogin_nss_cache[808492]: oslogin_cache_refresh[808492]: Refreshing passwd entry cache
+2026-02-19T10:31:54.978839+00:00 instance-20260211-041952 oslogin_cache_refresh[808492]: Refreshing passwd entry cache
+2026-02-19T10:31:54.981010+00:00 instance-20260211-041952 oslogin_cache_refresh[808492]: Refreshing group entry cache
+2026-02-19T10:31:54.981475+00:00 instance-20260211-041952 google_oslogin_nss_cache[808492]: oslogin_cache_refresh[808492]: Refreshing group entry cache
+2026-02-19T10:31:54.985467+00:00 instance-20260211-041952 systemd[1]: google-oslogin-cache.service: Deactivated successfully.
+2026-02-19T10:31:54.987384+00:00 instance-20260211-041952 systemd[1]: Finished google-oslogin-cache.service - NSS cache refresh.
+2026-02-19T10:33:55.696361+00:00 instance-20260211-041952 crontab[809009]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T10:34:04.715601+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:34:04.714Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T10:34:04.717013+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T10:38:20.238042+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:38:20.236Z [tools] exec failed: /bin/bash: line 1: cd: /home/dshontaylor/trading-bot: No such file or directory
+2026-02-19T10:38:20.241447+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T10:43:32.699988+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:43:32.698Z [tools] read failed: Offset 220000 is beyond end of file (898 lines total)
+2026-02-19T10:43:43.906052+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:43:43.904Z [tools] exec failed: 2026-02-19T10:43:43Z
+2026-02-19T10:43:43.911744+00:00 instance-20260211-041952 node[5247]: {
+2026-02-19T10:43:43.911817+00:00 instance-20260211-041952 node[5247]:   "name": "solana-momentum-bot",
+2026-02-19T10:43:43.913421+00:00 instance-20260211-041952 node[5247]:   "status": "online",
+2026-02-19T10:43:43.914798+00:00 instance-20260211-041952 node[5247]:   "pid": 772438,
+2026-02-19T10:43:43.914930+00:00 instance-20260211-041952 node[5247]:   "created_at": 1771466738320,
+2026-02-19T10:43:43.916298+00:00 instance-20260211-041952 node[5247]:   "unstable_restarts": 0,
+2026-02-19T10:43:43.919367+00:00 instance-20260211-041952 node[5247]:   "restart_time": 142
+2026-02-19T10:43:43.920914+00:00 instance-20260211-041952 node[5247]: }
+2026-02-19T10:43:43.922360+00:00 instance-20260211-041952 node[5247]: parse error: Invalid numeric literal at EOF at line 1, column 2
+2026-02-19T10:43:43.922560+00:00 instance-20260211-041952 node[5247]: Command exited with code 4
+2026-02-19T10:49:25.061529+00:00 instance-20260211-041952 crontab[809942]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T10:58:14.226764+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:58:14.225Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T10:58:14.230362+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T10:58:57.347935+00:00 instance-20260211-041952 node[5247]: 2026-02-19T10:58:57.346Z [tools] exec failed: The following paths are ignored by one of your .gitignore files:
+2026-02-19T10:58:57.349797+00:00 instance-20260211-041952 node[5247]: trading-bot/analysis
+2026-02-19T10:58:57.351383+00:00 instance-20260211-041952 node[5247]: hint: Use -f if you really want to add them.
+2026-02-19T10:58:57.353782+00:00 instance-20260211-041952 node[5247]: hint: Turn this message off by running
+2026-02-19T10:58:57.354046+00:00 instance-20260211-041952 node[5247]: hint: "git config advice.addIgnoredFile false"
+2026-02-19T10:58:57.354136+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T11:08:31.663803+00:00 instance-20260211-041952 node[5247]: 2026-02-19T11:08:31.662Z [tools] exec failed: warning: could not open directory 'trading-bot/trading-bot/': No such file or directory
+2026-02-19T11:08:31.667995+00:00 instance-20260211-041952 node[5247]: fatal: pathspec 'trading-bot/PROD_HARDENING_STATUS.md' did not match any files
+2026-02-19T11:08:31.668196+00:00 instance-20260211-041952 node[5247]: Command exited with code 128
+2026-02-19T11:15:46.576311+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.5752Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T11:15:46.684143+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.6839Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T11:15:46.715339+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7150Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T11:15:46.716010+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7156Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T11:15:46.717889+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7158Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T11:15:46.766302+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7328Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T11:15:46.766658+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7332Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T11:15:46.766878+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7333Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T11:15:46.778677+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T11:15:46.7782Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T11:17:01.216964+00:00 instance-20260211-041952 CRON[811890]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T11:24:28.281779+00:00 instance-20260211-041952 node[5247]: 2026-02-19T11:24:28.279Z [tools] edit failed: Could not find the exact text in /home/dshontaylor/.openclaw/workspace/trading-bot/PROD_HARDENING_STATUS.md. The old text must match exactly including all whitespace and newlines.
+2026-02-19T11:43:36.335573+00:00 instance-20260211-041952 crontab[813932]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T11:54:00.809609+00:00 instance-20260211-041952 crontab[814664]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T11:54:01.909444+00:00 instance-20260211-041952 crontab[814667]: (root) LIST (root)
+2026-02-19T12:13:48.031772+00:00 instance-20260211-041952 crontab[816006]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T12:16:17.469521+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.4679Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T12:16:17.563794+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.5635Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T12:16:17.597771+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.5971Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T12:16:17.598550+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.5977Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T12:16:17.600562+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.5979Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T12:16:17.616141+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.6159Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T12:16:17.616674+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.6162Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T12:16:17.617226+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.6162Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T12:16:17.659621+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T12:16:17.6589Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T12:17:01.229570+00:00 instance-20260211-041952 CRON[816112]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T12:38:12.425550+00:00 instance-20260211-041952 node[5247]: 2026-02-19T12:38:12.423Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/MEMORY.md'
+2026-02-19T12:43:14.407149+00:00 instance-20260211-041952 node[5247]: 2026-02-19T12:43:14.405Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/PROD_HARDENING_STATUS.md'
+2026-02-19T12:43:14.415794+00:00 instance-20260211-041952 node[5247]: 2026-02-19T12:43:14.415Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/PROD_HARDENING.md'
+2026-02-19T13:08:34.843596+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:08:34.841Z [tools] exec failed: /bin/bash: line 1: python: command not found
+2026-02-19T13:08:34.851399+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T13:16:48.223328+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.2220Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T13:16:48.321175+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3207Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T13:16:48.361888+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3616Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T13:16:48.363462+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3623Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T13:16:48.364265+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3625Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T13:16:48.379676+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3794Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T13:16:48.387446+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3796Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T13:16:48.389830+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.3797Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T13:16:48.422532+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T13:16:48.4221Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T13:17:01.226541+00:00 instance-20260211-041952 CRON[820206]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T13:28:40.982091+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:28:40.979Z [tools] exec failed: error: unknown option '--limit'
+2026-02-19T13:28:40.992009+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T13:28:57.302525+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:28:57.300Z [tools] exec failed: warning: could not open directory 'trading-bot/trading-bot/': No such file or directory
+2026-02-19T13:28:57.304663+00:00 instance-20260211-041952 node[5247]: fatal: pathspec 'trading-bot/PROD_HARDENING_STATUS.md' did not match any files
+2026-02-19T13:28:57.304884+00:00 instance-20260211-041952 node[5247]: Command exited with code 128
+2026-02-19T13:38:34.330944+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:38:34.329Z [tools] exec failed: ┌────┬─────────────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+2026-02-19T13:38:34.340371+00:00 instance-20260211-041952 node[5247]: │ id │ name                            │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+2026-02-19T13:38:34.340802+00:00 instance-20260211-041952 node[5247]: ├────┼─────────────────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+2026-02-19T13:38:34.341003+00:00 instance-20260211-041952 node[5247]: │ 2  │ derek-healthz                   │ default     │ N/A     │ fork    │ 359156   │ 4D     │ 0    │ online    │ 0%       │ 42.8mb   │ dshonta… │ disabled │
+2026-02-19T13:38:34.341416+00:00 instance-20260211-041952 node[5247]: │ 3  │ derek-watchdog                  │ default     │ N/A     │ fork    │ 359157   │ 4D     │ 0    │ online    │ 0%       │ 38.1mb   │ dshonta… │ disabled │
+2026-02-19T13:38:34.341567+00:00 instance-20260211-041952 node[5247]: │ 1  │ social-pulse-editorial-agent    │ default     │ 1.0.0   │ fork    │ 84873    │ 7D     │ 58   │ online    │ 0%       │ 72.9mb   │ dshonta… │ disabled │
+2026-02-19T13:38:34.341697+00:00 instance-20260211-041952 node[5247]: │ 0  │ solana-momentum-bot             │ default     │ 1.0.0   │ fork    │ 772438   │ 11h    │ 142  │ online    │ 0%       │ 126.2mb  │ dshonta… │ disabled │
+2026-02-19T13:38:34.341987+00:00 instance-20260211-041952 node[5247]: └────┴─────────────────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+2026-02-19T13:38:34.342346+00:00 instance-20260211-041952 node[5247]: Module
+2026-02-19T13:38:34.342553+00:00 instance-20260211-041952 node[5247]: ┌────┬──────────────────────────────┬───────────────┬──────────┬──────────┬──────┬──────────┬──────────┬──────────┐
+2026-02-19T13:38:34.342826+00:00 instance-20260211-041952 node[5247]: │ id │ module                       │ version       │ pid      │ status   │ ↺    │ cpu      │ mem      │ user     │
+2026-02-19T13:38:34.343047+00:00 instance-20260211-041952 node[5247]: ├────┼──────────────────────────────┼───────────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┤
+2026-02-19T13:38:34.343159+00:00 instance-20260211-041952 node[5247]: │ 4  │ pm2-logrotate                │ 3.0.0         │ 660431   │ online   │ 5    │ 0%       │ 50.5mb   │ dshonta… │
+2026-02-19T13:38:34.343362+00:00 instance-20260211-041952 node[5247]: └────┴──────────────────────────────┴───────────────┴──────────┴──────────┴──────┴──────────┴──────────┴──────────┘
+2026-02-19T13:38:34.343487+00:00 instance-20260211-041952 node[5247]: --- pm2.log around 2026-02-19T02:05
+2026-02-19T13:38:34.343618+00:00 instance-20260211-041952 node[5247]: /bin/bash: line 7: python: command not found
+2026-02-19T13:38:34.343835+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T13:38:40.600632+00:00 instance-20260211-041952 crontab[821619]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T13:44:06.010504+00:00 instance-20260211-041952 crontab[822223]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T13:44:06.029977+00:00 instance-20260211-041952 crontab[822226]: (root) LIST (root)
+2026-02-19T13:44:09.699170+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:44:09.697Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T13:44:09.699339+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T13:44:09.699553+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T13:48:31.122294+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:48:31.119Z [tools] exec failed: /bin/bash: line 1: python: command not found
+2026-02-19T13:48:31.122909+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T13:53:36.407294+00:00 instance-20260211-041952 node[5247]: 2026-02-19T13:53:36.405Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T13:53:36.412221+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T13:53:36.412660+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T13:58:32.083726+00:00 instance-20260211-041952 crontab[823035]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T13:58:32.139381+00:00 instance-20260211-041952 crontab[823037]: (root) LIST (root)
+2026-02-19T14:01:47.164629+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:01:47.163Z [ws] ⇄ res ✓ agent 1120ms runId=8a124b18-82f5-40c3-bb64-5b28a3aea6be conn=551b28c8…5b76 id=3f27690a…5f5d
+2026-02-19T14:01:59.207523+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:01:59.206Z Over the last 24h the bot stayed in monitor mode (live trading still disabled, 0 open positions) — no live trades occurred, but it logged a lot of paper signals. The main issue showing up is persistent rate-limiting (429s) and some flaky on-chain fetch reads, so the biggest win before going live is tightening the caching/backoff + adding a “degraded data mode” that pauses new entries when feeds/RPC are unhealthy.
+2026-02-19T14:03:56.878398+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:03:56.876Z [tools] exec failed: /bin/bash: line 1: printf: `T': invalid format character
+2026-02-19T14:03:56.878815+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T14:13:37.494931+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:13:37.493Z [tools] exec failed: ## master
+2026-02-19T14:13:37.499232+00:00 instance-20260211-041952 node[5247]:  M trading-bot/PROD_HARDENING_STATUS.md
+2026-02-19T14:13:37.499442+00:00 instance-20260211-041952 node[5247]: The following paths are ignored by one of your .gitignore files:
+2026-02-19T14:13:37.499593+00:00 instance-20260211-041952 node[5247]: trading-bot/analysis
+2026-02-19T14:13:37.499678+00:00 instance-20260211-041952 node[5247]: hint: Use -f if you really want to add them.
+2026-02-19T14:13:37.500014+00:00 instance-20260211-041952 node[5247]: hint: Turn this message off by running
+2026-02-19T14:13:37.500082+00:00 instance-20260211-041952 node[5247]: hint: "git config advice.addIgnoredFile false"
+2026-02-19T14:13:37.500126+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T14:17:01.266327+00:00 instance-20260211-041952 CRON[824364]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T14:17:19.054136+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.0492Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T14:17:19.147264+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.1470Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T14:17:19.194702+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.1945Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T14:17:19.196743+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.1963Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T14:17:19.198115+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.1978Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T14:17:19.227479+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.2272Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T14:17:19.227820+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.2274Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T14:17:19.228045+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.2275Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T14:17:19.270355+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T14:17:19.2701Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T14:18:39.302656+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:18:39.300Z [tools] exec failed: The following paths are ignored by one of your .gitignore files:
+2026-02-19T14:18:39.308071+00:00 instance-20260211-041952 node[5247]: trading-bot/analysis
+2026-02-19T14:18:39.308195+00:00 instance-20260211-041952 node[5247]: hint: Use -f if you really want to add them.
+2026-02-19T14:18:39.308250+00:00 instance-20260211-041952 node[5247]: hint: Turn this message off by running
+2026-02-19T14:18:39.308284+00:00 instance-20260211-041952 node[5247]: hint: "git config advice.addIgnoredFile false"
+2026-02-19T14:18:39.308319+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T14:28:40.550253+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:28:40.548Z [tools] exec failed: M trading-bot/PROD_HARDENING_STATUS.md
+2026-02-19T14:28:40.554313+00:00 instance-20260211-041952 node[5247]: The following paths are ignored by one of your .gitignore files:
+2026-02-19T14:28:40.554384+00:00 instance-20260211-041952 node[5247]: trading-bot/analysis
+2026-02-19T14:28:40.554430+00:00 instance-20260211-041952 node[5247]: hint: Use -f if you really want to add them.
+2026-02-19T14:28:40.554469+00:00 instance-20260211-041952 node[5247]: hint: Turn this message off by running
+2026-02-19T14:28:40.554504+00:00 instance-20260211-041952 node[5247]: hint: "git config advice.addIgnoredFile false"
+2026-02-19T14:28:40.554540+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T14:38:24.378341+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:38:24.376Z [tools] exec failed: /bin/bash: line 1: ./scripts/preflight_check.sh: No such file or directory
+2026-02-19T14:38:24.383821+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T14:38:28.058012+00:00 instance-20260211-041952 node[5247]: 2026-02-19T14:38:28.056Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T14:38:28.058221+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T14:38:28.058410+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+
+## journalctl window helper
+If you have sudo:
+  sudo journalctl --no-pager -S '2026-02-19 02:04:00' -U '2026-02-19 02:07:00'

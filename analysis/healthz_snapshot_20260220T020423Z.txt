@@ -1,0 +1,13 @@
+Timestamp: 20260220T020423Z
+\n--- curl localhost:80 ---
+(no response or error)
+\n--- curl localhost:3000 ---
+(no response or error)
+\n--- curl localhost:8080 ---
+(no response or error)
+\n--- curl localhost:8000 ---
+(no response or error)
+\n--- curl localhost:9000 ---
+(no response or error)
+\n--- curl localhost:5000 ---
+(no response or error)

@@ -1,0 +1,433 @@
+# PM2 restart context capture
+ts_utc=2026-02-19T05-48-39Z
+app=solana-momentum-bot
+
+## pm2 status
+┌────┬─────────────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name                            │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼─────────────────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 2  │ derek-healthz                   │ default     │ N/A     │ fork    │ 359156   │ 4D     │ 0    │ online    │ 0%       │ 45.4mb   │ dshonta… │ disabled │
+│ 3  │ derek-watchdog                  │ default     │ N/A     │ fork    │ 359157   │ 4D     │ 0    │ online    │ 0%       │ 38.5mb   │ dshonta… │ disabled │
+│ 1  │ social-pulse-editorial-agent    │ default     │ 1.0.0   │ fork    │ 84873    │ 7D     │ 58   │ online    │ 0%       │ 76.9mb   │ dshonta… │ disabled │
+│ 0  │ solana-momentum-bot             │ default     │ 1.0.0   │ fork    │ 772438   │ 3h     │ 142  │ online    │ 0%       │ 143.8mb  │ dshonta… │ disabled │
+└────┴─────────────────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+Module
+┌────┬──────────────────────────────┬───────────────┬──────────┬──────────┬──────┬──────────┬──────────┬──────────┐
+│ id │ module                       │ version       │ pid      │ status   │ ↺    │ cpu      │ mem      │ user     │
+├────┼──────────────────────────────┼───────────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┤
+│ 4  │ pm2-logrotate                │ 3.0.0         │ 660431   │ online   │ 5    │ 0%       │ 65.8mb   │ dshonta… │
+└────┴──────────────────────────────┴───────────────┴──────────┴──────────┴──────┴──────────┴──────────┴──────────┘
+
+## pm2 describe (redacted via pm2_snapshot_safe.sh)
+{"name":"solana-momentum-bot","pm_id":0,"pid":772438,"monit":{"memory":150765568,"cpu":3.7},"pm2_version":null,"created_at":1771466738320,"restart_time":142,"unstable_restarts":0,"status":"online","pm_uptime":1771466738442,"uptime_ms":13381106.192138672,"min_uptime":10000,"max_restarts":20,"exp_backoff_restart_delay":1000}
+
+## last 200 lines of app stderr (state/pm2-err.log)
+(missing ./state/pm2-err.log)
+
+## last 200 lines of pm2 daemon log (~/.pm2/pm2.log)
+2026-02-17T05:24:59: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:24:59: PM2 log: pid=573155 msg=process killed
+2026-02-17T05:24:59: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:24:59: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:28:58: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:28:58: PM2 log: pid=574417 msg=process killed
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:28:58: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:33:04: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:33:04: PM2 log: pid=574539 msg=process killed
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:33:04: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:37:53: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:37:53: PM2 log: pid=575122 msg=process killed
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:37:53: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T05:48:55: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T05:48:55: PM2 log: pid=575279 msg=process killed
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T05:48:55: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:00:25: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:00:25: PM2 log: pid=575992 msg=process killed
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:00:25: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:08:45: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:08:45: PM2 log: pid=576723 msg=process killed
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:08:45: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:14:44: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:14:44: PM2 log: pid=577478 msg=process killed
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:14:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:26:55: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:26:55: PM2 log: pid=578141 msg=process killed
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:26:55: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:33:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:33:14: PM2 log: pid=578898 msg=process killed
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:33:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T06:33:50: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T06:33:50: PM2 log: pid=579520 msg=process killed
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T06:33:50: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T08:46:12: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T08:46:12: PM2 log: pid=579562 msg=process killed
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T08:46:12: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T08:47:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T08:47:31: PM2 log: pid=588099 msg=process killed
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T08:47:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T13:58:20: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T13:58:20: PM2 log: pid=588155 msg=process killed
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T13:58:20: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T14:14:03: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T14:14:03: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T14:14:04: PM2 log: pid=608159 msg=process killed
+2026-02-17T14:14:04: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T14:14:04: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:03:06: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:03:06: PM2 log: pid=609431 msg=process killed
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:03:06: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:07:07: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:07:07: PM2 log: pid=616375 msg=process killed
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:07:07: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:13:13: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:13:13: PM2 log: pid=616493 msg=process killed
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:13:13: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:14:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:14:57: PM2 log: pid=617097 msg=process killed
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:14:57: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:23:16: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:23:16: PM2 log: pid=617156 msg=process killed
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:23:16: PM2 log: App [solana-momentum-bot:0] online
+2026-02-17T16:24:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-17T16:24:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-17T16:24:58: PM2 log: pid=617826 msg=process killed
+2026-02-17T16:24:58: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-17T16:24:58: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T00:15:49: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T00:15:49: PM2 log: pid=617886 msg=process killed
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T00:15:49: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T01:59:44: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T01:59:44: PM2 log: pid=647900 msg=process killed
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T01:59:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:00:10: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:00:10: PM2 log: pid=654326 msg=process killed
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:00:10: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:14:14: PM2 log: pid=654369 msg=process killed
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:24: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:29: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:29: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:39: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:44: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:44: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:14:54: PM2 log: App [solana-momentum-bot:0] exited with code [1] via signal [SIGINT]
+2026-02-18T02:14:59: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:14:59: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T02:44:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T02:44:31: PM2 log: pid=655602 msg=process killed
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T02:44:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:13:03: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:03: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:09: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:09: PM2 log: pid=660301 msg=process killed
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:09: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:10: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:10: PM2 log: pid=660339 msg=process killed
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:10: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:10: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:11: PM2 log: pid=660362 msg=process killed
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:11: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:11: PM2 log: pid=660386 msg=process killed
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:11: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:13:12: PM2 log: Stopping app:pm2-logrotate id:4
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] exited with code [0] via signal [SIGINT]
+2026-02-18T03:13:12: PM2 log: pid=660409 msg=process killed
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] starting in -fork mode-
+2026-02-18T03:13:12: PM2 log: App [pm2-logrotate:4] online
+2026-02-18T03:38:12: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:38:12: PM2 log: pid=658174 msg=process killed
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:38:12: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:50:57: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:50:57: PM2 log: pid=662580 msg=process killed
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:50:57: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:52:31: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:52:31: PM2 log: pid=663531 msg=process killed
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:52:31: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T03:54:29: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T03:54:29: PM2 log: pid=663634 msg=process killed
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T03:54:29: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T04:12:14: PM2 log: Process 0 in a stopped status, starting it
+2026-02-18T04:12:14: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+2026-02-18T04:12:14: PM2 log: pid=664187 msg=process killed
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-18T04:12:14: PM2 log: App [solana-momentum-bot:0] online
+2026-02-18T04:12:54: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+2026-02-19T02:05:38: PM2 log: Stopping app:solana-momentum-bot id:0
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] exited with code [0] via signal [SIGINT]
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] will restart in 1000ms
+2026-02-19T02:05:38: PM2 log: pid=665263 msg=process killed
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] starting in -fork mode-
+2026-02-19T02:05:38: PM2 log: App [solana-momentum-bot:0] online
+2026-02-19T02:06:25: PM2 log: [PM2][WORKER] Reset the restart delay, as app solana-momentum-bot has been up for more than 30000ms
+
+## last 200 lines of syslog (if present)
+2026-02-18T21:08:35.186858+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.1866Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-18T21:08:35.217239+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2170Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-18T21:08:35.218559+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2184Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-18T21:08:35.219800+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2196Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-18T21:08:35.235390+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2351Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-18T21:08:35.235706+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2354Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-18T21:08:35.236209+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2355Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-18T21:08:35.268721+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T21:08:35.2685Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-18T21:17:01.765320+00:00 instance-20260211-041952 CRON[751701]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-18T21:28:37.750868+00:00 instance-20260211-041952 node[5247]: 2026-02-18T21:28:37.749Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-18T21:28:37.756642+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-18T21:28:37.756968+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T21:58:08.788149+00:00 instance-20260211-041952 node[5247]: 2026-02-18T21:58:08.786Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-18T21:58:08.792442+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-18T21:58:08.792527+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T21:58:18.725221+00:00 instance-20260211-041952 node[5247]: 2026-02-18T21:58:18.724Z [tools] exec failed: M trading-bot/PROD_HARDENING_STATUS.md
+2026-02-18T21:58:18.725650+00:00 instance-20260211-041952 node[5247]: ls: invalid option -- '�'
+2026-02-18T21:58:18.725809+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-18T21:58:18.725857+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T21:58:59.251474+00:00 instance-20260211-041952 node[5247]: 2026-02-18T21:58:59.249Z [tools] exec failed: tail: cannot open 'state/pm2-err.log' for reading: No such file or directory
+2026-02-18T21:58:59.251918+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-18T22:03:44.918814+00:00 instance-20260211-041952 node[5247]: 2026-02-18T22:03:44.917Z [tools] exec failed: warning: could not open directory 'trading-bot/trading-bot/': No such file or directory
+2026-02-18T22:03:44.924103+00:00 instance-20260211-041952 node[5247]: fatal: pathspec 'trading-bot/PROD_HARDENING_STATUS.md' did not match any files
+2026-02-18T22:03:44.924718+00:00 instance-20260211-041952 node[5247]: Command exited with code 128
+2026-02-18T22:09:06.454168+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.4526Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-18T22:09:06.609194+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6089Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-18T22:09:06.641974+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6417Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-18T22:09:06.642958+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6428Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-18T22:09:06.643713+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6435Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-18T22:09:06.667600+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6671Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-18T22:09:06.668059+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6676Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-18T22:09:06.668266+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.6677Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-18T22:09:06.706850+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T22:09:06.7063Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-18T22:17:01.794687+00:00 instance-20260211-041952 CRON[755821]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-18T22:23:32.660099+00:00 instance-20260211-041952 node[5247]: 2026-02-18T22:23:32.658Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-18T22:23:32.664197+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-18T22:23:32.664420+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T22:30:54.972623+00:00 instance-20260211-041952 systemd[1]: Starting google-oslogin-cache.service - NSS cache refresh...
+2026-02-18T22:30:54.998036+00:00 instance-20260211-041952 google_oslogin_nss_cache[756618]: oslogin_cache_refresh[756618]: Refreshing passwd entry cache
+2026-02-18T22:30:54.998723+00:00 instance-20260211-041952 oslogin_cache_refresh[756618]: Refreshing passwd entry cache
+2026-02-18T22:30:55.002995+00:00 instance-20260211-041952 google_oslogin_nss_cache[756618]: oslogin_cache_refresh[756618]: Refreshing group entry cache
+2026-02-18T22:30:55.003273+00:00 instance-20260211-041952 oslogin_cache_refresh[756618]: Refreshing group entry cache
+2026-02-18T22:30:55.009902+00:00 instance-20260211-041952 systemd[1]: google-oslogin-cache.service: Deactivated successfully.
+2026-02-18T22:30:55.010624+00:00 instance-20260211-041952 systemd[1]: Finished google-oslogin-cache.service - NSS cache refresh.
+2026-02-18T22:38:45.411919+00:00 instance-20260211-041952 node[5247]: 2026-02-18T22:38:45.410Z [tools] exec failed: /bin/bash: line 1: printf: - : invalid option
+2026-02-18T22:38:45.415446+00:00 instance-20260211-041952 node[5247]: printf: usage: printf [-v var] format [arguments]
+2026-02-18T22:38:45.415616+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T22:43:38.224632+00:00 instance-20260211-041952 node[5247]: 2026-02-18T22:43:38.222Z [tools] exec failed: /bin/bash: line 1: bc: command not found
+2026-02-18T22:43:38.228624+00:00 instance-20260211-041952 node[5247]: date: invalid date ‘@’
+2026-02-18T22:43:38.229873+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-18T23:09:37.210883+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.2095Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-18T23:09:37.284885+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.2846Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-18T23:09:37.318138+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3179Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-18T23:09:37.319012+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3185Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-18T23:09:37.319446+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3188Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-18T23:09:37.342002+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3416Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-18T23:09:37.342769+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3420Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-18T23:09:37.343147+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3427Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-18T23:09:37.377566+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-18T23:09:37.3773Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-18T23:17:01.823478+00:00 instance-20260211-041952 CRON[760018]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-18T23:38:15.149842+00:00 instance-20260211-041952 node[5247]: 2026-02-18T23:38:15.148Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-18T23:38:15.200240+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-18T23:38:15.200831+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-18T23:58:28.139335+00:00 instance-20260211-041952 node[5247]: 2026-02-18T23:58:28.136Z [tools] exec failed: /bin/bash: line 1: printf: - : invalid option
+2026-02-18T23:58:28.143986+00:00 instance-20260211-041952 node[5247]: printf: usage: printf [-v var] format [arguments]
+2026-02-18T23:58:28.144189+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T00:00:03.456475+00:00 instance-20260211-041952 systemd[1]: Starting dpkg-db-backup.service - Daily dpkg database backup service...
+2026-02-19T00:00:03.469849+00:00 instance-20260211-041952 systemd[1]: Starting exim4-base.service - exim4-base housekeeping...
+2026-02-19T00:00:03.539782+00:00 instance-20260211-041952 systemd[1]: exim4-base.service: Deactivated successfully.
+2026-02-19T00:00:03.550732+00:00 instance-20260211-041952 systemd[1]: Finished exim4-base.service - exim4-base housekeeping.
+2026-02-19T00:00:03.575384+00:00 instance-20260211-041952 systemd[1]: Starting logrotate.service - Rotate log files...
+2026-02-19T00:00:03.691596+00:00 instance-20260211-041952 systemd[1]: logrotate.service: Deactivated successfully.
+2026-02-19T00:00:03.693568+00:00 instance-20260211-041952 systemd[1]: Finished logrotate.service - Rotate log files.
+2026-02-19T00:00:03.716178+00:00 instance-20260211-041952 systemd[1]: dpkg-db-backup.service: Deactivated successfully.
+2026-02-19T00:00:03.718250+00:00 instance-20260211-041952 systemd[1]: Finished dpkg-db-backup.service - Daily dpkg database backup service.
+2026-02-19T00:10:07.916735+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:07.9146Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T00:10:08.010124+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0098Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T00:10:08.054332+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0540Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T00:10:08.054825+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0545Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T00:10:08.055039+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0547Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T00:10:08.072534+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0722Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T00:10:08.074702+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0730Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T00:10:08.074981+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.0734Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T00:10:08.108746+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T00:10:08.1084Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T00:14:05.440745+00:00 instance-20260211-041952 node[5247]: 2026-02-19T00:14:05.439Z [tools] exec failed: /bin/bash: line 1: /healthz: No such file or directory
+2026-02-19T00:14:05.445131+00:00 instance-20260211-041952 node[5247]: [deploy] BLOCKED: keys/bot-keypair.json still present. Archive it first (or wait for the 24h window and run ./scripts/archive_plaintext_key_if_stable.sh).
+2026-02-19T00:14:05.445301+00:00 instance-20260211-041952 node[5247]: /bin/bash: line 1: printf: - : invalid option
+2026-02-19T00:14:05.445470+00:00 instance-20260211-041952 node[5247]: printf: usage: printf [-v var] format [arguments]
+2026-02-19T00:14:05.445524+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T00:17:01.851785+00:00 instance-20260211-041952 CRON[764256]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T00:28:12.608367+00:00 instance-20260211-041952 node[5247]: 2026-02-19T00:28:12.606Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/memory/2026-02-19.md'
+2026-02-19T00:28:12.626753+00:00 instance-20260211-041952 node[5247]: 2026-02-19T00:28:12.625Z [tools] read failed: ENOENT: no such file or directory, access '/home/dshontaylor/.openclaw/workspace/MEMORY.md'
+2026-02-19T01:10:38.676589+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.6750Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T01:10:38.771359+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.7710Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T01:10:38.809599+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8093Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T01:10:38.810701+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8099Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T01:10:38.811078+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8102Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T01:10:38.831977+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8316Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T01:10:38.832728+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8325Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T01:10:38.833778+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8335Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T01:10:38.871398+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T01:10:38.8709Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T01:13:10.564772+00:00 instance-20260211-041952 node[5247]: 2026-02-19T01:13:10.563Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T01:13:10.570858+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T01:13:10.571233+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T01:17:01.876973+00:00 instance-20260211-041952 CRON[768723]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T02:05:02.073168+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:05:02.071Z [tools] exec failed: Command exited with code 1
+2026-02-19T02:09:46.736758+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:09:46.735Z [ws] ⇄ res ✗ cron.update 7ms errorCode=INVALID_REQUEST errorMessage=invalid cron.update params: at /patch: unexpected property 'updatedAtMs'; must have required property 'jobId'; at root: unexpected property 'id'; must match a schema in anyOf conn=2aa1e0a2…2410 id=ab71d7ae…4791
+2026-02-19T02:09:46.748748+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:09:46.746Z [tools] cron failed: invalid cron.update params: at /patch: unexpected property 'updatedAtMs'; must have required property 'jobId'; at root: unexpected property 'id'; must match a schema in anyOf
+2026-02-19T02:11:09.385626+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.3847Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T02:11:09.491436+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.4912Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T02:11:09.534066+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5338Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T02:11:09.535225+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5351Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T02:11:09.535950+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5358Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T02:11:09.564624+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5644Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T02:11:09.565021+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5646Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T02:11:09.565474+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.5647Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T02:11:09.607466+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T02:11:09.6067Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T02:14:07.535033+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:14:07.533Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T02:14:07.539124+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T02:17:01.901902+00:00 instance-20260211-041952 CRON[773404]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T02:18:16.002974+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:18:16.000Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T02:18:16.003456+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T02:19:01.258222+00:00 instance-20260211-041952 crontab[773470]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T02:23:13.863144+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:23:13.861Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T02:23:13.864617+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T02:33:26.538668+00:00 instance-20260211-041952 crontab[774736]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T02:38:42.613455+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:38:42.611Z [tools] exec failed: /bin/bash: line 1: python: command not found
+2026-02-19T02:38:42.617539+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T02:43:31.910288+00:00 instance-20260211-041952 node[5247]: 2026-02-19T02:43:31.908Z [tools] exec failed: /bin/bash: line 1: python: command not found
+2026-02-19T02:43:31.913731+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T03:10:01.926638+00:00 instance-20260211-041952 CRON[777224]: (root) CMD (test -e /run/systemd/system || SERVICE_MODE=1 /sbin/e2scrub_all -A -r)
+2026-02-19T03:11:26.080303+00:00 instance-20260211-041952 systemd[1]: Starting apt-daily.service - Daily apt download activities...
+2026-02-19T03:11:31.902879+00:00 instance-20260211-041952 systemd[1]: apt-daily.service: Deactivated successfully.
+2026-02-19T03:11:31.903701+00:00 instance-20260211-041952 systemd[1]: Finished apt-daily.service - Daily apt download activities.
+2026-02-19T03:11:31.904043+00:00 instance-20260211-041952 systemd[1]: apt-daily.service: Consumed 5.620s CPU time.
+2026-02-19T03:11:40.238982+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.2380Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T03:11:40.344720+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3445Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T03:11:40.377559+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3772Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T03:11:40.377896+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3778Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T03:11:40.378183+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3780Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T03:11:40.396839+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3966Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T03:11:40.397173+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3969Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T03:11:40.397720+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.3969Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T03:11:40.437477+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T03:11:40.4372Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T03:17:01.936798+00:00 instance-20260211-041952 CRON[778431]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T03:53:27.163591+00:00 instance-20260211-041952 node[5247]: 2026-02-19T03:53:27.158Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T03:53:27.170026+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T03:53:27.170268+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T03:58:16.870657+00:00 instance-20260211-041952 node[5247]: 2026-02-19T03:58:16.869Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T03:58:16.873967+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T03:58:35.683207+00:00 instance-20260211-041952 node[5247]: 2026-02-19T03:58:35.681Z [tools] exec failed: --- healthz
+2026-02-19T03:58:35.683425+00:00 instance-20260211-041952 node[5247]: /bin/bash: line 1: python: command not found
+2026-02-19T03:58:35.703643+00:00 instance-20260211-041952 node[5247]: curl: (23) Failed writing body
+2026-02-19T03:58:35.703764+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T03:59:06.048576+00:00 instance-20260211-041952 node[5247]: 2026-02-19T03:59:06.046Z [tools] exec failed: --- syslog around 2026-02-19 02:05
+2026-02-19T03:59:06.049416+00:00 instance-20260211-041952 node[5247]: Command exited with code 1
+2026-02-19T04:12:11.034124+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.0327Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T04:12:11.143402+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.1431Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T04:12:11.179045+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.1788Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T04:12:11.180266+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.1799Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T04:12:11.180810+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.1802Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T04:12:11.202244+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.2020Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T04:12:11.203091+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.2029Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T04:12:11.203422+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.2030Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T04:12:11.246323+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T04:12:11.2460Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T04:17:01.964261+00:00 instance-20260211-041952 CRON[782599]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T04:31:44.951800+00:00 instance-20260211-041952 systemd[1]: Starting google-oslogin-cache.service - NSS cache refresh...
+2026-02-19T04:31:44.974097+00:00 instance-20260211-041952 google_oslogin_nss_cache[783381]: oslogin_cache_refresh[783381]: Refreshing passwd entry cache
+2026-02-19T04:31:44.978058+00:00 instance-20260211-041952 oslogin_cache_refresh[783381]: Refreshing passwd entry cache
+2026-02-19T04:31:44.979349+00:00 instance-20260211-041952 oslogin_cache_refresh[783381]: Refreshing group entry cache
+2026-02-19T04:31:44.979821+00:00 instance-20260211-041952 google_oslogin_nss_cache[783381]: oslogin_cache_refresh[783381]: Refreshing group entry cache
+2026-02-19T04:31:44.984541+00:00 instance-20260211-041952 systemd[1]: google-oslogin-cache.service: Deactivated successfully.
+2026-02-19T04:31:44.985071+00:00 instance-20260211-041952 systemd[1]: Finished google-oslogin-cache.service - NSS cache refresh.
+2026-02-19T04:38:42.731639+00:00 instance-20260211-041952 node[5247]: 2026-02-19T04:38:42.730Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T04:38:42.737446+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T04:38:42.738149+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T04:40:14.951426+00:00 instance-20260211-041952 systemd[1]: Starting systemd-tmpfiles-clean.service - Cleanup of Temporary Directories...
+2026-02-19T04:40:15.087972+00:00 instance-20260211-041952 systemd[1]: systemd-tmpfiles-clean.service: Deactivated successfully.
+2026-02-19T04:40:15.088902+00:00 instance-20260211-041952 systemd[1]: Finished systemd-tmpfiles-clean.service - Cleanup of Temporary Directories.
+2026-02-19T04:40:15.093497+00:00 instance-20260211-041952 systemd[1]: run-credentials-systemd\x2dtmpfiles\x2dclean.service.mount: Deactivated successfully.
+2026-02-19T04:43:56.504477+00:00 instance-20260211-041952 crontab[784745]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T05:12:41.617053+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.6156Z OSConfigAgent Info: Beginning ApplyConfigTask.
+2026-02-19T05:12:41.713929+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7136Z OSConfigAgent Info: Executing policy "goog-ops-agent-policy"
+2026-02-19T05:12:41.751454+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7511Z OSConfigAgent Info: Validate: resource "add-repo" validation successful.
+2026-02-19T05:12:41.751911+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7517Z OSConfigAgent Info: Check state: resource "add-repo" state is COMPLIANT.
+2026-02-19T05:12:41.771718+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7518Z OSConfigAgent Info: Validate: resource "install-pkg" validation successful.
+2026-02-19T05:12:41.772335+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7697Z OSConfigAgent Info: Check state: resource "install-pkg" state is COMPLIANT.
+2026-02-19T05:12:41.772870+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7700Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "add-repo" state: COMPLIANT
+2026-02-19T05:12:41.773257+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.7701Z OSConfigAgent Info: Policy "goog-ops-agent-policy" resource "install-pkg" state: COMPLIANT
+2026-02-19T05:12:41.816768+00:00 instance-20260211-041952 OSConfigAgent[383]: 2026-02-19T05:12:41.8165Z OSConfigAgent Info: Successfully completed ApplyConfigTask
+2026-02-19T05:17:01.992901+00:00 instance-20260211-041952 CRON[786783]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+2026-02-19T05:18:10.706972+00:00 instance-20260211-041952 node[5247]: 2026-02-19T05:18:10.705Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T05:18:10.712119+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T05:18:10.712441+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+2026-02-19T05:23:18.605401+00:00 instance-20260211-041952 node[5247]: 2026-02-19T05:23:18.603Z [tools] exec failed: /bin/bash: line 1: rg: command not found
+2026-02-19T05:23:18.609229+00:00 instance-20260211-041952 node[5247]: Command exited with code 127
+2026-02-19T05:38:55.188375+00:00 instance-20260211-041952 crontab[788217]: (dshontaylor) LIST (dshontaylor)
+2026-02-19T05:43:12.174951+00:00 instance-20260211-041952 node[5247]: 2026-02-19T05:43:12.173Z [tools] exec failed: ls: invalid option -- '�'
+2026-02-19T05:43:12.175721+00:00 instance-20260211-041952 node[5247]: Try 'ls --help' for more information.
+2026-02-19T05:43:12.175890+00:00 instance-20260211-041952 node[5247]: Command exited with code 2
+
+## journalctl window helper
+If you have sudo:
+  sudo journalctl --no-pager -S '2026-02-19 02:04:00' -U '2026-02-19 02:07:00'

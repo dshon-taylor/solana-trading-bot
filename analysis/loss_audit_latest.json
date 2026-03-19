@@ -1,0 +1,62 @@
+{
+  "generatedAt": "2026-03-03T18:33:44.664Z",
+  "windowStart": "2026-03-03T17:33:44.664Z",
+  "closedLastHour": 4,
+  "wins": 1,
+  "losses": 3,
+  "bigLosses": 2,
+  "avgPnl": -0.13376191084052322,
+  "medianPnl": -0.15868878098558276,
+  "exitReasonCounts": {
+    "stop hit @ 0.000008 <= 0.000009": 1,
+    "stop hit @ 0.018411 <= 0.023641": 2,
+    "stop hit @ 0.000173 <= 0.000192": 1
+  },
+  "worst": [
+    {
+      "mint": "8opvqaWysX1oYbXuTL8PHaoaTiXD69VFYAX4smPebonk",
+      "symbol": "8opvqa",
+      "entry": 0.023641061338088052,
+      "exit": 0.018411469021316042,
+      "pnlPct": -0.22120801777823007,
+      "pnlUsd": -0.9954360800020353,
+      "holdMinutes": 37.6674,
+      "reason": "stop hit @ 0.018411 <= 0.023641"
+    },
+    {
+      "mint": "8opvqaWysX1oYbXuTL8PHaoaTiXD69VFYAX4smPebonk",
+      "symbol": "8opvqa",
+      "entry": 0.023641061338088052,
+      "exit": 0.018411469021316042,
+      "pnlPct": -0.22120801777823007,
+      "pnlUsd": -0.9954360800020353,
+      "holdMinutes": 0.10581666666666667,
+      "reason": "stop hit @ 0.018411 <= 0.023641"
+    },
+    {
+      "mint": "9Hq5qCSnpo8c7jXv2BJhK1TRsbHswr8cAA8H2Tkdpump",
+      "symbol": "9Hq5qC",
+      "entry": 0.00019160807955442507,
+      "exit": 0.0001731812178799923,
+      "pnlPct": -0.09616954419293547,
+      "pnlUsd": -0.4327629488682096,
+      "holdMinutes": 2.755516666666667,
+      "reason": "stop hit @ 0.000173 <= 0.000192"
+    },
+    {
+      "mint": "AffGxvoEmVHx3hRpsZUVwqikjVxaEx27ThVo9Vehpump",
+      "symbol": "AffGxv",
+      "entry": 0.00000828374170021685,
+      "exit": 0.000008313049051401065,
+      "pnlPct": 0.0035379363873027543,
+      "pnlUsd": 0.015920713742862393,
+      "holdMinutes": 14.20075,
+      "reason": "stop hit @ 0.000008 <= 0.000009"
+    }
+  ],
+  "openPositions": {
+    "count": 11,
+    "belowEntryCount": 0,
+    "belowEntryPct": 0
+  }
+}

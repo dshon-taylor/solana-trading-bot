@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-03-03T22:04:24Z",
+  "effectiveConfig": {
+    "AGGRESSIVE_MODE": false,
+    "MIN_MCAP_USD_env": 50000,
+    "MIN_LIQUIDITY_FLOOR_USD_env": 75000,
+    "MIN_MCAP_USD_effective": 50000,
+    "MIN_LIQUIDITY_USD_effective": 75000,
+    "LIQUIDITY_TO_MCAP_RATIO": 0.01,
+    "LIVE_PROBE_MIN_LIQ_USD": 70000,
+    "LIVE_PROBE_MIN_TX1H": 40,
+    "FORCE_ATTEMPT_ON_CONFIRM_PASS": false,
+    "MIN_SOL_FOR_FEES": 0.06,
+    "BIRDEYE_WS_ENABLED": true,
+    "openPositions_count": 11,
+    "lowSolPauseEntries_state": true
+  },
+  "state_overrides_found": {
+    "original_filterOverrides": {
+      "LIQUIDITY_TO_MCAP_RATIO": 0.01,
+      "MIN_LIQUIDITY_USD": 10000,
+      "MIN_TOKEN_AGE_HOURS": 0,
+      "MIN_MCAP_USD": 0
+    },
+    "mismatches": [
+      {
+        "key": "MIN_MCAP_USD",
+        "state_value": 0,
+        "env_value": 50000,
+        "effective_before_fix": 0,
+        "issue": "state override set to 0 bypasses environment MIN_MCAP_USD floor and allows entries below intended market cap threshold"
+      },
+      {
+        "key": "MIN_LIQUIDITY_USD",
+        "state_value": 10000,
+        "env_value": 75000,
+        "effective_before_fix": 10000,
+        "issue": "state override lowers liquidity floor well below .env MIN_LIQUIDITY_FLOOR_USD"
+      }
+    ]
+  },
+  "actions_taken": {
+    "auto_corrections": [
+      {
+        "file": "trading-bot/state/state.json",
+        "change": "set filterOverrides.MIN_MCAP_USD from 0 -> 50000",
+        "reason": "state override contradicted .env and would bypass mcap guard; safe to align to .env default"
+      },
+      {
+        "file": "trading-bot/state/state.json",
+        "change": "set filterOverrides.MIN_LIQUIDITY_USD from 10000 -> 75000",
+        "reason": "state override lowered liquidity floor; aligned to .env default"
+      }
+    ],
+    "git_commit": {
+      "attempted": true,
+      "committed": false,
+      "reason": "state directory is git-ignored in repo; changes were written to disk but not committed"
+    }
+  },
+  "ws_manager_enrollment": {
+    "birdeye_ws_enabled_env": true,
+    "wsmgr_binding_in_code": true,
+    "open_positions_enrolled_on_boot": true,
+    "notes": "Code binds BirdEye WS to wsmgr and calls wsmgr.onFill for each open position on startup. Current state shows 11 open positions; manager will subscribe them when runtime starts or on next boot."
+  },
+  "lowSolPause_behavior": {
+    "minSolForFees_env": 0.06,
+    "state_flags_lowSolPauseEntries": true,
+    "notes": "Tracker/index toggles state.flags.lowSolPauseEntries true when on-chain SOL balance < MIN_SOL_FOR_FEES; state currently has it set true (new entries paused)."
+  },
+  "recommendations": [
+    "Ensure state directory is tracked or persist filterOverrides in a tracked config file if you want configuration changes to be version-controlled.",
+    "If the filterOverrides were intentionally set to permissive values, review and document that exception. Otherwise keep the state overrides aligned to .env as applied here.",
+    "Monitor SOL balance and, if lowSolPauseEntries is unexpected, inspect recent balance history (state.track.lowSolAlertAtMs) and refill SOL reserve to resume entries.",
+    "Restart runtime (or trigger cache.set birdeye:sub:<mint>) to ensure WS manager subscribes current open positions if not already active."
+  ]
+}
