@@ -2868,6 +2868,16 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     }
     bumpWatchlistFunnel(counters, 'momentumPassed', { nowMs });
     pushCompactWindowEvent('momentumPassed');
+
+    // Requalification guard: if a mint was blocked after stop-out, clear it only on a fresh momentum pass.
+    try {
+      state.runtime ||= {};
+      state.runtime.requalifyAfterStopByMint ||= {};
+      if (state.runtime.requalifyAfterStopByMint[mint]) {
+        delete state.runtime.requalifyAfterStopByMint[mint];
+        counters.watchlist.requalifyClearedOnMomentumPass = Number(counters.watchlist.requalifyClearedOnMomentumPass || 0) + 1;
+      }
+    } catch {}
     pushCompactWindowEvent('momentumAgeSample', null, {
       mint,
       ageMin: tokenAgeMinutes,
@@ -3468,6 +3478,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       finalizeHotBypassTrace({ nextStageReached: 'confirm', finalPreMomentumRejectReason: null, momentumCounterIncremented: !!hotBypassTraceCtx?._momentumPassed, confirmCounterIncremented: true });
     }
     if (immediateMode) counters.watchlist.immediateConfirmPassed += 1;
+
+    // After stop-outs, mint must re-qualify via fresh momentum pass before attempt path can run.
+    state.runtime ||= {};
+    state.runtime.requalifyAfterStopByMint ||= {};
+    if (state.runtime.requalifyAfterStopByMint[mint]) {
+      counters.watchlist.requalifyBlockedAttempts = Number(counters.watchlist.requalifyBlockedAttempts || 0) + 1;
+      if (fail('attemptNeedsRequalify', { stage: 'attempt', meta: { blockedAtMs: Number(state.runtime.requalifyAfterStopByMint[mint]?.blockedAtMs || 0), trigger: String(state.runtime.requalifyAfterStopByMint[mint]?.trigger || 'stop') } }) === 'break') break;
+      continue;
+    }
 
     const forceAttemptActive = cfg.FORCE_ATTEMPT_POLICY_ACTIVE === true;
     if (forceAttemptActive) {
@@ -4579,6 +4598,22 @@ async function closePosition(cfg, conn, wallet, state, mint, pair, reason) {
   pos.exitTx = res.signature;
   pos.exitReason = reason;
   pos.exitPriceUsd = exitPriceUsd;
+
+  // Requalification guard trigger: after stop-outs, require fresh momentum pass before re-attempting this mint.
+  try {
+    const why = String(reason || '').toLowerCase();
+    const isStopExit = why.includes('stop hit') || why.includes('stop loss hit') || why.includes('trailing stop hit');
+    if (isStopExit) {
+      state.runtime ||= {};
+      state.runtime.requalifyAfterStopByMint ||= {};
+      state.runtime.requalifyAfterStopByMint[mint] = {
+        blockedAtMs: Date.now(),
+        trigger: 'stop',
+        entryPriceUsd: Number(pos.entryPriceUsd || 0) || null,
+        exitPriceUsd: Number(exitPriceUsd || 0) || null,
+      };
+    }
+  } catch {}
 
   // Cooldown after consecutive hard stops to prevent death-spirals.
   try {
