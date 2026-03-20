@@ -667,8 +667,7 @@ async function resolveWatchlistRouteMeta({ cfg, state, mint, row, solUsdNow, now
 }
 
 function watchlistHotQueueMax(cfg) {
-  // Hard cap to avoid HOT firehose overload.
-  return 8;
+  return Math.max(8, Number(cfg.WATCHLIST_HOT_QUEUE_MAX || 16));
 }
 
 function readPct(v) {
@@ -740,6 +739,11 @@ function queueHotWatchlistMint({ state, cfg, mint, nowMs, priority = 1, reason =
     if (queue.length > max) queue.length = max;
   }
   wl.hotQueue = queue;
+  if (counters?.watchlist) {
+    counters.watchlist.hotQueueSizeSamples ||= [];
+    counters.watchlist.hotQueueSizeSamples.push({ tMs: nowMs, size: Number(queue.length || 0), cap: Number(max || 0) });
+    if (counters.watchlist.hotQueueSizeSamples.length > 200) counters.watchlist.hotQueueSizeSamples = counters.watchlist.hotQueueSizeSamples.slice(-200);
+  }
 }
 
 function watchlistEntriesSorted(state) {
@@ -4633,6 +4637,51 @@ async function closePosition(cfg, conn, wallet, state, mint, pair, reason) {
   pos.pnlUsdNetApprox = pnlUsdNetApprox;
   pos.lastSeenPriceUsd = exitPriceUsd ?? (Number(pos.lastSeenPriceUsd || 0) || null);
 
+  // Compact runner-capture diagnostics
+  try {
+    state.runtime ||= {};
+    state.runtime.diagCounters ||= {};
+    const dc = state.runtime.diagCounters;
+    dc.runnerCapture ||= {
+      exitsUnder15s: 0,
+      holdSecSamples: [],
+      reached5BeforeExit: 0,
+      reached10BeforeExit: 0,
+      reached20BeforeExit: 0,
+      reached30BeforeExit: 0,
+      exitedBeforePostEntryLocalMax10m: 0,
+      totalExitsMeasured: 0,
+    };
+    const rc = dc.runnerCapture;
+    const entryMs = Date.parse(String(pos.entryAt || 0));
+    const exitMs = Date.parse(String(pos.exitAt || 0));
+    const holdSec = (Number.isFinite(entryMs) && Number.isFinite(exitMs) && exitMs > entryMs)
+      ? ((exitMs - entryMs) / 1000)
+      : null;
+    if (Number.isFinite(holdSec)) {
+      if (holdSec < 15) rc.exitsUnder15s = Number(rc.exitsUnder15s || 0) + 1;
+      rc.holdSecSamples = Array.isArray(rc.holdSecSamples) ? rc.holdSecSamples : [];
+      rc.holdSecSamples.push(Number(holdSec.toFixed(3)));
+      if (rc.holdSecSamples.length > 400) rc.holdSecSamples = rc.holdSecSamples.slice(-400);
+    }
+    const peak = Number(pos.lastPeakPrice || pos.peakPriceUsd || 0);
+    const entryPxN = Number(pos.entryPriceUsd || 0);
+    if (entryPxN > 0 && peak > 0) {
+      const peakRet = (peak / entryPxN) - 1;
+      if (peakRet >= 0.05) rc.reached5BeforeExit = Number(rc.reached5BeforeExit || 0) + 1;
+      if (peakRet >= 0.10) rc.reached10BeforeExit = Number(rc.reached10BeforeExit || 0) + 1;
+      if (peakRet >= 0.20) rc.reached20BeforeExit = Number(rc.reached20BeforeExit || 0) + 1;
+      if (peakRet >= 0.30) rc.reached30BeforeExit = Number(rc.reached30BeforeExit || 0) + 1;
+    }
+    const peakAtMs = Number(pos.peakAtMs || pos.lastPeakAtMs || 0);
+    if (Number.isFinite(exitMs) && exitMs > 0 && Number.isFinite(peakAtMs) && peakAtMs > 0 && Number.isFinite(entryMs) && entryMs > 0) {
+      if (exitMs < peakAtMs && (peakAtMs - entryMs) <= 10 * 60_000) {
+        rc.exitedBeforePostEntryLocalMax10m = Number(rc.exitedBeforePostEntryLocalMax10m || 0) + 1;
+      }
+    }
+    rc.totalExitsMeasured = Number(rc.totalExitsMeasured || 0) + 1;
+  } catch {}
+
   const symbol = tokenDisplayName({
     name: pos?.tokenName || pair?.baseToken?.name || pair?.birdeye?.raw?.name || null,
     symbol: pos?.symbol || pair?.baseToken?.symbol || pair?.birdeye?.raw?.symbol || null,
@@ -4783,6 +4832,7 @@ async function updateStops(cfg, state, mint, priceUsd) {
   // Update local peak (for anchoring)
   if (priceUsd > (pos.lastPeakPrice || 0)) {
     pos.lastPeakPrice = priceUsd;
+    pos.lastPeakAtMs = Date.now();
   }
 
   const entry = Number(pos.entryPriceUsd);
@@ -4800,7 +4850,7 @@ async function updateStops(cfg, state, mint, priceUsd) {
       return { changed, stopPriceUsd: pos.stopPriceUsd };
     }
 
-    const stopPrice = entry;
+    const stopPrice = entry * (1 - Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
     if (!Number.isFinite(Number(pos.stopPriceUsd)) || pos.stopPriceUsd < stopPrice) {
       pos.stopPriceUsd = stopPrice;
       pos.lastStopUpdateAt = nowIso();
@@ -6208,6 +6258,13 @@ async function main() {
         const swapEntryBlockedMissingDecimalsCount = Number(counters?.guardrails?.entryBlockedReasons?.missingDecimals || 0);
         const otherExecutionSpillover = Number(counters?.execution?.nonTradableMintRejected || 0) + Number(counters?.execution?.nonTradableMintCooldownActive || 0);
         const showExecutionSpillover = reserveBlocked > 0 || targetUsdTooSmall > 0 || swapEntryBlockedMissingDecimalsCount > 0 || otherExecutionSpillover > 0;
+        const rc = counters?.runnerCapture || {};
+        const holdSamples = Array.isArray(rc?.holdSecSamples) ? rc.holdSecSamples.map(Number).filter(Number.isFinite) : [];
+        const sortedHold = holdSamples.slice().sort((a, b) => a - b);
+        const medianHoldSec = sortedHold.length ? sortedHold[Math.floor(sortedHold.length / 2)] : null;
+        const hotQueueSamples = Array.isArray(counters?.watchlist?.hotQueueSizeSamples) ? counters.watchlist.hotQueueSizeSamples.slice(-20) : [];
+        const hotQueueAvg = hotQueueSamples.length ? (hotQueueSamples.reduce((s, x) => s + Number(x?.size || 0), 0) / hotQueueSamples.length) : null;
+        const hotQueueMaxSeen = hotQueueSamples.length ? Math.max(...hotQueueSamples.map((x) => Number(x?.size || 0))) : null;
         const liqDropRejected = Number(counters?.watchlist?.confirmLiqDrop60sRejected || 0);
         const preConfirmMcapMissingRejected = Number(counters?.watchlist?.preConfirmMcapMissingRejected || 0);
         const preConfirmMcapLowRejected = Number(counters?.watchlist?.preConfirmMcapLowRejected || 0);
@@ -6276,6 +6333,13 @@ async function main() {
             `- reserveBlocked=${reserveBlocked}`,
             `- swapEntryBlockedMissingDecimals=${swapEntryBlockedMissingDecimalsCount}`,
           ] : []),
+          '',
+          'RUNNER-CAPTURE DIAGNOSTICS',
+          `- exitsUnder15s=${Number(rc?.exitsUnder15s || 0)} medianHoldSec=${medianHoldSec == null ? 'n/a' : Number(medianHoldSec).toFixed(1)} totalExitsMeasured=${Number(rc?.totalExitsMeasured || 0)}`,
+          `- reachedBeforeExit: +5%=${Number(rc?.reached5BeforeExit || 0)} +10%=${Number(rc?.reached10BeforeExit || 0)} +20%=${Number(rc?.reached20BeforeExit || 0)} +30%=${Number(rc?.reached30BeforeExit || 0)}`,
+          `- exitedBeforePostEntryLocalMax10m=${Number(rc?.exitedBeforePostEntryLocalMax10m || 0)}`,
+          `- hotQueueSize(avg/max,last20)=${hotQueueAvg == null ? 'n/a' : Number(hotQueueAvg).toFixed(1)}/${hotQueueMaxSeen == null ? 'n/a' : Math.round(hotQueueMaxSeen)} cap=${watchlistHotQueueMax(cfg)}`,
+          `- hotQueueCapEvictions=${Number(counters?.watchlist?.capEvictions || 0)} rejectedDueToCap=${Number(counters?.watchlist?.rejectedDueToCap || 0)}`,
           '',
           'POST-MOMENTUM LIQUIDITY BAND',
           `- <30k=${liqBandPost.lt30}  30–50k=${liqBandPost.b30_50}  50–75k=${liqBandPost.b50_75}  75k+=${liqBandPost.gte75}`,

@@ -1,9 +1,9 @@
 export function computeTrailPct(pnl) {
-  // pnl as fraction (e.g., 0.4 for 40%)
-  if (pnl < 0.30) return null; // stop-at-entry
-  if (pnl >= 1.50) return 0.18;
-  if (pnl >= 0.80) return 0.22;
-  if (pnl >= 0.30) return 0.30;
+  if (pnl < 0.10) return null;
+  if (pnl >= 1.20) return 0.18;
+  if (pnl >= 0.60) return 0.22;
+  if (pnl >= 0.25) return 0.18;
+  if (pnl >= 0.10) return 0.12;
   return null;
 }
 
