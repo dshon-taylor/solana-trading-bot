@@ -6054,14 +6054,14 @@ async function main() {
         const topConfirmRejectReasons = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,4).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const topAttemptRejectReasons = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,4).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
 
-        const freshnessBuckets = { lt5: 0, b5_10: 0, b10_20: 0, gte20: 0 };
+        const freshnessBuckets = { b5_10: 0, b10_15: 0, b15_20: 0, gte20: 0 };
         for (const ev of postFlowWin) {
           if (String(ev?.stage || '') !== 'confirm' || String(ev?.outcome || '') !== 'reached') continue;
           const f = Number(ev?.freshnessMs || NaN);
           if (!Number.isFinite(f)) continue;
-          if (f < 5_000) freshnessBuckets.lt5 += 1;
-          else if (f < 10_000) freshnessBuckets.b5_10 += 1;
-          else if (f < 20_000) freshnessBuckets.b10_20 += 1;
+          if (f < 10_000) freshnessBuckets.b5_10 += 1;
+          else if (f < 15_000) freshnessBuckets.b10_15 += 1;
+          else if (f < 20_000) freshnessBuckets.b15_20 += 1;
           else freshnessBuckets.gte20 += 1;
         }
         const _confirmFreshnessLast10Removed = true;
@@ -6187,6 +6187,29 @@ async function main() {
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
             return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} ageMin=${Number.isFinite(Number(r.ageMin)) ? Number(r.ageMin).toFixed(1) : 'null'} result=FAIL driver=${r.driver.driver} ${r.driver.metric} ${r.checks}`;
           });
+        const freshnessOnlyFails = confirmCandidatesDecorated
+          .filter((r) => r.final === 'rejected'
+            && r.txPass
+            && r.buyPass
+            && r.liqPass
+            && String(r.rejectReason || '').includes('confirm.mcapStaleRejected'));
+        const freshnessOnlyFailBuckets = { b5_10: 0, b10_15: 0, b15_20: 0, gte20: 0 };
+        for (const r of freshnessOnlyFails) {
+          const f = Number(r.freshnessMs || 0);
+          if (!(f > 0)) continue;
+          if (f < 10_000) freshnessOnlyFailBuckets.b5_10 += 1;
+          else if (f < 15_000) freshnessOnlyFailBuckets.b10_15 += 1;
+          else if (f < 20_000) freshnessOnlyFailBuckets.b15_20 += 1;
+          else freshnessOnlyFailBuckets.gte20 += 1;
+        }
+        const freshnessOnlyFailRows = freshnessOnlyFails
+          .sort((a, b) => Number(a.freshnessMs || Infinity) - Number(b.freshnessMs || Infinity))
+          .slice(0, 8)
+          .map((r) => {
+            const frag = `${r.mint.slice(0,5)}...`;
+            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            return `- ${label} freshnessMs=${Number.isFinite(Number(r.freshnessMs)) ? Math.round(Number(r.freshnessMs)) : 'null'} buyDom=${Number.isFinite(Number(r.carryBuySellRatio)) ? Number(r.carryBuySellRatio).toFixed(3) : 'null'} txAccel=${Number.isFinite(Number(r.txAccelObserved)) ? Number(r.txAccelObserved).toFixed(2) : 'null'} liq=${Math.round(Number(r.liq || 0))}`;
+          });
         const strongestPassedConfirmRows = confirmCandidatesDecorated
           .filter((r) => r.final === 'passed')
           .sort((a, b) => Number(b.passStrength || 0) - Number(a.passStrength || 0))
@@ -6282,7 +6305,13 @@ async function main() {
           ...(circuitOpen ? ['', 'CIRCUIT', `circuitOpen=true reason=${circuitOpenReason} since=${circuitOpenSinceMs ? fmtCt(circuitOpenSinceMs) : 'n/a'} cooldownRemainingSec=${circuitOpenRemainingSec}`, `circuitFailures: dex=${Number(circuitFailures?.dex || 0)} rpc=${Number(circuitFailures?.rpc || 0)} jup=${Number(circuitFailures?.jup || 0)}`] : []),
           '',
           'CONFIRM FRESHNESS DISTRIBUTION',
-          `- <5s=${freshnessBuckets.lt5}  5–10s=${freshnessBuckets.b5_10}  10–20s=${freshnessBuckets.b10_20}  20s+=${freshnessBuckets.gte20}`,
+          `- 5–10s=${freshnessBuckets.b5_10}  10–15s=${freshnessBuckets.b10_15}  15–20s=${freshnessBuckets.b15_20}  20s+=${freshnessBuckets.gte20}`,
+          ...(freshnessOnlyFails.length ? [
+            '',
+            'FRESHNESS-ONLY FAILS (buyDom+txAccel+liq passed)',
+            `- count=${freshnessOnlyFails.length} buckets: 5–10s=${freshnessOnlyFailBuckets.b5_10} 10–15s=${freshnessOnlyFailBuckets.b10_15} 15–20s=${freshnessOnlyFailBuckets.b15_20} 20s+=${freshnessOnlyFailBuckets.gte20}`,
+            ...freshnessOnlyFailRows,
+          ] : []),
           ...(strongestFailedConfirmRows.length ? [
             '',
             'STRONGEST FAILED CONFIRM CANDIDATES',
