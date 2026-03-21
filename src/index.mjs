@@ -3524,6 +3524,41 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       : confirmQualityGate({ cfg, sigReasons: confirmSigReasons, snapshot });
     if (!confirmGate.ok) {
       const rejectReason = continuationActive ? `confirmContinuation.${String(confirmGate?.failReason || 'windowExpired')}` : String(confirmGate.reason || 'confirmGateRejected');
+      pushCompactWindowEvent('postMomentumFlow', null, {
+        mint,
+        liq: Number(liqForEntry || 0),
+        mcap: Number(mcapForEntry || 0),
+        ageMin: Number.isFinite(tokenAgeMinutes) ? tokenAgeMinutes : null,
+        freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
+        priceImpactPct: confirmPriceImpactPct,
+        slippageBps: confirmSlippageBps,
+        stage: 'confirm',
+        outcome: 'rejected',
+        reason: rejectReason,
+        txAccelObserved: Number.isFinite(confirmTxAccelObserved) ? confirmTxAccelObserved : null,
+        txAccelThreshold: confirmTxAccelThreshold,
+        txAccelMissDistance: Number.isFinite(confirmTxAccelMissDistance) ? confirmTxAccelMissDistance : null,
+        tx1m: Number.isFinite(confirmTx1m) ? confirmTx1m : null,
+        tx5mAvg: Number.isFinite(confirmTx5mAvg) ? confirmTx5mAvg : null,
+        tx30mAvg: Number.isFinite(confirmTx30mAvg) ? confirmTx30mAvg : null,
+        buySellRatioObserved: Number.isFinite(confirmBuySellRatioObserved) ? confirmBuySellRatioObserved : null,
+        buySellThreshold: confirmBuySellThreshold,
+        txMetricSource: confirmTxMetricSource,
+        txMetricMissing: !(Number.isFinite(confirmTx1m) && Number.isFinite(confirmTx5mAvg) && confirmTx1m > 0 && confirmTx5mAvg > 0),
+        carryPresent,
+        carryTx1m: Number(carryObj?.tx1m || 0) || null,
+        carryTx5mAvg: Number(carryObj?.tx5mAvg || 0) || null,
+        carryTx30mAvg: Number(carryObj?.tx30mAvg || 0) || null,
+        carryBuySellRatio: Number(carryObj?.buySellRatio || 0) || null,
+        continuationMode: continuationActive,
+        continuationPassReason: continuationActive ? String(confirmGate?.passReason || 'none') : null,
+        continuationStartPrice: Number(confirmGate?.diag?.startPrice || 0) || null,
+        continuationHighPrice: Number(confirmGate?.diag?.highPrice || 0) || null,
+        continuationLowPrice: Number(confirmGate?.diag?.lowPrice || 0) || null,
+        continuationFinalPrice: Number(confirmGate?.diag?.finalPrice || 0) || null,
+        continuationMaxRunupPct: Number(confirmGate?.diag?.maxRunupPctWithinConfirm || 0) || null,
+        continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
+      });
       finalizeHotBypassTrace({ nextStageReached: 'confirm', finalPreMomentumRejectReason: `confirm.${rejectReason}`, momentumCounterIncremented: !!hotBypassTraceCtx?._momentumPassed, confirmCounterIncremented: false });
       if (fail(rejectReason, { stage: 'confirm', cooldownMs: 20_000, meta: {
         txAccelObserved: Number.isFinite(confirmTxAccelObserved) ? confirmTxAccelObserved : null,
@@ -6375,6 +6410,29 @@ async function main() {
         const continuationPassReasonLine = Object.entries(continuationPassReasonCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const continuationFailReasonLine = Object.entries(continuationFailReasonCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
 
+        const momentumPassedMintsSet = new Set(momentumPassedRows.map((x) => String(x?.mint || '')));
+        const contFailByType = { hardDip: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
+        let momentumPassedReachedRunup15 = 0;
+        const seenRunup15Mints = new Set();
+        for (const ev of postFlowWin) {
+          const mint = String(ev?.mint || '');
+          if (!momentumPassedMintsSet.has(mint)) continue;
+          const reason = String(ev?.reason || '');
+          if (String(ev?.stage || '') === 'confirm' && String(ev?.outcome || '') === 'rejected') {
+            if (reason.includes('confirmContinuation.hardDip')) contFailByType.hardDip += 1;
+            else if (reason.includes('confirmContinuation.windowExpired') || reason.includes('confirmContinuation.windowClose')) contFailByType.windowExpired += 1;
+            else if (reason.includes('confirmContinuation.liq') || reason.includes('confirm.fullLiqRejected')) contFailByType.liq += 1;
+            else if (reason.includes('confirmContinuation.impact') || reason.includes('confirmPriceImpact')) contFailByType.impact += 1;
+            else if (reason.includes('confirmNoRoute')) contFailByType.route += 1;
+            else contFailByType.other += 1;
+          }
+          const runup = Number(ev?.continuationMaxRunupPct || 0);
+          if (String(ev?.stage || '') === 'confirm' && Number.isFinite(runup) && runup >= 0.015 && !seenRunup15Mints.has(mint)) {
+            seenRunup15Mints.add(mint);
+            momentumPassedReachedRunup15 += 1;
+          }
+        }
+
         const momentumPassedRows = inWindowObj(compactWindow.momentumRecent || []).filter(x => String(x?.final || '').includes('momentum.passed')).slice(-20);
         const postByMint = {};
         for (const ev of postFlowWin) {
@@ -6446,6 +6504,8 @@ async function main() {
             'CONFIRM CONTINUATION DIAGNOSTICS',
             `- modeActive=true rows=${continuationRows.length} passReasons=${continuationPassReasonLine}`,
             `- failReasons=${continuationFailReasonLine}`,
+            `- momentumPassed->confirmFail: hardDip=${contFailByType.hardDip} windowExpired=${contFailByType.windowExpired} liq=${contFailByType.liq} impact=${contFailByType.impact} route=${contFailByType.route} other=${contFailByType.other}`,
+            `- momentumPassed names reaching +1.5% inside confirm window=${momentumPassedReachedRunup15}`,
           ] : []),
           ...(strongestFailedConfirmRows.length ? [
             '',
