@@ -6480,93 +6480,84 @@ async function main() {
         const preConfirmMcapLowRejected = Number(counters?.watchlist?.preConfirmMcapLowRejected || 0);
         const showPreconfirmPlumbing = preConfirmMcapMissingRejected > 0 || preConfirmMcapLowRejected > 0;
 
+        const continuationModeActive = (process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true';
+        const confirmReachedRunup15 = confirmCandidatesDecorated.filter((r) => Number.isFinite(Number(r.continuationMaxRunupPct)) && Number(r.continuationMaxRunupPct) >= 0.015).length;
+        const medianLocal = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
+        const medianRunupPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxRunupPct || NaN)).filter((v) => Number.isFinite(v)));
+        const medianDipPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxDipPct || NaN)).filter((v) => Number.isFinite(v)));
+        const top3ConfirmBlockers = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
+        const top3AttemptBlockers = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
+        const topHandoffBlocker = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
+        const strongestFailedConfirmCompact = confirmCandidatesDecorated
+          .filter((r) => r.final === 'rejected')
+          .sort((a, b) => Number(b.failedStrength || 0) - Number(a.failedStrength || 0))
+          .slice(0, 3)
+          .map((r) => {
+            const frag = `${r.mint.slice(0,5)}...`;
+            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} reason=${String(r.rejectReason || 'unknown').replace(/^confirm\./, '')}`;
+          });
+        const strongestPassedConfirmCompact = confirmCandidatesDecorated
+          .filter((r) => r.final === 'passed')
+          .sort((a, b) => Number(b.passStrength || 0) - Number(a.passStrength || 0))
+          .slice(0, 3)
+          .map((r) => {
+            const frag = `${r.mint.slice(0,5)}...`;
+            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} passReason=${String(r.continuationPassReason || 'none')}`;
+          });
+        const continuationFailMix = { hardDip: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
+        for (const [k, v] of Object.entries(confirmRejectCounts)) {
+          const n = Number(v || 0);
+          if (k.includes('confirmContinuation.hardDip')) continuationFailMix.hardDip += n;
+          else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpired += n;
+          else if (k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liq += n;
+          else if (k.includes('confirmContinuation.impact') || k.includes('confirmPriceImpact')) continuationFailMix.impact += n;
+          else if (k.includes('confirmNoRoute')) continuationFailMix.route += n;
+          else continuationFailMix.other += n;
+        }
+        const showCircuitAbnormal = circuitOpen || Number(circuitFailures?.dex || 0) > 0 || Number(circuitFailures?.rpc || 0) > 0 || Number(circuitFailures?.jup || 0) > 0;
+        const freshnessMajorBlocker = Number(confirmRejectCounts['confirm.mcapStaleRejected'] || 0) > 0;
+
         return [
           `🧪 *Diag (confirm)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
           'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} lastConfirmEvalAgeSec=${lastConfirmEvalAgeSec} status=${warmingUp ? 'warming_up' : 'ready'}`,
+          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastConfirmAgeSec=${lastConfirmEvalAgeSec}`,
+          ...(showCircuitAbnormal ? [
+            `circuitAbnormal=true open=${circuitOpen ? 'true' : 'false'} reason=${circuitOpenReason} cooldownRemainingSec=${circuitOpenRemainingSec}`,
+          ] : []),
           '',
-          'ACTIVITY',
-          `lastHour: momentumPassed=${hourMomentumPassed} preConfirmRejected=${preConfirmRejectedHour} confirmReached=${hourConfirmReached2} confirmPassed=${hourConfirmPassed2} attemptReached=${hourAttemptReached2} attemptPassed=${hourAttemptPassed2} fill=${hourFill2}`,
-          `cumulative: momentumPassed=${cumulativeMomentumPassed} preConfirmRejected=${preConfirmRejectedCum} confirmReached=${cumulativeConfirmReached} confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} attemptPassed=${cumAttemptPassed} fill=${cumFill}`,
-          `choke=${primaryChokeName} (${primaryChokeCount} fails, ${primaryChokePct.toFixed(1)}% of confirmReached)`,
-          ...(circuitOpen ? ['', 'CIRCUIT', `circuitOpen=true reason=${circuitOpenReason} since=${circuitOpenSinceMs ? fmtCt(circuitOpenSinceMs) : 'n/a'} cooldownRemainingSec=${circuitOpenRemainingSec}`, `circuitFailures: dex=${Number(circuitFailures?.dex || 0)} rpc=${Number(circuitFailures?.rpc || 0)} jup=${Number(circuitFailures?.jup || 0)}`] : []),
+          'FLOW',
+          `- lastHour: confirmReached=${hourConfirmReached2} confirmPassed=${hourConfirmPassed2} attemptReached=${hourAttemptReached2} fill=${hourFill2}`,
+          `- cumulative: confirmReached=${cumulativeConfirmReached} confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill}`,
+          `- confirmPassRate=${fmtRate(cumulativeConfirmPassed, cumulativeConfirmReached)}`,
+          `- attemptFromConfirmRate=${fmtRate(cumAttemptReached, cumulativeConfirmPassed)}`,
+          `- fillFromConfirmRate=${fmtRate(cumFill, cumulativeConfirmPassed)}`,
           '',
-          'CONFIRM FRESHNESS DISTRIBUTION',
-          `- 5–10s=${freshnessBuckets.b5_10}  10–15s=${freshnessBuckets.b10_15}  15–20s=${freshnessBuckets.b15_20}  20s+=${freshnessBuckets.gte20}`,
-          ...(freshnessOnlyFails.length ? [
+          'CONTINUATION OUTCOMES',
+          `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
+          `- passReasons: runup=${Number(continuationPassReasonCounts.runup || 0)} hold=${Number(continuationPassReasonCounts.hold || 0)} windowClose=${Number(continuationPassReasonCounts.windowClose || 0)}`,
+          `- failReasons: hardDip=${continuationFailMix.hardDip} windowExpired=${continuationFailMix.windowExpired} liq=${continuationFailMix.liq} impact=${continuationFailMix.impact} route=${continuationFailMix.route} other=${continuationFailMix.other}`,
+          `- confirmReached +1.5% in-window=${confirmReachedRunup15}`,
+          `- median maxRunupPctWithinConfirm=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} median maxDipPctWithinConfirm=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'}`,
+          '',
+          'BLOCKER SUMMARY',
+          `- top3 confirm blockers: ${top3ConfirmBlockers}`,
+          `- top3 attempt blockers: ${top3AttemptBlockers}`,
+          '',
+          'ATTEMPT/FILL HANDOFF',
+          `- confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill} topHandoffBlocker=${topHandoffBlocker}`,
+          '',
+          'TOP EXAMPLES',
+          '- strongest failed confirm candidates:',
+          ...(strongestFailedConfirmCompact.length ? strongestFailedConfirmCompact : ['- none']),
+          '- strongest passed confirm candidates:',
+          ...(strongestPassedConfirmCompact.length ? strongestPassedConfirmCompact : ['- none']),
+          ...((!continuationModeActive || freshnessMajorBlocker) ? [
             '',
-            'FRESHNESS-ONLY FAILS (buyDom+txAccel+liq passed)',
-            `- count=${freshnessOnlyFails.length} buckets: 5–10s=${freshnessOnlyFailBuckets.b5_10} 10–15s=${freshnessOnlyFailBuckets.b10_15} 15–20s=${freshnessOnlyFailBuckets.b15_20} 20s+=${freshnessOnlyFailBuckets.gte20}`,
-            ...freshnessOnlyFailRows,
+            'FRESHNESS (conditional)',
+            `- 5–10s=${freshnessBuckets.b5_10} 10–15s=${freshnessBuckets.b10_15} 15–20s=${freshnessBuckets.b15_20} 20s+=${freshnessBuckets.gte20}`,
           ] : []),
-          ...(continuationRows.length ? [
-            '',
-            'CONFIRM CONTINUATION DIAGNOSTICS',
-            `- modeActive=true rows=${continuationRows.length} passReasons=${continuationPassReasonLine}`,
-            `- failReasons=${continuationFailReasonLine}`,
-            `- momentumPassed->confirmFail: hardDip=${contFailByType.hardDip} windowExpired=${contFailByType.windowExpired} liq=${contFailByType.liq} impact=${contFailByType.impact} route=${contFailByType.route} other=${contFailByType.other}`,
-            `- momentumPassed names reaching +1.5% inside confirm window=${momentumPassedReachedRunup15}`,
-          ] : []),
-          ...(strongestFailedConfirmRows.length ? [
-            '',
-            'STRONGEST FAILED CONFIRM CANDIDATES',
-            ...strongestFailedConfirmRows,
-          ] : []),
-          ...(strongestPassedConfirmRows.length ? [
-            '',
-            'STRONGEST PASSED CONFIRM CANDIDATES',
-            ...strongestPassedConfirmRows,
-          ] : []),
-          ...(nearMissLines.length ? [
-            '',
-            'NEAR MISS SUMMARY',
-            ...nearMissLines,
-          ] : []),
-          ...(passedForProfile.length ? [passingProfileLine] : []),
-          '',
-          'CONFIRM/ATTEMPT PATH SUMMARY',
-          `confirmReached=${cumulativeConfirmReached} confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} attemptPassed=${cumAttemptPassed} fill=${cumFill}`,
-          `confirmPassRate=${fmtRate(cumulativeConfirmPassed, cumulativeConfirmReached)}`,
-          `attemptFromConfirmRate=${fmtRate(cumAttemptReached, cumulativeConfirmPassed)}`,
-          `fillFromConfirmRate=${fmtRate(cumFill, cumulativeConfirmPassed)}`,
-          `topConfirmRejectReasons=${topConfirmRejectReasons}`,
-          `topAttemptRejectReasons=${topAttemptRejectReasons}`,
-          `swapEntryBlockedMissingDecimalsLast10=${(counters?.guardrails?.entryBlockedLast10 || []).filter(x => String(x?.reason||'') === 'missingDecimals').slice(-10).map(x => { const rpc=(Array.isArray(x?.decimalsSourcesTried)?x.decimalsSourcesTried.find(s=>String(s?.source||'')==='rpc.getTokenSupply.value.decimals'):null); return `${String(x?.mint||'n/a').slice(0,6)} candMint=${String(x?.mint||'n/a')} pairMint=${String(x?.pairBaseTokenAddress||'none')} rpcTarget=${String(x?.mintResolvedForDecimals||'none')} decimalsSource=${String(x?.decimalsSource||'none')} failedLookups=${String(x?.missingLookup||'none')} rpcSuccess=${rpc?.rpcSuccess === true ? 'true' : (rpc?.rpcSuccess === false ? 'false' : 'n/a')} rpcDecimals=${Number.isFinite(Number(rpc?.value)) ? Number(rpc.value) : 'null'} rpcErr=${String(rpc?.error || rpc?.parseReason || 'none')} final=${String(x?.finalMissingDecimalsReason||'swap.entryBlocked_missingDecimals')}`; }).join(' | ') || 'none'}`,
-          '',
-          'TOP BLOCKERS',
-          ...(postBlockersTop.length ? postBlockersTop : ['- none']),
-          '',
-          'CONFIRM RULES',
-          `- LIVE_CONFIRM_MIN_LIQ_USD=${Number(cfg.LIVE_CONFIRM_MIN_LIQ_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD)}`,
-          `- LIVE_ATTEMPT_MIN_LIQ_USD=${Number(cfg.LIVE_ATTEMPT_MIN_LIQ_USD ?? cfg.LIVE_CONFIRM_MIN_LIQ_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD)}`,
-          `- MIN_LIQUIDITY_FLOOR_USD=${Number(cfg.MIN_LIQUIDITY_FLOOR_USD || 0)}`,
-          `- confirm.mcapStaleRule=freshnessMs <= ${Number(cfg.CONFIRM_SNAPSHOT_MAX_AGE_MS || 5000)}`,
-          `- slippage.maxAllowedBps=${Number(cfg.DEFAULT_SLIPPAGE_BPS || 0)} maxPriceImpactPct=${Number(cfg.EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT || 0)}`,
-          ...(showPreconfirmPlumbing ? [
-            `- preConfirm.mcapSourceUsed=${Object.entries(counters?.watchlist?.preConfirmMcapSourceUsed || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,6).map(([k,v])=>`${k}:${v}`).join(', ') || 'none'}`,
-            `- preConfirm.mcapMissingRejected=${preConfirmMcapMissingRejected} preConfirm.mcapLowRejected=${preConfirmMcapLowRejected}`,
-          ] : []),
-          ...(liqDropRejected > 0 ? [
-            `- confirm.liqDrop60sCandidates=${Number(counters?.watchlist?.confirmLiqDrop60sCandidates || 0)} confirm.liqDrop60sRejected=${liqDropRejected}`,
-            `- confirm.liqDrop60sLast3=${(counters?.watchlist?.confirmLiqDrop60sLast3 || []).slice(-3).map(x => `${String(x?.mint||'n/a').slice(0,6)} liqNow=${Math.round(Number(x?.liqNow||0))} liq60sAgo=${Number.isFinite(Number(x?.liq60sAgo)) ? Math.round(Number(x.liq60sAgo)) : 'null'} liqDropPct=${Number.isFinite(Number(x?.liqDropPct)) ? Number(x.liqDropPct).toFixed(3) : 'null'}`).join(' | ') || 'none'}`,
-          ] : []),
-          ...(showExecutionSpillover ? [
-            '',
-            'EXECUTION SPILLOVER',
-            `- targetUsdTooSmall=${targetUsdTooSmall}`,
-            `- reserveBlocked=${reserveBlocked}`,
-            `- swapEntryBlockedMissingDecimals=${swapEntryBlockedMissingDecimalsCount}`,
-          ] : []),
-          '',
-          'RUNNER-CAPTURE DIAGNOSTICS',
-          `- exitsUnder15s=${Number(rc?.exitsUnder15s || 0)} medianHoldSec=${medianHoldSec == null ? 'n/a' : Number(medianHoldSec).toFixed(1)} totalExitsMeasured=${Number(rc?.totalExitsMeasured || 0)}`,
-          `- reachedBeforeExit: +5%=${Number(rc?.reached5BeforeExit || 0)} +10%=${Number(rc?.reached10BeforeExit || 0)} +20%=${Number(rc?.reached20BeforeExit || 0)} +30%=${Number(rc?.reached30BeforeExit || 0)}`,
-          `- exitedBeforePostEntryLocalMax10m=${Number(rc?.exitedBeforePostEntryLocalMax10m || 0)}`,
-          `- hotQueueSize(avg/max,last20)=${hotQueueAvg == null ? 'n/a' : Number(hotQueueAvg).toFixed(1)}/${hotQueueMaxSeen == null ? 'n/a' : Math.round(hotQueueMaxSeen)} cap=${watchlistHotQueueMax(cfg)}`,
-          `- hotQueueCapEvictions=${Number(counters?.watchlist?.capEvictions || 0)} rejectedDueToCap=${Number(counters?.watchlist?.rejectedDueToCap || 0)}`,
-          '',
-          'POST-MOMENTUM LIQUIDITY BAND',
-          `- <30k=${liqBandPost.lt30}  30–50k=${liqBandPost.b30_50}  50–75k=${liqBandPost.b50_75}  75k+=${liqBandPost.gte75}`,
         ].join('\n');
       }
 
