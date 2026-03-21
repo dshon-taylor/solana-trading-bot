@@ -6410,6 +6410,7 @@ async function main() {
         const continuationPassReasonLine = Object.entries(continuationPassReasonCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const continuationFailReasonLine = Object.entries(continuationFailReasonCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
 
+        const momentumPassedRows = inWindowObj(compactWindow.momentumRecent || []).filter(x => String(x?.final || '').includes('momentum.passed')).slice(-20);
         const momentumPassedMintsSet = new Set(momentumPassedRows.map((x) => String(x?.mint || '')));
         const contFailByType = { hardDip: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
         let momentumPassedReachedRunup15 = 0;
@@ -6433,7 +6434,6 @@ async function main() {
           }
         }
 
-        const momentumPassedRows = inWindowObj(compactWindow.momentumRecent || []).filter(x => String(x?.final || '').includes('momentum.passed')).slice(-20);
         const postByMint = {};
         for (const ev of postFlowWin) {
           const m = String(ev?.mint || 'unknown');
