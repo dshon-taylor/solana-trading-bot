@@ -6223,6 +6223,7 @@ async function main() {
             return tx >= tStart && tx < nextReachedTs;
           });
           const withTx = flow.find((x) => Number.isFinite(Number(x?.txAccelObserved)) || Number.isFinite(Number(x?.tx1m)) || Number.isFinite(Number(x?.tx5mAvg)) || Number.isFinite(Number(x?.tx30mAvg))) || ev;
+          const withContinuation = flow.find((x) => Number.isFinite(Number(x?.continuationMaxRunupPct)) || Number.isFinite(Number(x?.continuationMaxDipPct)) || String(x?.continuationPassReason || 'none') !== 'none') || flow.find((x) => String(x?.outcome || '') === 'passed' || String(x?.outcome || '') === 'rejected') || ev;
           const liveRow = state?.watchlist?.mints?.[mint] || null;
           const tx1mResolved = Number((withTx?.tx1m ?? liveRow?.latest?.tx1m ?? liveRow?.snapshot?.tx_1m ?? liveRow?.pair?.birdeye?.tx_1m) ?? NaN);
           const tx5mAvgResolved = Number((withTx?.tx5mAvg ?? liveRow?.latest?.tx5mAvg ?? liveRow?.snapshot?.tx_5m_avg ?? liveRow?.pair?.birdeye?.tx_5m_avg) ?? NaN);
@@ -6253,14 +6254,14 @@ async function main() {
             carryTx1m: Number(withTx?.carryTx1m ?? NaN),
             carryTx5mAvg: Number(withTx?.carryTx5mAvg ?? NaN),
             carryBuySellRatio: Number(withTx?.carryBuySellRatio ?? NaN),
-            continuationMode: !!(withTx?.continuationMode ?? ev?.continuationMode),
-            continuationPassReason: String(withTx?.continuationPassReason ?? ev?.continuationPassReason ?? 'none'),
-            continuationStartPrice: Number(withTx?.continuationStartPrice ?? ev?.continuationStartPrice ?? NaN),
-            continuationHighPrice: Number(withTx?.continuationHighPrice ?? ev?.continuationHighPrice ?? NaN),
-            continuationLowPrice: Number(withTx?.continuationLowPrice ?? ev?.continuationLowPrice ?? NaN),
-            continuationFinalPrice: Number(withTx?.continuationFinalPrice ?? ev?.continuationFinalPrice ?? NaN),
-            continuationMaxRunupPct: Number(withTx?.continuationMaxRunupPct ?? ev?.continuationMaxRunupPct ?? NaN),
-            continuationMaxDipPct: Number(withTx?.continuationMaxDipPct ?? ev?.continuationMaxDipPct ?? NaN),
+            continuationMode: !!(withContinuation?.continuationMode ?? withTx?.continuationMode ?? ev?.continuationMode),
+            continuationPassReason: String(withContinuation?.continuationPassReason ?? withTx?.continuationPassReason ?? ev?.continuationPassReason ?? 'none'),
+            continuationStartPrice: Number(withContinuation?.continuationStartPrice ?? withTx?.continuationStartPrice ?? ev?.continuationStartPrice ?? NaN),
+            continuationHighPrice: Number(withContinuation?.continuationHighPrice ?? withTx?.continuationHighPrice ?? ev?.continuationHighPrice ?? NaN),
+            continuationLowPrice: Number(withContinuation?.continuationLowPrice ?? withTx?.continuationLowPrice ?? ev?.continuationLowPrice ?? NaN),
+            continuationFinalPrice: Number(withContinuation?.continuationFinalPrice ?? withTx?.continuationFinalPrice ?? ev?.continuationFinalPrice ?? NaN),
+            continuationMaxRunupPct: Number(withContinuation?.continuationMaxRunupPct ?? withTx?.continuationMaxRunupPct ?? ev?.continuationMaxRunupPct ?? NaN),
+            continuationMaxDipPct: Number(withContinuation?.continuationMaxDipPct ?? withTx?.continuationMaxDipPct ?? ev?.continuationMaxDipPct ?? NaN),
             final,
           };
         });
