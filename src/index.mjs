@@ -6692,7 +6692,7 @@ async function main() {
           };
         };
         const momentumCandidates = inWindowObj(compactWindow.momentumRecent || []).map(buildMomentumCandidate);
-        const strongestFailedMomentumRows = momentumCandidates.filter(c => c.final.includes('momentumFailed')).sort((a,b)=>Number(b.momentumScore||0)-Number(a.momentumScore||0)).slice(0,5)
+        const strongestFailedMomentumRows = momentumCandidates.filter(c => c.final.includes('momentumFailed')).sort((a,b)=>Number(b.momentumScore||0)-Number(a.momentumScore||0)).slice(0,3)
           .map(c => {
             const frag = `${c.mint.slice(0,6)}...`;
             const label = (c.symbol === frag) ? frag : `${c.symbol} (${frag})`;
@@ -6702,45 +6702,66 @@ async function main() {
                 ? `guardFail=liquidityBelowThreshold liq=${Math.round(c.liq)} threshold=${Math.round(Number(guardPrimary.replace('liq<','') || 0))}`
                 : `guardFail=${guardPrimary}`)
               : 'guardFail=none';
-            return `- ${label} liq=${Math.round(c.liq)} mcap=${Math.round(c.mcap)} ageMin=${c.ageMin != null ? c.ageMin.toFixed(1) : 'null'} branch=${c.branch.includes('early') ? 'early' : 'mature'} score=${c.momentumScore.toFixed(1)} threshold=${Number(c.momentumScoreThreshold || process.env.MOMENTUM_SCORE_PASS_THRESHOLD || 60).toFixed(1)} band=${c.momentumScoreBand} result=FAIL contributors=[${c.contributorText}] detractors=[${c.detractorText}] ${guardFail}`;
+            return `- ${label} score=${c.momentumScore.toFixed(1)} threshold=${Number(c.momentumScoreThreshold || process.env.MOMENTUM_SCORE_PASS_THRESHOLD || 60).toFixed(1)} liq=${Math.round(c.liq)} mcap=${Math.round(c.mcap)} ${guardFail}`;
           });
-        const strongestPassedMomentumRows = momentumCandidates.filter(c => c.final.includes('momentum.passed')).sort((a,b)=>Number(b.momentumScore||0)-Number(a.momentumScore||0)).slice(0,5)
+        const strongestPassedMomentumRows = momentumCandidates.filter(c => c.final.includes('momentum.passed')).sort((a,b)=>Number(b.momentumScore||0)-Number(a.momentumScore||0)).slice(0,3)
           .map(c => {
             const frag = `${c.mint.slice(0,6)}...`;
             const label = (c.symbol === frag) ? frag : `${c.symbol} (${frag})`;
-            return `- ${label} liq=${Math.round(c.liq)} mcap=${Math.round(c.mcap)} ageMin=${c.ageMin != null ? c.ageMin.toFixed(1) : 'null'} branch=${c.branch.includes('early') ? 'early' : 'mature'} score=${c.momentumScore.toFixed(1)} threshold=${Number(c.momentumScoreThreshold || process.env.MOMENTUM_SCORE_PASS_THRESHOLD || 60).toFixed(1)} band=${c.momentumScoreBand} result=PASS contributors=[${c.contributorText}] detractors=[${c.detractorText}]`;
+            return `- ${label} score=${c.momentumScore.toFixed(1)} threshold=${Number(c.momentumScoreThreshold || process.env.MOMENTUM_SCORE_PASS_THRESHOLD || 60).toFixed(1)} liq=${Math.round(c.liq)} mcap=${Math.round(c.mcap)}`;
           });
-        const strongestFailedScore = momentumCandidates.filter(c => c.final.includes('momentumFailed')).sort((a,b)=>Number(b.momentumScore||0)-Number(a.momentumScore||0))[0]?.momentumScore;
-        const weakestPassedScore = momentumCandidates.filter(c => c.final.includes('momentum.passed')).sort((a,b)=>Number(a.momentumScore||0)-Number(b.momentumScore||0))[0]?.momentumScore;
         const chokeEntry = Object.entries(failCheckCountsWin).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0] || null;
         const chokeName = chokeEntry ? chokeEntry[0] : 'none';
         const chokeCount = Number(chokeEntry?.[1] || 0);
         const chokePct = cumEvaluated > 0 ? ((chokeCount / cumEvaluated) * 100) : 0;
-        const nearMissTxVals = momentumCandidates
-          .filter(c => c.final.includes('momentumFailed')
-            && Array.isArray(c.topPenaltyContributors)
-            && c.topPenaltyContributors.some((p) => String(p?.name || '').toLowerCase().includes('tx'))
-            && Number.isFinite(c.txStrength))
-          .map(c=>Number(c.txStrength));
-        const nearMissVolVals = momentumCandidates
-          .filter(c => c.final.includes('momentumFailed')
-            && Array.isArray(c.topPenaltyContributors)
-            && c.topPenaltyContributors.some((p) => String(p?.name || '').toLowerCase().includes('volume'))
-            && Number.isFinite(c.volStrength))
-          .map(c=>Number(c.volStrength));
-        const nearMissLines = [];
-        if (nearMissTxVals.length) nearMissLines.push(`- TxAcceleration avg=${(nearMissTxVals.reduce((a,b)=>a+b,0)/nearMissTxVals.length).toFixed(2)} vs threshold=${momentumTxThresholdRuntime.toFixed(2)} (n=${nearMissTxVals.length})`);
-        if (nearMissVolVals.length) nearMissLines.push(`- VolumeExpansion avg=${(nearMissVolVals.reduce((a,b)=>a+b,0)/nearMissVolVals.length).toFixed(2)} vs threshold=${momentumVolThresholdRuntime.toFixed(2)} (n=${nearMissVolVals.length})`);
-        const median = (arr) => { if (!arr.length) return null; const s=arr.slice().sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-        const passSet = momentumCandidates.filter(c => c.final.includes('momentum.passed'));
-        const passLiqMed = median(passSet.map(c=>Number(c.liq||0)).filter(v=>v>0));
-        const passMcapMed = median(passSet.map(c=>Number(c.mcap||0)).filter(v=>v>0));
-        const passAgeMed = median(passSet.map(c=>Number(c.ageMin||NaN)).filter(v=>Number.isFinite(v) && v>=0));
-        const passingProfileLine = passSet.length ? `passingProfile - liq median=${passLiqMed != null ? Math.round(passLiqMed/1000)+'k' : 'n/a'} - mcap median=${passMcapMed != null ? Math.round(passMcapMed/1000)+'k' : 'n/a'} - age median=${passAgeMed != null ? Math.round(passAgeMed)+'m' : 'n/a'}` : 'passingProfile=none';
-        const showAgeDebug = ageMissingWin > 0;
-        const pathUsage = counters?.watchlist?.momentumPathUsage || {};
-        const showMetricPlumbing = Number(pathUsage?.tx?.fallback || 0) > 0 || Number(pathUsage?.tx?.missing || 0) > 0 || Number(pathUsage?.volume?.fallback || 0) > 0 || Number(pathUsage?.volume?.missing || 0) > 0;
         const repeatSuppressed = Number(counters?.watchlist?.momentumRepeatFailSuppressed||0);
+
+        const top3ScoringFailReasons = Object.entries(failCheckCountsWin)
+          .filter(([k]) => !String(k).startsWith('hardGuard.'))
+          .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+          .slice(0,3)
+          .map(([k,v])=>`- ${k}: ${v}`);
+        const top3HardGuardBlockers = Object.entries(hardGuardRejectCountsWin)
+          .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+          .slice(0,3)
+          .map(([k,v])=>`- ${k}: ${v}`);
+
+        const nearPassGuardBlocked = momentumCandidates.filter((c) => c.final.includes('momentumFailed')
+          && Number.isFinite(Number(c.momentumScore))
+          && Number(c.momentumScore) >= Number(c.momentumScoreThreshold || process.env.MOMENTUM_SCORE_PASS_THRESHOLD || 60)
+          && Array.isArray(c.hardRejects)
+          && c.hardRejects.length > 0);
+        const nearPassGuardCounts = {};
+        for (const c of nearPassGuardBlocked) {
+          const g = String(c.guardPrimary || c.hardRejects?.[0] || 'unknown');
+          nearPassGuardCounts[g] = Number(nearPassGuardCounts[g] || 0) + 1;
+        }
+        const nearPassTopGuard = Object.entries(nearPassGuardCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
+
+        const momentumPassedRows = inWindowObj(compactWindow.momentumRecent || []).filter((x) => String(x?.final || '').includes('momentum.passed'));
+        const momentumPassedMints = new Set(momentumPassedRows.map((x) => String(x?.mint || '')));
+        const confirmPassedSet = new Set();
+        const fillSet = new Set();
+        const reachedRunup15Set = new Set();
+        const confirmFailMix = { hardDip: 0, windowExpired: 0, liq: 0, route: 0, impact: 0, other: 0 };
+        for (const ev of postFlowWin) {
+          const mint = String(ev?.mint || '');
+          if (!momentumPassedMints.has(mint)) continue;
+          if (String(ev?.stage || '') === 'confirm' && String(ev?.outcome || '') === 'passed') confirmPassedSet.add(mint);
+          if (String(ev?.stage || '') === 'fill' && String(ev?.outcome || '') === 'passed') fillSet.add(mint);
+          const runup = Number(ev?.continuationMaxRunupPct || 0);
+          if (String(ev?.stage || '') === 'confirm' && Number.isFinite(runup) && runup >= 0.015) reachedRunup15Set.add(mint);
+          if (String(ev?.stage || '') === 'confirm' && String(ev?.outcome || '') === 'rejected') {
+            const reason = String(ev?.reason || '');
+            if (reason.includes('confirmContinuation.hardDip')) confirmFailMix.hardDip += 1;
+            else if (reason.includes('confirmContinuation.windowExpired') || reason.includes('confirmContinuation.windowClose')) confirmFailMix.windowExpired += 1;
+            else if (reason.includes('confirmContinuation.liq') || reason.includes('confirm.fullLiqRejected')) confirmFailMix.liq += 1;
+            else if (reason.includes('confirmNoRoute')) confirmFailMix.route += 1;
+            else if (reason.includes('confirmContinuation.impact') || reason.includes('confirmPriceImpact')) confirmFailMix.impact += 1;
+            else confirmFailMix.other += 1;
+          }
+        }
+
         return [
           `🧪 *Diag (momentum)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
           'HEADER',
@@ -6750,44 +6771,31 @@ async function main() {
           `- evaluated=${cumEvaluated} passed=${cumPassed} failed=${cumFailed}`,
           `- passRate=${cumPassed}/${cumEvaluated} (${cumEvaluated > 0 ? ((cumPassed/cumEvaluated)*100).toFixed(1) : '0.0'}%)`,
           `- branchMix=early:${earlyCountWin} mature:${Math.max(0, momentumAgeWin.length - earlyCountWin)}`,
-          `choke=${chokeName} (${chokeCount} fails, ${chokePct.toFixed(1)}% of evaluated)`,
+          `- choke=${chokeName} (${chokeCount} fails, ${chokePct.toFixed(1)}% of evaluated)`,
           '',
-          'FAILED CHECK DISTRIBUTION',
-          ...(failedTopM.length ? failedTopM : ['- none']),
-          ...(nearMissLines.length ? ['', 'NEAR MISS SUMMARY', ...nearMissLines] : []),
+          'POST-MOMENTUM OUTCOMES',
+          `- momentumPassed=${momentumPassedMints.size} confirmPassed=${confirmPassedSet.size} fill=${fillSet.size}`,
+          `- reached+1.5%InConfirmWindow=${reachedRunup15Set.size}`,
+          `- confirmFailMix hardDip=${confirmFailMix.hardDip} windowExpired=${confirmFailMix.windowExpired} liq=${confirmFailMix.liq} route=${confirmFailMix.route} impact=${confirmFailMix.impact} other=${confirmFailMix.other}`,
           '',
-          'STRONGEST FAILED MOMENTUM CANDIDATES',
+          'BLOCKER SUMMARY',
+          `- topScoringFailReasons: ${(top3ScoringFailReasons.length ? top3ScoringFailReasons.map((x)=>x.replace(/^- /,'')).join(', ') : 'none')}`,
+          `- topHardGuardBlockers: ${(top3HardGuardBlockers.length ? top3HardGuardBlockers.map((x)=>x.replace(/^- /,'')).join(', ') : 'none')}`,
+          '',
+          'NEAR-PASS / GUARD-BLOCKED',
+          `- score>=threshold but hard-guard-blocked=${nearPassGuardBlocked.length} topGuardReason=${nearPassTopGuard}`,
+          '',
+          'TOP EXAMPLES',
+          '- strongest failed momentum candidates:',
           ...(strongestFailedMomentumRows.length ? strongestFailedMomentumRows : ['- none']),
-          '',
-          'STRONGEST PASSED MOMENTUM CANDIDATES',
+          '- strongest passed momentum candidates:',
           ...(strongestPassedMomentumRows.length ? strongestPassedMomentumRows : ['- none']),
           '',
-          'THRESHOLD BOUNDARY',
-          `- strongestFailedScore=${Number.isFinite(strongestFailedScore) ? Number(strongestFailedScore).toFixed(2) : 'none'}`,
-          `- weakestPassedScore=${Number.isFinite(weakestPassedScore) ? Number(weakestPassedScore).toFixed(2) : 'none'}`,
-          '',
           'LIQUIDITY DISTRIBUTION',
-          `- <30k=${liqBandM.lt30}  30–40k=${liqBandM.b30_40}  40–50k=${liqBandM.b40_50}  50–75k=${liqBandM.b50_75}  75k+=${liqBandM.gte75}`,
-          '',
-          passingProfileLine,
-          ...(showMetricPlumbing ? [
-            '',
-            'METRIC PLUMBING',
-            `tx5mAvgSemantics=normalized_per_minute`,
-            `txMetricNormalizationSource=ws|fallback_hourly_normalized|other`,
-            `momentumPathUsage.tx(normal/fallback/missing)=${Number(pathUsage?.tx?.normal || 0)}/${Number(pathUsage?.tx?.fallback || 0)}/${Number(pathUsage?.tx?.missing || 0)} volume(normal/fallback/missing)=${Number(pathUsage?.volume?.normal || 0)}/${Number(pathUsage?.volume?.fallback || 0)}/${Number(pathUsage?.volume?.missing || 0)}`,
-          ] : []),
-          ...(showAgeDebug ? [
-            '',
-            'AGE DEBUG (last10)',
-            ...(ageDebugLast10.length ? ageDebugLast10 : ['- none']),
-          ] : []),
+          `- <30k=${liqBandM.lt30} 30–40k=${liqBandM.b30_40} 40–50k=${liqBandM.b40_50} 50–75k=${liqBandM.b50_75} 75k+=${liqBandM.gte75}`,
           ...(repeatSuppressed > 0 ? [
             '',
-            'REPEAT FAIL SUPPRESSION',
-            `repeatFailSuppressed=${repeatSuppressed}`,
-            `repeatFailMintsTop=${repeatMintsTop}`,
-            `repeatFailReasonTop=${repeatReasonTop}`,
+            `REPEAT FAIL SUPPRESSION - count=${repeatSuppressed} mintsTop=${repeatMintsTop} reasonTop=${repeatReasonTop}`,
           ] : []),
         ].join('\n');
       }
