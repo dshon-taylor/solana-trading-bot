@@ -46,6 +46,7 @@ import { resolveEntryAndStopForOpenPosition } from './entry_guard.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { resolveConfirmTxMetricsFromDiagEvent } from './diag_event_invariants.mjs';
+import { CORE_MOMO_CHECKS, canaryMomoShouldSample, recordCanaryMomoFailChecks, coreMomentumProgress, decideMomentumBranch, normalizeEpochMs, pickEpochMsWithSource, applySnapshotToLatest, buildNormalizedMomentumInput, pruneMomentumRepeatFailMap } from './watchlist_eval_helpers.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
@@ -1079,18 +1080,18 @@ async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, snapsho
     } catch {}
   }
 
-  const PRE_RUNNER_ENABLED = (process.env.PRE_RUNNER_ENABLED ?? 'true') === 'true';
-  const PRE_RUNNER_TX_ACCEL_MIN = Math.max(0, Number(process.env.PRE_RUNNER_TX_ACCEL_MIN || 1.2));
-  const PRE_RUNNER_WALLET_EXPANSION_MIN = Math.max(0, Number(process.env.PRE_RUNNER_WALLET_EXPANSION_MIN || 1.25));
-  const PRE_RUNNER_PRICE_IMPACT_EXPANSION_MIN = Math.max(0, Number(process.env.PRE_RUNNER_PRICE_IMPACT_EXPANSION_MIN || 1.5));
-  const PRE_RUNNER_FAST_WINDOW_MS = Math.max(30_000, Number(process.env.PRE_RUNNER_FAST_WINDOW_MS || 60_000));
-  const HOT_MIN_ABS_TX1H_HEALTHY = Math.max(0, Number(process.env.HOT_MIN_ABS_TX1H_HEALTHY || 120));
-  const HOT_MIN_ABS_VOLUME_5M_HEALTHY = Math.max(0, Number(process.env.HOT_MIN_ABS_VOLUME_5M_HEALTHY || 15000));
-  const BURST_PROMOTION_ENABLED = (process.env.BURST_PROMOTION_ENABLED ?? 'true') === 'true';
-  const BURST_TX_ACCEL_MIN = Math.max(0, Number(process.env.BURST_TX_ACCEL_MIN || 1.1));
-  const BURST_WALLET_EXPANSION_MIN = Math.max(0, Number(process.env.BURST_WALLET_EXPANSION_MIN || 1.1));
-  const BURST_VOLUME_EXPANSION_MIN = Math.max(0, Number(process.env.BURST_VOLUME_EXPANSION_MIN || 1.0));
-  const BURST_FAST_WINDOW_MS = Math.max(30_000, Number(process.env.BURST_FAST_WINDOW_MS || 45_000));
+  const PRE_RUNNER_ENABLED = !!cfg.PRE_RUNNER_ENABLED;
+  const PRE_RUNNER_TX_ACCEL_MIN = Number(cfg.PRE_RUNNER_TX_ACCEL_MIN || 0);
+  const PRE_RUNNER_WALLET_EXPANSION_MIN = Number(cfg.PRE_RUNNER_WALLET_EXPANSION_MIN || 0);
+  const PRE_RUNNER_PRICE_IMPACT_EXPANSION_MIN = Number(cfg.PRE_RUNNER_PRICE_IMPACT_EXPANSION_MIN || 0);
+  const PRE_RUNNER_FAST_WINDOW_MS = Number(cfg.PRE_RUNNER_FAST_WINDOW_MS || 60_000);
+  const HOT_MIN_ABS_TX1H_HEALTHY = Number(cfg.HOT_MIN_ABS_TX1H_HEALTHY || 0);
+  const HOT_MIN_ABS_VOLUME_5M_HEALTHY = Number(cfg.HOT_MIN_ABS_VOLUME_5M_HEALTHY || 0);
+  const BURST_PROMOTION_ENABLED = !!cfg.BURST_PROMOTION_ENABLED;
+  const BURST_TX_ACCEL_MIN = Number(cfg.BURST_TX_ACCEL_MIN || 0);
+  const BURST_WALLET_EXPANSION_MIN = Number(cfg.BURST_WALLET_EXPANSION_MIN || 0);
+  const BURST_VOLUME_EXPANSION_MIN = Number(cfg.BURST_VOLUME_EXPANSION_MIN || 0);
+  const BURST_FAST_WINDOW_MS = Number(cfg.BURST_FAST_WINDOW_MS || 45_000);
 
   let hotReason = txAccelTrigger ? 'tx30sAccel' : uniqueBuyerSpike ? 'uniqueBuyersSpike' : burstBuysTrigger ? 'burstBuys' : priceImpactSpike ? 'jupPriceImpactSpike' : (next.routeHint ? 'routeHint' : null);
   if (PRE_RUNNER_ENABLED && !hotReason) {
@@ -1132,9 +1133,9 @@ async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, snapsho
       next.meta.preHotMissingFieldsLast = missing;
       pushDebug(state, { t: nowIso(), mint, symbol: next?.symbol || null, reason: `preHot(missing:${missing.join(',')})` });
     }
-    const maxTop10Pct = Number(process.env.MAX_TOP10_PCT || 38);
-    const maxTopHolderPct = Number(process.env.MAX_TOP_HOLDER_PCT || 3.5);
-    const maxBundlePct = Number(process.env.MAX_BUNDLE_CLUSTER_PCT || 15);
+    const maxTop10Pct = Number(cfg.MAX_TOP10_PCT || 38);
+    const maxTopHolderPct = Number(cfg.MAX_TOP_HOLDER_PCT || 3.5);
+    const maxBundlePct = Number(cfg.MAX_BUNDLE_CLUSTER_PCT || 15);
     const preHotMinLiqUsd = Number(state?.filterOverrides?.MIN_LIQUIDITY_FLOOR_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD ?? 120_000);
     if (liqEff > 0 && liqEff < preHotMinLiqUsd) failReasons.push('liquidity');
     if (top10Eff != null && top10Eff > maxTop10Pct) failReasons.push('top10');
@@ -1531,6 +1532,315 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     pushBypassTraceSummary(evt);
   };
 
+  const ensureCompactWindowState = () => {
+    counters.watchlist ||= {};
+    state.runtime ||= {};
+    state.runtime.compactWindow ||= counters.watchlist.compactWindow || {};
+    counters.watchlist.compactWindow = state.runtime.compactWindow;
+    const w = counters.watchlist.compactWindow;
+    if (!Array.isArray(w.momentumRecent)) w.momentumRecent = [];
+    if (!Array.isArray(w.momentumScoreSamples)) w.momentumScoreSamples = [];
+    if (!Array.isArray(w.momentumInputSamples)) w.momentumInputSamples = [];
+    if (!Array.isArray(w.momentumAgeSamples)) w.momentumAgeSamples = [];
+    if (!Array.isArray(w.blockers)) w.blockers = [];
+    if (!Array.isArray(w.watchlistSeen)) w.watchlistSeen = [];
+    if (!Array.isArray(w.watchlistEvaluated)) w.watchlistEvaluated = [];
+    if (!Array.isArray(w.momentumEval)) w.momentumEval = [];
+    if (!Array.isArray(w.momentumPassed)) w.momentumPassed = [];
+    if (!Array.isArray(w.momentumFailChecks)) w.momentumFailChecks = [];
+    if (!Array.isArray(w.confirmReached)) w.confirmReached = [];
+    if (!Array.isArray(w.confirmPassed)) w.confirmPassed = [];
+    if (!Array.isArray(w.attempt)) w.attempt = [];
+    if (!Array.isArray(w.fill)) w.fill = [];
+    if (!Array.isArray(w.postMomentumFlow)) w.postMomentumFlow = [];
+    if (!Array.isArray(w.momentumLiqValues)) w.momentumLiqValues = [];
+    if (!Array.isArray(w.stalkableSeen)) w.stalkableSeen = [];
+    if (!Array.isArray(w.scanCycles)) w.scanCycles = [];
+    if (!Array.isArray(w.candidateSeen)) w.candidateSeen = [];
+    if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
+    if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
+    if (!Array.isArray(w.repeatSuppressed)) w.repeatSuppressed = [];
+    return w;
+  };
+  const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
+    const w = ensureCompactWindowState();
+    const now = Number(opts?.tMs || nowMs || Date.now());
+    const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
+    const cutoff = now - retainMs;
+    const shouldPersist = opts?.persist !== false;
+    if (shouldPersist) {
+      try {
+        const persistKinds = new Set([
+          'momentumEval',
+          'momentumPassed',
+          'momentumFailChecks',
+          'momentumLiq',
+          'momentumRecent',
+          'momentumScoreSample',
+          'momentumInputSample',
+          'momentumAgeSample',
+          'repeatSuppressed',
+          'confirmReached',
+          'confirmPassed',
+          'attempt',
+          'fill',
+          'postMomentumFlow',
+          'blocker',
+          'stalkableSeen',
+          'scanCycle',
+          'candidateSeen',
+          'candidateRouteable',
+          'candidateLiquiditySeen',
+        ]);
+        if (persistKinds.has(String(kind || ''))) {
+          appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind, reason: reason || null, extra: extra || null });
+        }
+      } catch {}
+    }
+    const pushTs = (arr) => {
+      arr.push(now);
+      while (arr.length && Number(arr[0] || 0) < cutoff) arr.shift();
+    };
+    if (kind === 'blocker') {
+      w.blockers.push({ tMs: now, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') });
+      while (w.blockers.length && Number(w.blockers[0]?.tMs || 0) < cutoff) w.blockers.shift();
+      return;
+    }
+    if (kind === 'momentumFailChecks') {
+      w.momentumFailChecks.push({ tMs: now, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') });
+      while (w.momentumFailChecks.length && Number(w.momentumFailChecks[0]?.tMs || 0) < cutoff) w.momentumFailChecks.shift();
+      return;
+    }
+    if (kind === 'momentumLiq') {
+      w.momentumLiqValues.push({ tMs: now, liqUsd: Number(extra?.liqUsd || 0) });
+      while (w.momentumLiqValues.length && Number(w.momentumLiqValues[0]?.tMs || 0) < cutoff) w.momentumLiqValues.shift();
+      return;
+    }
+    if (kind === 'stalkableSeen') {
+      w.stalkableSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+      while (w.stalkableSeen.length && Number(w.stalkableSeen[0]?.tMs || 0) < cutoff) w.stalkableSeen.shift();
+      return;
+    }
+    if (kind === 'candidateSeen') {
+      w.candidateSeen ||= [];
+      w.candidateSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
+      while (w.candidateSeen.length && Number(w.candidateSeen[0]?.tMs || 0) < cutoff) w.candidateSeen.shift();
+      return;
+    }
+    if (kind === 'candidateRouteable') {
+      w.candidateRouteable ||= [];
+      w.candidateRouteable.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
+      while (w.candidateRouteable.length && Number(w.candidateRouteable[0]?.tMs || 0) < cutoff) w.candidateRouteable.shift();
+      return;
+    }
+    if (kind === 'candidateLiquiditySeen') {
+      w.candidateLiquiditySeen ||= [];
+      w.candidateLiquiditySeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+      while (w.candidateLiquiditySeen.length && Number(w.candidateLiquiditySeen[0]?.tMs || 0) < cutoff) w.candidateLiquiditySeen.shift();
+      return;
+    }
+    if (kind === 'scanCycle') {
+      w.scanCycles.push({
+        tMs: now,
+        intervalMs: Number.isFinite(Number(extra?.intervalMs)) ? Number(extra.intervalMs) : null,
+        durationMs: Number.isFinite(Number(extra?.durationMs)) ? Number(extra.durationMs) : null,
+        candidatesFound: Number(extra?.candidatesFound || 0),
+        watchlistIngest: Number(extra?.watchlistIngest || 0),
+        pairFetchCalls: Number(extra?.pairFetchCalls || 0),
+        birdeyeCalls: Number(extra?.birdeyeCalls || 0),
+        rpcCalls: Number(extra?.rpcCalls || 0),
+        maxSingleCallDurationMs: Number(extra?.maxSingleCallDurationMs || 0),
+        candidateDiscoveryMs: Number(extra?.candidateDiscoveryMs || 0),
+        candidateSourcePollingMs: Number(extra?.candidateSourcePollingMs || 0),
+        candidateSourceMergingMs: Number(extra?.candidateSourceMergingMs || 0),
+        candidateSourceTransformsMs: Number(extra?.candidateSourceTransformsMs || 0),
+        candidateStreamDrainMs: Number(extra?.candidateStreamDrainMs || 0),
+        candidateTokenlistFetchMs: Number(extra?.candidateTokenlistFetchMs || 0),
+        candidateTokenlistPoolBuildMs: Number(extra?.candidateTokenlistPoolBuildMs || 0),
+        candidateTokenlistSamplingMs: Number(extra?.candidateTokenlistSamplingMs || 0),
+        candidateTokenlistQuoteabilityChecksMs: Number(extra?.candidateTokenlistQuoteabilityChecksMs || 0),
+        tokenlistCandidatesFilteredByLiquidity: Number(extra?.tokenlistCandidatesFilteredByLiquidity || 0),
+        tokenlistQuoteChecksPerformed: Number(extra?.tokenlistQuoteChecksPerformed || 0),
+        tokenlistQuoteChecksSkipped: Number(extra?.tokenlistQuoteChecksSkipped || 0),
+        candidateDedupeMs: Number(extra?.candidateDedupeMs || 0),
+        candidateIterationMs: Number(extra?.candidateIterationMs || 0),
+        candidateStateLookupMs: Number(extra?.candidateStateLookupMs || 0),
+        candidateCacheReadsMs: Number(extra?.candidateCacheReadsMs || 0),
+        candidateCacheWritesMs: Number(extra?.candidateCacheWritesMs || 0),
+        candidateFilterLoopsMs: Number(extra?.candidateFilterLoopsMs || 0),
+        candidateAsyncWaitUnclassifiedMs: Number(extra?.candidateAsyncWaitUnclassifiedMs || 0),
+        candidateCooldownFilteringMs: Number(extra?.candidateCooldownFilteringMs || 0),
+        candidateShortlistPrefilterMs: Number(extra?.candidateShortlistPrefilterMs || 0),
+        candidateRouteabilityChecksMs: Number(extra?.candidateRouteabilityChecksMs || 0),
+        candidateOtherMs: Number(extra?.candidateOtherMs || 0),
+        snapshotBuildMs: Number(extra?.snapshotBuildMs || 0),
+        snapshotBirdseyeFetchMs: Number(extra?.snapshotBirdseyeFetchMs || 0),
+        snapshotPairEnrichmentMs: Number(extra?.snapshotPairEnrichmentMs || 0),
+        snapshotLiqMcapNormalizationMs: Number(extra?.snapshotLiqMcapNormalizationMs || 0),
+        snapshotValidationMs: Number(extra?.snapshotValidationMs || 0),
+        snapshotWatchlistRowConstructionMs: Number(extra?.snapshotWatchlistRowConstructionMs || 0),
+        snapshotOtherMs: Number(extra?.snapshotOtherMs || 0),
+        totalWorkMs: Number(extra?.totalWorkMs || 0),
+        totalCycleMs: Number(extra?.totalCycleMs || 0),
+        scanAggregateTaskMs: Number(extra?.scanAggregateTaskMs || 0),
+        scanWallClockMs: Number(extra?.scanWallClockMs || 0),
+      });
+      while (w.scanCycles.length && Number(w.scanCycles[0]?.tMs || 0) < cutoff) w.scanCycles.shift();
+      return;
+    }
+    if (kind === 'repeatSuppressed') {
+      w.repeatSuppressed.push({ tMs: now, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
+      while (w.repeatSuppressed.length && Number(w.repeatSuppressed[0]?.tMs || 0) < cutoff) w.repeatSuppressed.shift();
+      return;
+    }
+    if (kind === 'momentumRecent') {
+      w.momentumRecent.push({
+        tMs: now,
+        mint: String(extra?.mint || 'unknown'),
+        liq: Number(extra?.liq || 0),
+        mcap: Number(extra?.mcap || 0),
+        ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
+        agePresent: !!extra?.agePresent,
+        early: !!extra?.early,
+        branch: String(extra?.branch || 'mature_3_of_4'),
+        v5: Number.isFinite(Number(extra?.v5)) ? Number(extra.v5) : null,
+        v30: Number.isFinite(Number(extra?.v30)) ? Number(extra.v30) : null,
+        volStrength: Number.isFinite(Number(extra?.volStrength)) ? Number(extra.volStrength) : null,
+        volumeSource: String(extra?.volumeSource || 'unknown'),
+        volumeFallback: !!extra?.volumeFallback,
+        walletExpansion: Number.isFinite(Number(extra?.walletExpansion)) ? Number(extra.walletExpansion) : null,
+        buyers1m: Number.isFinite(Number(extra?.buyers1m)) ? Number(extra.buyers1m) : null,
+        buyers5mAvg: Number.isFinite(Number(extra?.buyers5mAvg)) ? Number(extra.buyers5mAvg) : null,
+        hardRejects: Array.isArray(extra?.hardRejects) ? extra.hardRejects.slice(0,6).map(String) : [],
+        tx1m: Number.isFinite(Number(extra?.tx1m)) ? Number(extra.tx1m) : null,
+        tx5mAvg: Number.isFinite(Number(extra?.tx5mAvg)) ? Number(extra.tx5mAvg) : null,
+        tx30mAvg: Number.isFinite(Number(extra?.tx30mAvg)) ? Number(extra.tx30mAvg) : null,
+        momentumScore: Number.isFinite(Number(extra?.momentumScore)) ? Number(extra.momentumScore) : null,
+        momentumScoreThreshold: Number.isFinite(Number(extra?.momentumScoreThreshold)) ? Number(extra.momentumScoreThreshold) : null,
+        momentumScoreBand: String(extra?.momentumScoreBand || 'unknown'),
+        topScoreContributors: Array.isArray(extra?.topScoreContributors) ? extra.topScoreContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), score: Number(x?.score || 0) })) : [],
+        topPenaltyContributors: Array.isArray(extra?.topPenaltyContributors) ? extra.topPenaltyContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), penalty: Number(x?.penalty || 0) })) : [],
+        final: String(extra?.final || 'passed'),
+      });
+      while (w.momentumRecent.length && Number(w.momentumRecent[0]?.tMs || 0) < cutoff) w.momentumRecent.shift();
+      return;
+    }
+    if (kind === 'momentumScoreSample') {
+      w.momentumScoreSamples.push({
+        tMs: now,
+        mint: String(extra?.mint || 'unknown'),
+        momentumScore: Number.isFinite(Number(extra?.momentumScore)) ? Number(extra.momentumScore) : null,
+        momentumScoreThreshold: Number.isFinite(Number(extra?.momentumScoreThreshold)) ? Number(extra.momentumScoreThreshold) : null,
+        momentumScoreBand: String(extra?.momentumScoreBand || 'unknown'),
+        topScoreContributors: Array.isArray(extra?.topScoreContributors) ? extra.topScoreContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), score: Number(x?.score || 0) })) : [],
+        topPenaltyContributors: Array.isArray(extra?.topPenaltyContributors) ? extra.topPenaltyContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), penalty: Number(x?.penalty || 0) })) : [],
+        final: String(extra?.final || 'unknown'),
+      });
+      while (w.momentumScoreSamples.length && Number(w.momentumScoreSamples[0]?.tMs || 0) < cutoff) w.momentumScoreSamples.shift();
+      return;
+    }
+    if (kind === 'momentumInputSample') {
+      w.momentumInputSamples.push({
+        tMs: now,
+        mint: String(extra?.mint || 'unknown'),
+        liq: Number(extra?.liq || 0),
+        v5: Number(extra?.v5 || 0),
+        v30: Number(extra?.v30 || 0),
+        volStrength: Number.isFinite(Number(extra?.volStrength)) ? Number(extra.volStrength) : null,
+        volumeSource: String(extra?.volumeSource || 'unknown'),
+        volumeFallback: !!extra?.volumeFallback,
+        walletExpansion: Number.isFinite(Number(extra?.walletExpansion)) ? Number(extra.walletExpansion) : null,
+        buyers1m: Number.isFinite(Number(extra?.buyers1m)) ? Number(extra.buyers1m) : null,
+        buyers5mAvg: Number.isFinite(Number(extra?.buyers5mAvg)) ? Number(extra.buyers5mAvg) : null,
+        bsr: Number(extra?.bsr || 0),
+        tx1m: Number(extra?.tx1m || 0),
+        tx5mAvg: Number(extra?.tx5mAvg || 0),
+        tx30mAvg: Number(extra?.tx30mAvg || 0),
+        txThreshold: Number.isFinite(Number(extra?.txThreshold)) ? Number(extra.txThreshold) : null,
+        volThreshold: Number.isFinite(Number(extra?.volThreshold)) ? Number(extra.volThreshold) : null,
+        walletThreshold: Number.isFinite(Number(extra?.walletThreshold)) ? Number(extra.walletThreshold) : null,
+        hardRejects: Array.isArray(extra?.hardRejects) ? extra.hardRejects.slice(0,6).map(String) : [],
+        fail: String(extra?.fail || 'none')
+      });
+      while (w.momentumInputSamples.length && Number(w.momentumInputSamples[0]?.tMs || 0) < cutoff) w.momentumInputSamples.shift();
+      return;
+    }
+    if (kind === 'momentumAgeSample') {
+      w.momentumAgeSamples.push({
+        tMs: now,
+        mint: String(extra?.mint || 'unknown'),
+        ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
+        early: !!extra?.early,
+        source: String(extra?.source || 'missing'),
+        branch: String(extra?.branch || 'mature_3_of_4'),
+        fail: String(extra?.fail || 'none'),
+      });
+      while (w.momentumAgeSamples.length && Number(w.momentumAgeSamples[0]?.tMs || 0) < cutoff) w.momentumAgeSamples.shift();
+      return;
+    }
+    if (kind === 'postMomentumFlow') {
+      w.postMomentumFlow.push({
+        tMs: now,
+        mint: String(extra?.mint || 'unknown'),
+        liq: Number(extra?.liq || 0),
+        mcap: Number(extra?.mcap || 0),
+        ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
+        freshnessMs: Number.isFinite(Number(extra?.freshnessMs)) ? Number(extra.freshnessMs) : null,
+        priceImpactPct: Number.isFinite(Number(extra?.priceImpactPct)) ? Number(extra.priceImpactPct) : null,
+        slippageBps: Number.isFinite(Number(extra?.slippageBps)) ? Number(extra.slippageBps) : null,
+        txAccelObserved: Number.isFinite(Number(extra?.txAccelObserved)) ? Number(extra.txAccelObserved) : null,
+        txAccelThreshold: Number.isFinite(Number(extra?.txAccelThreshold)) ? Number(extra.txAccelThreshold) : null,
+        txAccelMissDistance: Number.isFinite(Number(extra?.txAccelMissDistance)) ? Number(extra.txAccelMissDistance) : null,
+        tx1m: Number.isFinite(Number(extra?.tx1m)) ? Number(extra.tx1m) : null,
+        tx5mAvg: Number.isFinite(Number(extra?.tx5mAvg)) ? Number(extra.tx5mAvg) : null,
+        tx30mAvg: Number.isFinite(Number(extra?.tx30mAvg)) ? Number(extra.tx30mAvg) : null,
+        buySellRatioObserved: Number.isFinite(Number(extra?.buySellRatioObserved)) ? Number(extra.buySellRatioObserved) : null,
+        buySellThreshold: Number.isFinite(Number(extra?.buySellThreshold)) ? Number(extra.buySellThreshold) : null,
+        txMetricSource: String(extra?.txMetricSource || 'unknown'),
+        txMetricMissing: !!extra?.txMetricMissing,
+        carryPresent: !!extra?.carryPresent,
+        carryTx1m: Number.isFinite(Number(extra?.carryTx1m)) ? Number(extra.carryTx1m) : null,
+        carryTx5mAvg: Number.isFinite(Number(extra?.carryTx5mAvg)) ? Number(extra.carryTx5mAvg) : null,
+        carryTx30mAvg: Number.isFinite(Number(extra?.carryTx30mAvg)) ? Number(extra.carryTx30mAvg) : null,
+        carryBuySellRatio: Number.isFinite(Number(extra?.carryBuySellRatio)) ? Number(extra.carryBuySellRatio) : null,
+        continuationMode: !!extra?.continuationMode,
+        continuationPassReason: String(extra?.continuationPassReason || 'none'),
+        continuationStartPrice: Number.isFinite(Number(extra?.continuationStartPrice)) ? Number(extra.continuationStartPrice) : null,
+        continuationHighPrice: Number.isFinite(Number(extra?.continuationHighPrice)) ? Number(extra.continuationHighPrice) : null,
+        continuationLowPrice: Number.isFinite(Number(extra?.continuationLowPrice)) ? Number(extra.continuationLowPrice) : null,
+        continuationFinalPrice: Number.isFinite(Number(extra?.continuationFinalPrice)) ? Number(extra.continuationFinalPrice) : null,
+        continuationMaxRunupPct: Number.isFinite(Number(extra?.continuationMaxRunupPct)) ? Number(extra.continuationMaxRunupPct) : null,
+        continuationMaxDipPct: Number.isFinite(Number(extra?.continuationMaxDipPct)) ? Number(extra.continuationMaxDipPct) : null,
+        continuationTimeToRunupPassMs: Number.isFinite(Number(extra?.continuationTimeToRunupPassMs)) ? Number(extra.continuationTimeToRunupPassMs) : null,
+        continuationTimeoutWasFlatOrNegative: !!extra?.continuationTimeoutWasFlatOrNegative,
+        continuationConfirmStartLiqUsd: Number.isFinite(Number(extra?.continuationConfirmStartLiqUsd)) ? Number(extra.continuationConfirmStartLiqUsd) : null,
+        continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
+        continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
+        continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
+        stage: String(extra?.stage || 'unknown'),
+        outcome: String(extra?.outcome || 'unknown'),
+        reason: String(extra?.reason || 'none'),
+      });
+      while (w.postMomentumFlow.length && Number(w.postMomentumFlow[0]?.tMs || 0) < cutoff) w.postMomentumFlow.shift();
+      return;
+    }
+    if (Array.isArray(w[kind])) pushTs(w[kind]);
+  };
+
+  const repeatFailWindowSec = 180;
+  const repeatFailCooldownSec = 120;
+  const repeatEscalationWindowSec = 900;
+  const repeatEscalationHits = 3;
+  const repeatEscalationCooldownSec = 900;
+  const repeatImprovementDelta = 0.05;
+  state.runtime ||= {};
+  state.runtime.momentumRepeatFail ||= {};
+  pruneMomentumRepeatFailMap(state.runtime.momentumRepeatFail, {
+    nowMs,
+    staleAfterMs: Math.max(30 * 60_000, repeatEscalationWindowSec * 2 * 1000),
+    maxEntries: 5000,
+  });
+
   for (const [mint, row, isHot] of rows) {
     const isCanary = canary?.enabled === true && canary?.mint === mint;
     const canaryLog = (stage, detail) => {
@@ -1543,491 +1853,19 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       if (typeof canary?.recordOnce === 'function') return canary.recordOnce(stage, reason, mint, meta);
     };
 
-    // Canary momentum diagnostics: keep a tiny in-memory failure log (for /diag) and
-    // optionally sample detailed meta to keep canary_trace.jsonl low-noise.
-    function canaryMomoShouldSample(nowMs) {
-      const limit = Number(cfg.CANARY_MOMO_FAIL_SAMPLE_PER_MIN || 0);
-      if (!limit || limit <= 0) return { ok: true, limitPerMin: limit, usedThisMin: null };
-      state.debug ||= {};
-      state.debug.canary ||= {};
-      state.debug.canary.momoSample ||= { windowStartMs: 0, used: 0 };
-      const bucketMs = 60_000;
-      const b = state.debug.canary.momoSample;
-      if (!b.windowStartMs || (nowMs - b.windowStartMs) >= bucketMs) {
-        b.windowStartMs = nowMs;
-        b.used = 0;
-      }
-      if (b.used >= limit) return { ok: false, limitPerMin: limit, usedThisMin: b.used };
-      b.used += 1;
-      return { ok: true, limitPerMin: limit, usedThisMin: b.used };
-    }
-
-    function recordCanaryMomoFailChecks(nowMs, failedChecks) {
-      if (!isCanary) return;
-      const windowMin = Number(cfg.MOMENTUM_DIAG_WINDOW_MIN || 30);
-      const windowMs = Math.max(60_000, windowMin * 60_000);
-      state.debug ||= {};
-      state.debug.momentumFail ||= { windowMs, events: [] };
-      state.debug.momentumFail.windowMs = windowMs;
-      const ev = { tMs: nowMs, checks: Array.from(new Set((failedChecks || []).map(String))).slice(0, 32) };
-      state.debug.momentumFail.events.push(ev);
-      // prune by time + cap length
-      const cutoff = nowMs - windowMs;
-      while (state.debug.momentumFail.events.length && state.debug.momentumFail.events[0].tMs < cutoff) {
-        state.debug.momentumFail.events.shift();
-      }
-      if (state.debug.momentumFail.events.length > 1000) {
-        state.debug.momentumFail.events = state.debug.momentumFail.events.slice(-1000);
-      }
-    }
-
-    const CORE_MOMO_CHECKS = ['dex.volumeExpansion', 'dex.buyPressure', 'dex.txAcceleration', 'dex.walletExpansion'];
-    function coreMomentumProgress(sig) {
-      const r = sig?.reasons || {};
-      const volRatio = Number(r.volume5m || 0) / Math.max(1, Number(r.volume_30m_avg || 0));
-      const buyRatio = Number(r.buySellRatio || 0) / 1.2;
-      const txRatio = Number(r.tx_1m || 0) / Math.max(1, Number(r.tx_5m_avg || 0));
-      const walletRatio = Number(r.walletExpansion || 0) / Math.max(1e-9, Number(r.walletExpansionThreshold || 1.25));
-      return {
-        'dex.volumeExpansion': Number.isFinite(volRatio) ? volRatio : 0,
-        'dex.buyPressure': Number.isFinite(buyRatio) ? buyRatio : 0,
-        'dex.txAcceleration': Number.isFinite(txRatio) ? txRatio : 0,
-        'dex.walletExpansion': Number.isFinite(walletRatio) ? walletRatio : 0,
-      };
-    }
-
-    function decideMomentumBranch(tokenAgeMinutes) {
-      const agePresent = Number.isFinite(tokenAgeMinutes);
-      const matureTokenMode = agePresent ? tokenAgeMinutes >= 30 : true;
-      const earlyTokenMode = agePresent ? tokenAgeMinutes < 30 : false;
-      const breakoutBranchUsed = earlyTokenMode ? 'early_2_of_3' : (agePresent ? 'mature_3_of_4' : 'missingAge_strict_3_of_4');
-      return { agePresent, matureTokenMode, earlyTokenMode, breakoutBranchUsed };
-    }
-
-    function applySnapshotToLatest({ row, snapshot }) {
-      if (!row || !snapshot) return;
-      row.latest ||= {};
-      if (Number(snapshot.marketCapUsd || 0) > 0) row.latest.mcapUsd = Number(snapshot.marketCapUsd);
-      if (Number(snapshot.liquidityUsd || 0) > 0) row.latest.liqUsd = Number(snapshot.liquidityUsd);
-      const snapshotPairCreatedAt = normalizeEpochMs(snapshot.pairCreatedAt ?? snapshot?.pair?.pairCreatedAt ?? snapshot?.raw?.pairCreatedAt ?? snapshot?.raw?.pair_created_at ?? 0);
-      if (Number(snapshotPairCreatedAt || 0) > 0) row.latest.pairCreatedAt = Number(snapshotPairCreatedAt || 0);
-      if (Number(snapshot.priceUsd || 0) > 0) row.latest.priceUsd = Number(snapshot.priceUsd);
-      if (Number.isFinite(Number(snapshot.freshnessMs))) row.latest.marketDataFreshnessMs = Number(snapshot.freshnessMs);
-      row.latest.marketDataSource = snapshot.source || row.latest.marketDataSource || 'unknown';
-      const decimalsFromSnapshot = [snapshot?.raw?.decimals, snapshot?.pair?.baseToken?.decimals, row?.pair?.baseToken?.decimals]
-        .map((x) => Number(x))
-        .find((x) => Number.isInteger(x) && x >= 0);
-      if (Number.isInteger(decimalsFromSnapshot)) row.latest.decimals = Number(decimalsFromSnapshot);
-
-      const micro = {
-        volume5m: Number(snapshot?.volume_5m ?? snapshot?.pair?.birdeye?.volume_5m ?? 0),
-        volume30mAvg: Number(snapshot?.volume_30m_avg ?? snapshot?.pair?.birdeye?.volume_30m_avg ?? 0),
-        buySellRatio: Number(snapshot?.buySellRatio ?? snapshot?.pair?.birdeye?.buySellRatio ?? 0),
-        tx1m: Number(snapshot?.tx_1m ?? snapshot?.pair?.birdeye?.tx_1m ?? 0),
-        tx5mAvg: Number(snapshot?.tx_5m_avg ?? snapshot?.pair?.birdeye?.tx_5m_avg ?? 0),
-        tx30mAvg: Number(snapshot?.tx_30m_avg ?? snapshot?.pair?.birdeye?.tx_30m_avg ?? 0),
-        rollingHigh5m: Number(snapshot?.rolling_high_5m ?? snapshot?.pair?.birdeye?.rolling_high_5m ?? 0),
-        uniqueBuyers1m: Number(snapshot?.uniqueBuyers1m ?? snapshot?.pair?.birdeye?.uniqueBuyers1m ?? snapshot?.pair?.birdeye?.uniqueWallet1m ?? 0),
-        uniqueBuyers5m: Number(snapshot?.uniqueBuyers5m ?? snapshot?.pair?.birdeye?.uniqueBuyers5m ?? snapshot?.pair?.birdeye?.uniqueWallet5m ?? 0),
-      };
-      for (const [k, v] of Object.entries(micro)) {
-        if (Number.isFinite(Number(v)) && Number(v) > 0) row.latest[k] = Number(v);
-      }
-    }
-
-    function buildNormalizedMomentumInput({ snapshot, latest, pair, nowMs }) {
-      const p = pair || {};
-      const s = snapshot || {};
-      const l = latest || {};
-      const wsBe = p?.wsCache?.birdeye || {};
-      const birdeye = {
-        volume_5m: Number(l.volume5m ?? s?.volume_5m ?? s?.raw?.volume_5m ?? p?.birdeye?.volume_5m ?? wsBe?.volume_5m ?? 0) || 0,
-        volume_30m_avg: Number(l.volume30mAvg ?? s?.volume_30m_avg ?? s?.raw?.volume_30m_avg ?? p?.birdeye?.volume_30m_avg ?? wsBe?.volume_30m_avg ?? 0) || 0,
-        buySellRatio: Number(l.buySellRatio ?? s?.buySellRatio ?? s?.raw?.buySellRatio ?? p?.birdeye?.buySellRatio ?? wsBe?.buySellRatio ?? 0) || 0,
-        tx_1m: Number(l.tx1m ?? s?.tx_1m ?? s?.raw?.tx_1m ?? p?.birdeye?.tx_1m ?? wsBe?.tx_1m ?? 0) || 0,
-        tx_5m_avg: Number(l.tx5mAvg ?? s?.tx_5m_avg ?? s?.raw?.tx_5m_avg ?? p?.birdeye?.tx_5m_avg ?? wsBe?.tx_5m_avg ?? 0) || 0,
-        tx_30m_avg: Number(l.tx30mAvg ?? s?.tx_30m_avg ?? s?.raw?.tx_30m_avg ?? p?.birdeye?.tx_30m_avg ?? wsBe?.tx_30m_avg ?? 0) || 0,
-        rolling_high_5m: Number(l.rollingHigh5m ?? s?.rolling_high_5m ?? s?.raw?.rolling_high_5m ?? p?.birdeye?.rolling_high_5m ?? wsBe?.rolling_high_5m ?? 0) || 0,
-        tx_1h: Number(l.tx1h ?? s?.tx_1h ?? s?.raw?.tx_1h ?? p?.birdeye?.tx_1h ?? wsBe?.tx_1h ?? 0) || 0,
-        uniqueBuyers1m: Number(l.uniqueBuyers1m ?? s?.uniqueBuyers1m ?? s?.raw?.uniqueBuyers1m ?? s?.raw?.uniqueWallet1m ?? s?.raw?.uniqueWalletHistory1m ?? p?.birdeye?.uniqueBuyers1m ?? p?.birdeye?.uniqueWallet1m ?? p?.birdeye?.uniqueWalletHistory1m ?? wsBe?.uniqueBuyers1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
-        uniqueBuyers5m: Number(l.uniqueBuyers5m ?? s?.uniqueBuyers5m ?? s?.raw?.uniqueBuyers5m ?? s?.raw?.uniqueWallet5m ?? s?.raw?.uniqueWalletHistory5m ?? p?.birdeye?.uniqueBuyers5m ?? p?.birdeye?.uniqueWallet5m ?? p?.birdeye?.uniqueWalletHistory5m ?? wsBe?.uniqueBuyers5m ?? wsBe?.uniqueWallet5m ?? 0) || 0,
-        uniqueWallet1m: Number(s?.raw?.uniqueWallet1m ?? p?.birdeye?.uniqueWallet1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
-        uniqueWallet5m: Number(s?.raw?.uniqueWallet5m ?? p?.birdeye?.uniqueWallet5m ?? wsBe?.uniqueWallet5m ?? 0) || 0,
-      };
-      const n = {
-        ...p,
-        priceUsd: Number(s.priceUsd ?? l.priceUsd ?? p.priceUsd ?? p.price ?? 0) || 0,
-        price: Number(s.priceUsd ?? l.priceUsd ?? p.price ?? p.priceUsd ?? 0) || 0,
-        liquidity: { usd: Number(s.liquidityUsd ?? l.liqUsd ?? p?.liquidity?.usd ?? 0) || 0 },
-        marketCap: Number(s.marketCapUsd ?? l.mcapUsd ?? p.marketCap ?? p.fdv ?? 0) || 0,
-        fdv: Number(s.fdvUsd ?? l.fdvUsd ?? p.fdv ?? 0) || 0,
-        pairCreatedAt: Number(s.pairCreatedAt ?? l.pairCreatedAt ?? p.pairCreatedAt ?? 0) || null,
-        volume: {
-          h1: Number(l.volume1h ?? s?.pair?.volume?.h1 ?? p?.volume?.h1 ?? 0) || 0,
-          h4: Number(l.volume4h ?? s?.pair?.volume?.h4 ?? p?.volume?.h4 ?? 0) || 0,
-        },
-        txns: {
-          h1: {
-            buys: Number(l.buys1h ?? s?.pair?.txns?.h1?.buys ?? p?.txns?.h1?.buys ?? 0) || 0,
-            sells: Number(l.sells1h ?? s?.pair?.txns?.h1?.sells ?? p?.txns?.h1?.sells ?? 0) || 0,
-          },
-        },
-        priceChange: {
-          h1: Number(l.pc1h ?? s?.pair?.priceChange?.h1 ?? p?.priceChange?.h1 ?? 0) || 0,
-          h4: Number(l.pc4h ?? s?.pair?.priceChange?.h4 ?? p?.priceChange?.h4 ?? 0) || 0,
-        },
-        birdeye,
-      };
-      const presentFields = [
-        n.priceUsd > 0,
-        Number(n?.liquidity?.usd || 0) > 0,
-        Number(n.marketCap || 0) > 0,
-        Number(n?.volume?.h1 || 0) > 0,
-        Number(n?.txns?.h1?.buys || 0) + Number(n?.txns?.h1?.sells || 0) > 0,
-        Number(n?.priceChange?.h1 || 0) !== 0,
-        Number(n.pairCreatedAt || 0) > 0,
-        Number(n?.birdeye?.volume_5m || 0) > 0,
-        Number(n?.birdeye?.buySellRatio || 0) > 0,
-        Number(n?.birdeye?.tx_1m || 0) > 0,
-      ].filter(Boolean).length;
-      const sourceUsed = (s?.priceUsd || s?.liquidityUsd || s?.marketCapUsd) ? 'snapshot+merged'
-        : ((l?.liqUsd || l?.mcapUsd) ? 'latest+pair' : 'pairOnly');
-      const microFieldNames = ['volume_5m', 'volume_30m_avg', 'buySellRatio', 'tx_1m', 'tx_5m_avg'];
-      const microPresent = microFieldNames.reduce((acc, k) => acc + (Number(n?.birdeye?.[k] || 0) > 0 ? 1 : 0), 0);
-      const microSourceUsed = (Number(l?.volume5m || 0) > 0 || Number(l?.tx1m || 0) > 0 || Number(l?.buySellRatio || 0) > 0)
-        ? 'latest'
-        : ((Number(s?.volume_5m || 0) > 0 || Number(s?.tx_1m || 0) > 0 || Number(s?.buySellRatio || 0) > 0 || Number(s?.pair?.birdeye?.volume_5m || 0) > 0) ? 'snapshot'
-          : ((Number(p?.birdeye?.volume_5m || 0) > 0 || Number(wsBe?.volume_5m || 0) > 0) ? 'pair/ws' : 'none'));
-      const rawAvail = {
-        snapshot: { priceUsd: s?.priceUsd ?? null, liquidityUsd: s?.liquidityUsd ?? null, marketCapUsd: s?.marketCapUsd ?? null, freshnessMs: s?.freshnessMs ?? null },
-        latest: { priceUsd: l?.priceUsd ?? null, liqUsd: l?.liqUsd ?? null, mcapUsd: l?.mcapUsd ?? null, freshnessMs: l?.marketDataFreshnessMs ?? null },
-        pair: { priceUsd: p?.priceUsd ?? p?.price ?? null, liqUsd: p?.liquidity?.usd ?? null, mcapUsd: p?.marketCap ?? p?.fdv ?? null },
-      };
-      return { normalized: n, presentFields, sourceUsed, rawAvail, microPresent, microSourceUsed };
-    }
-    const normalizeEpochMs = (v) => {
-      const n = Number(v);
-      if (Number.isFinite(n) && n > 0) return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
-      const parsed = Date.parse(String(v || '').trim());
-      if (!Number.isFinite(parsed) || parsed <= 0) return null;
-      return Math.round(parsed);
-    };
-    const pickEpochMsWithSource = (candidates = []) => {
-      for (const c of candidates) {
-        const n = normalizeEpochMs(c?.value);
-        if (n) return { value: n, source: String(c?.source || 'unknown') };
-      }
-      return { value: null, source: 'missing' };
-    };
-
-    const ensureCompactWindowState = () => {
-      counters.watchlist ||= {};
-      state.runtime ||= {};
-      state.runtime.compactWindow ||= counters.watchlist.compactWindow || {};
-      counters.watchlist.compactWindow = state.runtime.compactWindow;
-      const w = counters.watchlist.compactWindow;
-      if (!Array.isArray(w.momentumRecent)) w.momentumRecent = [];
-      if (!Array.isArray(w.momentumScoreSamples)) w.momentumScoreSamples = [];
-      if (!Array.isArray(w.momentumInputSamples)) w.momentumInputSamples = [];
-      if (!Array.isArray(w.momentumAgeSamples)) w.momentumAgeSamples = [];
-      if (!Array.isArray(w.blockers)) w.blockers = [];
-      if (!Array.isArray(w.watchlistSeen)) w.watchlistSeen = [];
-      if (!Array.isArray(w.watchlistEvaluated)) w.watchlistEvaluated = [];
-      if (!Array.isArray(w.momentumEval)) w.momentumEval = [];
-      if (!Array.isArray(w.momentumPassed)) w.momentumPassed = [];
-      if (!Array.isArray(w.momentumFailChecks)) w.momentumFailChecks = [];
-      if (!Array.isArray(w.confirmReached)) w.confirmReached = [];
-      if (!Array.isArray(w.confirmPassed)) w.confirmPassed = [];
-      if (!Array.isArray(w.attempt)) w.attempt = [];
-      if (!Array.isArray(w.fill)) w.fill = [];
-      if (!Array.isArray(w.postMomentumFlow)) w.postMomentumFlow = [];
-      if (!Array.isArray(w.momentumLiqValues)) w.momentumLiqValues = [];
-      if (!Array.isArray(w.stalkableSeen)) w.stalkableSeen = [];
-      if (!Array.isArray(w.scanCycles)) w.scanCycles = [];
-      if (!Array.isArray(w.candidateSeen)) w.candidateSeen = [];
-      if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
-      if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
-      if (!Array.isArray(w.repeatSuppressed)) w.repeatSuppressed = [];
-      return w;
-    };
-    const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
-      const w = ensureCompactWindowState();
-      const now = Number(opts?.tMs || nowMs || Date.now());
-      const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-      const cutoff = now - retainMs;
-      const shouldPersist = opts?.persist !== false;
-      if (shouldPersist) {
-        try {
-          const persistKinds = new Set([
-            'momentumEval',
-            'momentumPassed',
-            'momentumFailChecks',
-            'momentumLiq',
-            'momentumRecent',
-            'momentumScoreSample',
-            'momentumInputSample',
-            'momentumAgeSample',
-            'repeatSuppressed',
-            'confirmReached',
-            'confirmPassed',
-            'attempt',
-            'fill',
-            'postMomentumFlow',
-            'blocker',
-            'stalkableSeen',
-            'scanCycle',
-            'candidateSeen',
-            'candidateRouteable',
-            'candidateLiquiditySeen',
-          ]);
-          if (persistKinds.has(String(kind || ''))) {
-            appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind, reason: reason || null, extra: extra || null });
-          }
-        } catch {}
-      }
-      const pushTs = (arr) => {
-        arr.push(now);
-        while (arr.length && Number(arr[0] || 0) < cutoff) arr.shift();
-      };
-      if (kind === 'blocker') {
-        w.blockers.push({ tMs: now, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') });
-        while (w.blockers.length && Number(w.blockers[0]?.tMs || 0) < cutoff) w.blockers.shift();
-        return;
-      }
-      if (kind === 'momentumFailChecks') {
-        w.momentumFailChecks.push({ tMs: now, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') });
-        while (w.momentumFailChecks.length && Number(w.momentumFailChecks[0]?.tMs || 0) < cutoff) w.momentumFailChecks.shift();
-        return;
-      }
-      if (kind === 'momentumLiq') {
-        w.momentumLiqValues.push({ tMs: now, liqUsd: Number(extra?.liqUsd || 0) });
-        while (w.momentumLiqValues.length && Number(w.momentumLiqValues[0]?.tMs || 0) < cutoff) w.momentumLiqValues.shift();
-        return;
-      }
-      if (kind === 'stalkableSeen') {
-        w.stalkableSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
-        while (w.stalkableSeen.length && Number(w.stalkableSeen[0]?.tMs || 0) < cutoff) w.stalkableSeen.shift();
-        return;
-      }
-      if (kind === 'candidateSeen') {
-        w.candidateSeen ||= [];
-        w.candidateSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-        while (w.candidateSeen.length && Number(w.candidateSeen[0]?.tMs || 0) < cutoff) w.candidateSeen.shift();
-        return;
-      }
-      if (kind === 'candidateRouteable') {
-        w.candidateRouteable ||= [];
-        w.candidateRouteable.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-        while (w.candidateRouteable.length && Number(w.candidateRouteable[0]?.tMs || 0) < cutoff) w.candidateRouteable.shift();
-        return;
-      }
-      if (kind === 'candidateLiquiditySeen') {
-        w.candidateLiquiditySeen ||= [];
-        w.candidateLiquiditySeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
-        while (w.candidateLiquiditySeen.length && Number(w.candidateLiquiditySeen[0]?.tMs || 0) < cutoff) w.candidateLiquiditySeen.shift();
-        return;
-      }
-      if (kind === 'scanCycle') {
-        w.scanCycles.push({
-          tMs: now,
-          intervalMs: Number.isFinite(Number(extra?.intervalMs)) ? Number(extra.intervalMs) : null,
-          durationMs: Number.isFinite(Number(extra?.durationMs)) ? Number(extra.durationMs) : null,
-          candidatesFound: Number(extra?.candidatesFound || 0),
-          watchlistIngest: Number(extra?.watchlistIngest || 0),
-          pairFetchCalls: Number(extra?.pairFetchCalls || 0),
-          birdeyeCalls: Number(extra?.birdeyeCalls || 0),
-          rpcCalls: Number(extra?.rpcCalls || 0),
-          maxSingleCallDurationMs: Number(extra?.maxSingleCallDurationMs || 0),
-          candidateDiscoveryMs: Number(extra?.candidateDiscoveryMs || 0),
-          candidateSourcePollingMs: Number(extra?.candidateSourcePollingMs || 0),
-          candidateSourceMergingMs: Number(extra?.candidateSourceMergingMs || 0),
-          candidateSourceTransformsMs: Number(extra?.candidateSourceTransformsMs || 0),
-          candidateStreamDrainMs: Number(extra?.candidateStreamDrainMs || 0),
-          candidateTokenlistFetchMs: Number(extra?.candidateTokenlistFetchMs || 0),
-          candidateTokenlistPoolBuildMs: Number(extra?.candidateTokenlistPoolBuildMs || 0),
-          candidateTokenlistSamplingMs: Number(extra?.candidateTokenlistSamplingMs || 0),
-          candidateTokenlistQuoteabilityChecksMs: Number(extra?.candidateTokenlistQuoteabilityChecksMs || 0),
-          tokenlistCandidatesFilteredByLiquidity: Number(extra?.tokenlistCandidatesFilteredByLiquidity || 0),
-          tokenlistQuoteChecksPerformed: Number(extra?.tokenlistQuoteChecksPerformed || 0),
-          tokenlistQuoteChecksSkipped: Number(extra?.tokenlistQuoteChecksSkipped || 0),
-          candidateDedupeMs: Number(extra?.candidateDedupeMs || 0),
-          candidateIterationMs: Number(extra?.candidateIterationMs || 0),
-          candidateStateLookupMs: Number(extra?.candidateStateLookupMs || 0),
-          candidateCacheReadsMs: Number(extra?.candidateCacheReadsMs || 0),
-          candidateCacheWritesMs: Number(extra?.candidateCacheWritesMs || 0),
-          candidateFilterLoopsMs: Number(extra?.candidateFilterLoopsMs || 0),
-          candidateAsyncWaitUnclassifiedMs: Number(extra?.candidateAsyncWaitUnclassifiedMs || 0),
-          candidateCooldownFilteringMs: Number(extra?.candidateCooldownFilteringMs || 0),
-          candidateShortlistPrefilterMs: Number(extra?.candidateShortlistPrefilterMs || 0),
-          candidateRouteabilityChecksMs: Number(extra?.candidateRouteabilityChecksMs || 0),
-          candidateOtherMs: Number(extra?.candidateOtherMs || 0),
-          snapshotBuildMs: Number(extra?.snapshotBuildMs || 0),
-          snapshotBirdseyeFetchMs: Number(extra?.snapshotBirdseyeFetchMs || 0),
-          snapshotPairEnrichmentMs: Number(extra?.snapshotPairEnrichmentMs || 0),
-          snapshotLiqMcapNormalizationMs: Number(extra?.snapshotLiqMcapNormalizationMs || 0),
-          snapshotValidationMs: Number(extra?.snapshotValidationMs || 0),
-          snapshotWatchlistRowConstructionMs: Number(extra?.snapshotWatchlistRowConstructionMs || 0),
-          snapshotOtherMs: Number(extra?.snapshotOtherMs || 0),
-          totalWorkMs: Number(extra?.totalWorkMs || 0),
-          totalCycleMs: Number(extra?.totalCycleMs || 0),
-          scanAggregateTaskMs: Number(extra?.scanAggregateTaskMs || 0),
-          scanWallClockMs: Number(extra?.scanWallClockMs || 0),
-        });
-        while (w.scanCycles.length && Number(w.scanCycles[0]?.tMs || 0) < cutoff) w.scanCycles.shift();
-        return;
-      }
-      if (kind === 'repeatSuppressed') {
-        w.repeatSuppressed.push({ tMs: now, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
-        while (w.repeatSuppressed.length && Number(w.repeatSuppressed[0]?.tMs || 0) < cutoff) w.repeatSuppressed.shift();
-        return;
-      }
-      if (kind === 'momentumRecent') {
-        w.momentumRecent.push({
-          tMs: now,
-          mint: String(extra?.mint || 'unknown'),
-          liq: Number(extra?.liq || 0),
-          mcap: Number(extra?.mcap || 0),
-          ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
-          agePresent: !!extra?.agePresent,
-          early: !!extra?.early,
-          branch: String(extra?.branch || 'mature_3_of_4'),
-          v5: Number.isFinite(Number(extra?.v5)) ? Number(extra.v5) : null,
-          v30: Number.isFinite(Number(extra?.v30)) ? Number(extra.v30) : null,
-          volStrength: Number.isFinite(Number(extra?.volStrength)) ? Number(extra.volStrength) : null,
-          volumeSource: String(extra?.volumeSource || 'unknown'),
-          volumeFallback: !!extra?.volumeFallback,
-          walletExpansion: Number.isFinite(Number(extra?.walletExpansion)) ? Number(extra.walletExpansion) : null,
-          buyers1m: Number.isFinite(Number(extra?.buyers1m)) ? Number(extra.buyers1m) : null,
-          buyers5mAvg: Number.isFinite(Number(extra?.buyers5mAvg)) ? Number(extra.buyers5mAvg) : null,
-          hardRejects: Array.isArray(extra?.hardRejects) ? extra.hardRejects.slice(0,6).map(String) : [],
-          tx1m: Number.isFinite(Number(extra?.tx1m)) ? Number(extra.tx1m) : null,
-          tx5mAvg: Number.isFinite(Number(extra?.tx5mAvg)) ? Number(extra.tx5mAvg) : null,
-          tx30mAvg: Number.isFinite(Number(extra?.tx30mAvg)) ? Number(extra.tx30mAvg) : null,
-          momentumScore: Number.isFinite(Number(extra?.momentumScore)) ? Number(extra.momentumScore) : null,
-          momentumScoreThreshold: Number.isFinite(Number(extra?.momentumScoreThreshold)) ? Number(extra.momentumScoreThreshold) : null,
-          momentumScoreBand: String(extra?.momentumScoreBand || 'unknown'),
-          topScoreContributors: Array.isArray(extra?.topScoreContributors) ? extra.topScoreContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), score: Number(x?.score || 0) })) : [],
-          topPenaltyContributors: Array.isArray(extra?.topPenaltyContributors) ? extra.topPenaltyContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), penalty: Number(x?.penalty || 0) })) : [],
-          final: String(extra?.final || 'passed'),
-        });
-        while (w.momentumRecent.length && Number(w.momentumRecent[0]?.tMs || 0) < cutoff) w.momentumRecent.shift();
-        return;
-      }
-      if (kind === 'momentumScoreSample') {
-        w.momentumScoreSamples.push({
-          tMs: now,
-          mint: String(extra?.mint || 'unknown'),
-          momentumScore: Number.isFinite(Number(extra?.momentumScore)) ? Number(extra.momentumScore) : null,
-          momentumScoreThreshold: Number.isFinite(Number(extra?.momentumScoreThreshold)) ? Number(extra.momentumScoreThreshold) : null,
-          momentumScoreBand: String(extra?.momentumScoreBand || 'unknown'),
-          topScoreContributors: Array.isArray(extra?.topScoreContributors) ? extra.topScoreContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), score: Number(x?.score || 0) })) : [],
-          topPenaltyContributors: Array.isArray(extra?.topPenaltyContributors) ? extra.topPenaltyContributors.slice(0, 5).map((x) => ({ name: String(x?.name || 'unknown'), penalty: Number(x?.penalty || 0) })) : [],
-          final: String(extra?.final || 'unknown'),
-        });
-        while (w.momentumScoreSamples.length && Number(w.momentumScoreSamples[0]?.tMs || 0) < cutoff) w.momentumScoreSamples.shift();
-        return;
-      }
-      if (kind === 'momentumInputSample') {
-        w.momentumInputSamples.push({
-          tMs: now,
-          mint: String(extra?.mint || 'unknown'),
-          liq: Number(extra?.liq || 0),
-          v5: Number(extra?.v5 || 0),
-          v30: Number(extra?.v30 || 0),
-          volStrength: Number.isFinite(Number(extra?.volStrength)) ? Number(extra.volStrength) : null,
-          volumeSource: String(extra?.volumeSource || 'unknown'),
-          volumeFallback: !!extra?.volumeFallback,
-          walletExpansion: Number.isFinite(Number(extra?.walletExpansion)) ? Number(extra.walletExpansion) : null,
-          buyers1m: Number.isFinite(Number(extra?.buyers1m)) ? Number(extra.buyers1m) : null,
-          buyers5mAvg: Number.isFinite(Number(extra?.buyers5mAvg)) ? Number(extra.buyers5mAvg) : null,
-          bsr: Number(extra?.bsr || 0),
-          tx1m: Number(extra?.tx1m || 0),
-          tx5mAvg: Number(extra?.tx5mAvg || 0),
-          tx30mAvg: Number(extra?.tx30mAvg || 0),
-          txThreshold: Number.isFinite(Number(extra?.txThreshold)) ? Number(extra.txThreshold) : null,
-          volThreshold: Number.isFinite(Number(extra?.volThreshold)) ? Number(extra.volThreshold) : null,
-          walletThreshold: Number.isFinite(Number(extra?.walletThreshold)) ? Number(extra.walletThreshold) : null,
-          hardRejects: Array.isArray(extra?.hardRejects) ? extra.hardRejects.slice(0,6).map(String) : [],
-          fail: String(extra?.fail || 'none')
-        });
-        while (w.momentumInputSamples.length && Number(w.momentumInputSamples[0]?.tMs || 0) < cutoff) w.momentumInputSamples.shift();
-        return;
-      }
-      if (kind === 'momentumAgeSample') {
-        w.momentumAgeSamples.push({
-          tMs: now,
-          mint: String(extra?.mint || 'unknown'),
-          ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
-          early: !!extra?.early,
-          source: String(extra?.source || 'missing'),
-          branch: String(extra?.branch || 'mature_3_of_4'),
-          fail: String(extra?.fail || 'none'),
-        });
-        while (w.momentumAgeSamples.length && Number(w.momentumAgeSamples[0]?.tMs || 0) < cutoff) w.momentumAgeSamples.shift();
-        return;
-      }
-      if (kind === 'postMomentumFlow') {
-        w.postMomentumFlow.push({
-          tMs: now,
-          mint: String(extra?.mint || 'unknown'),
-          liq: Number(extra?.liq || 0),
-          mcap: Number(extra?.mcap || 0),
-          ageMin: Number.isFinite(extra?.ageMin) ? Number(extra.ageMin) : null,
-          freshnessMs: Number.isFinite(Number(extra?.freshnessMs)) ? Number(extra.freshnessMs) : null,
-          priceImpactPct: Number.isFinite(Number(extra?.priceImpactPct)) ? Number(extra.priceImpactPct) : null,
-          slippageBps: Number.isFinite(Number(extra?.slippageBps)) ? Number(extra.slippageBps) : null,
-          txAccelObserved: Number.isFinite(Number(extra?.txAccelObserved)) ? Number(extra.txAccelObserved) : null,
-          txAccelThreshold: Number.isFinite(Number(extra?.txAccelThreshold)) ? Number(extra.txAccelThreshold) : null,
-          txAccelMissDistance: Number.isFinite(Number(extra?.txAccelMissDistance)) ? Number(extra.txAccelMissDistance) : null,
-          tx1m: Number.isFinite(Number(extra?.tx1m)) ? Number(extra.tx1m) : null,
-          tx5mAvg: Number.isFinite(Number(extra?.tx5mAvg)) ? Number(extra.tx5mAvg) : null,
-          tx30mAvg: Number.isFinite(Number(extra?.tx30mAvg)) ? Number(extra.tx30mAvg) : null,
-          buySellRatioObserved: Number.isFinite(Number(extra?.buySellRatioObserved)) ? Number(extra.buySellRatioObserved) : null,
-          buySellThreshold: Number.isFinite(Number(extra?.buySellThreshold)) ? Number(extra.buySellThreshold) : null,
-          txMetricSource: String(extra?.txMetricSource || 'unknown'),
-          txMetricMissing: !!extra?.txMetricMissing,
-          carryPresent: !!extra?.carryPresent,
-          carryTx1m: Number.isFinite(Number(extra?.carryTx1m)) ? Number(extra.carryTx1m) : null,
-          carryTx5mAvg: Number.isFinite(Number(extra?.carryTx5mAvg)) ? Number(extra.carryTx5mAvg) : null,
-          carryTx30mAvg: Number.isFinite(Number(extra?.carryTx30mAvg)) ? Number(extra.carryTx30mAvg) : null,
-          carryBuySellRatio: Number.isFinite(Number(extra?.carryBuySellRatio)) ? Number(extra.carryBuySellRatio) : null,
-          continuationMode: !!extra?.continuationMode,
-          continuationPassReason: String(extra?.continuationPassReason || 'none'),
-          continuationStartPrice: Number.isFinite(Number(extra?.continuationStartPrice)) ? Number(extra.continuationStartPrice) : null,
-          continuationHighPrice: Number.isFinite(Number(extra?.continuationHighPrice)) ? Number(extra.continuationHighPrice) : null,
-          continuationLowPrice: Number.isFinite(Number(extra?.continuationLowPrice)) ? Number(extra.continuationLowPrice) : null,
-          continuationFinalPrice: Number.isFinite(Number(extra?.continuationFinalPrice)) ? Number(extra.continuationFinalPrice) : null,
-          continuationMaxRunupPct: Number.isFinite(Number(extra?.continuationMaxRunupPct)) ? Number(extra.continuationMaxRunupPct) : null,
-          continuationMaxDipPct: Number.isFinite(Number(extra?.continuationMaxDipPct)) ? Number(extra.continuationMaxDipPct) : null,
-          continuationTimeToRunupPassMs: Number.isFinite(Number(extra?.continuationTimeToRunupPassMs)) ? Number(extra.continuationTimeToRunupPassMs) : null,
-          continuationTimeoutWasFlatOrNegative: !!extra?.continuationTimeoutWasFlatOrNegative,
-          continuationConfirmStartLiqUsd: Number.isFinite(Number(extra?.continuationConfirmStartLiqUsd)) ? Number(extra.continuationConfirmStartLiqUsd) : null,
-          continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
-          continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
-          continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
-          stage: String(extra?.stage || 'unknown'),
-          outcome: String(extra?.outcome || 'unknown'),
-          reason: String(extra?.reason || 'none'),
-        });
-        while (w.postMomentumFlow.length && Number(w.postMomentumFlow[0]?.tMs || 0) < cutoff) w.postMomentumFlow.shift();
-        return;
-      }
-      if (Array.isArray(w[kind])) pushTs(w[kind]);
-    };
-
     canaryLog('seen', immediateMode ? 'immediate' : 'scheduled');
     if (isHot) counters.watchlist.hotConsumed += 1;
     bumpWatchlistFunnel(counters, 'watchlistSeen', { nowMs });
     pushCompactWindowEvent('watchlistSeen');
 
     const lastEvalMs = Number(row?.lastEvaluatedAtMs || 0);
-    const preRunnerFastMinMs = Math.max(500, Number(process.env.PRE_RUNNER_EVAL_MIN_MS || 500));
-    const preRunnerFastMaxMs = Math.max(preRunnerFastMinMs, Number(process.env.PRE_RUNNER_EVAL_MAX_MS || 1000));
+    const preRunnerFastMinMs = Number(cfg.PRE_RUNNER_EVAL_MIN_MS || 500);
+    const preRunnerFastMaxMs = Number(cfg.PRE_RUNNER_EVAL_MAX_MS || preRunnerFastMinMs);
     const preRunnerMeta = row?.meta?.preRunner || null;
     const burstMeta = row?.meta?.burst || null;
     const preRunnerFastActive = !!(preRunnerMeta?.active && Number(preRunnerMeta?.fastUntilMs || 0) > nowMs);
-    const burstFastMinMs = Math.max(500, Number(process.env.BURST_EVAL_MIN_MS || 500));
-    const burstFastMaxMs = Math.max(burstFastMinMs, Number(process.env.BURST_EVAL_MAX_MS || 1000));
+    const burstFastMinMs = Number(cfg.BURST_EVAL_MIN_MS || 500);
+    const burstFastMaxMs = Number(cfg.BURST_EVAL_MAX_MS || burstFastMinMs);
     const burstFastActive = !!(burstMeta?.active && Number(burstMeta?.fastUntilMs || 0) > nowMs);
     if (preRunnerMeta?.active && Number(preRunnerMeta?.fastUntilMs || 0) > 0 && Number(preRunnerMeta?.fastUntilMs || 0) <= nowMs) {
       row.meta.preRunner.active = false;
@@ -2130,7 +1968,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     let pair = row.pair || null;
     let snapshot = row.snapshot || null;
     const wasRouteAvailableOnly = String(row?.latest?.marketDataSource || row?.snapshot?.source || '').toLowerCase() === 'routeavailableonly';
-    const hotMomentumMinLiqUsd = Number(process.env.HOT_MOMENTUM_MIN_LIQ_USD || 40000);
+    const hotMomentumMinLiqUsd = Number(cfg.HOT_MOMENTUM_MIN_LIQ_USD || 40_000);
     let hotBypassTraceCtx = null;
     const finalizeHotBypassTrace = ({ nextStageReached, finalPreMomentumRejectReason = null, momentumCounterIncremented = false, confirmCounterIncremented = false, extra = null }) => {
       if (!hotBypassTraceCtx) return;
@@ -2345,9 +2183,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
 
     const hotMinMcap = Number(state?.filterOverrides?.MIN_MCAP_USD ?? cfg.MIN_MCAP_USD ?? 0);
     const hotMinAgeHours = Number(state?.filterOverrides?.MIN_TOKEN_AGE_HOURS ?? cfg.MIN_TOKEN_AGE_HOURS ?? 0);
-    const mcapRefreshRetries = Math.max(1, Math.min(2, Number(process.env.HOT_MCAP_REFRESH_RETRIES || 2)));
-    const mcapRefreshDelayMs = Math.max(100, Math.min(800, Number(process.env.HOT_MCAP_REFRESH_DELAY_MS || 220)));
-    const mcapRefreshWindowMs = Math.max(500, Math.min(5000, Number(process.env.HOT_MCAP_REFRESH_WINDOW_MS || 1800)));
+    const mcapRefreshRetries = Number(cfg.HOT_MCAP_REFRESH_RETRIES || 2);
+    const mcapRefreshDelayMs = Number(cfg.HOT_MCAP_REFRESH_DELAY_MS || 220);
+    const mcapRefreshWindowMs = Number(cfg.HOT_MCAP_REFRESH_WINDOW_MS || 1800);
     const resolveMcapHot = () => {
       const mcapFromRow = Number(row?.latest?.mcapUsd ?? 0);
       const mcapFromSnap = Number(snapshot?.marketCapUsd ?? 0);
@@ -2485,10 +2323,10 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     }
     if (!(poolAgeSecForHolders != null)) {
       // age missing: allow temporary HOT age-pending path when configured and safe
-      const HOT_ALLOW_AGE_PENDING = (process.env.HOT_ALLOW_AGE_PENDING ?? 'true') === 'true';
-      const HOT_AGE_PENDING_MAX_EVALS = Math.max(1, Number(process.env.HOT_AGE_PENDING_MAX_EVALS || 3));
-      const HOT_AGE_PENDING_MAX_MS = Math.max(1, Number(process.env.HOT_AGE_PENDING_MAX_MS || 180000));
-      const HOT_AGE_PENDING_COOLDOWN_MS = Math.max(1, Number(process.env.HOT_AGE_PENDING_COOLDOWN_MS || 300000));
+      const HOT_ALLOW_AGE_PENDING = !!cfg.HOT_ALLOW_AGE_PENDING;
+      const HOT_AGE_PENDING_MAX_EVALS = Number(cfg.HOT_AGE_PENDING_MAX_EVALS || 3);
+      const HOT_AGE_PENDING_MAX_MS = Number(cfg.HOT_AGE_PENDING_MAX_MS || 180000);
+      const HOT_AGE_PENDING_COOLDOWN_MS = Number(cfg.HOT_AGE_PENDING_COOLDOWN_MS || 300000);
 
       // snapshot usable + liquidity passes + data fresh + no hard safety reject
       const snapshotUsable = getSnapshotStatus({ snapshot, latest: row?.latest })?.usable ?? true;
@@ -2547,7 +2385,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     applySnapshotToLatest({ row, snapshot });
     const liqUsd = Number(pair?.liquidity?.usd || snapshot?.liquidityUsd || row?.latest?.liqUsd || 0);
     pushCompactWindowEvent('stalkableSeen', null, { mint, liqUsd });
-    const { normalized: momentumInput, presentFields: momentumInputPresentFields, sourceUsed: momentumInputSourceUsed, rawAvail: momentumRawAvail, microPresent: momentumMicroPresent, microSourceUsed: momentumMicroSourceUsed } = buildNormalizedMomentumInput({ snapshot, latest: row?.latest, pair, nowMs });
+    const { normalized: momentumInput, presentFields: momentumInputPresentFields, sourceUsed: momentumInputSourceUsed, rawAvail: momentumRawAvail, microPresent: momentumMicroPresent, microSourceUsed: momentumMicroSourceUsed } = buildNormalizedMomentumInput({ snapshot, latest: row?.latest, pair });
     counters.watchlist.momentumInputSourceUsed ||= {};
     counters.watchlist.momentumInputSourceUsed[momentumInputSourceUsed] = Number(counters.watchlist.momentumInputSourceUsed[momentumInputSourceUsed] || 0) + 1;
     if (momentumInputPresentFields >= 4) counters.watchlist.momentumInputCompletenessPresent = Number(counters.watchlist.momentumInputCompletenessPresent || 0) + 1;
@@ -2599,7 +2437,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           state,
           mint,
           nowMs,
-          minRetryMs: Math.max(5_000, Number(process.env.MINT_AGE_LOOKUP_RETRY_MS || 30_000)),
+          minRetryMs: Number(cfg.MINT_AGE_LOOKUP_RETRY_MS || 30_000),
           lookupFn: () => resolveMintCreatedAtFromRpc?.({ state, conn, mint, nowMs: Date.now(), maxPages: 3 }),
         });
         agePicked = { value: null, source: 'pending_rpc' };
@@ -2662,9 +2500,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       const microFreshGate = isMicroFreshEnough({
         microPresentCount: momentumMicroPresent,
         freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
-        maxAgeMs: Math.max(1000, Number(process.env.MOMENTUM_MICRO_MAX_AGE_MS || 10_000)),
-        requireFreshMicro: (process.env.MOMENTUM_REQUIRE_FRESH_MICRO ?? 'true') === 'true',
-        minPresentForGate: Math.max(1, Number(process.env.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3)),
+        maxAgeMs: Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000),
+        requireFreshMicro: !!cfg.MOMENTUM_REQUIRE_FRESH_MICRO,
+        minPresentForGate: Number(cfg.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3),
       });
 
       // Score-model truth: momentum pass is driven by sig.ok (score threshold + hard guards)
@@ -2683,8 +2521,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         mint,
         nowMs,
         gatePassed: momentumGateOk,
-        requiredStreak: Math.max(1, Number(process.env.MOMENTUM_PASS_STREAK_REQUIRED || 1)),
-        streakResetMs: Math.max(30_000, Number(process.env.MOMENTUM_PASS_STREAK_RESET_MS || (10 * 60_000))),
+        requiredStreak: Number(cfg.MOMENTUM_PASS_STREAK_REQUIRED || 1),
+        streakResetMs: Number(cfg.MOMENTUM_PASS_STREAK_RESET_MS || (10 * 60_000)),
       });
       momentumGateOk = !!hysteresis.passed;
       if (hysteresis.warmup) combinedFailed.push('momentum.hysteresisWarmup');
@@ -2696,7 +2534,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       counters.watchlist.momentumBreakoutSignalsPassed = Number(counters.watchlist.momentumBreakoutSignalsPassed || 0) + breakoutSignalsPassed;
       counters.watchlist.momentumBreakoutSignalsFailed = Number(counters.watchlist.momentumBreakoutSignalsFailed || 0) + breakoutSignalsFailed;
 
-      recordCanaryMomoFailChecks(nowMs, combinedFailed);
+      recordCanaryMomoFailChecks({ state, nowMs, failedChecks: combinedFailed, windowMin: cfg.MOMENTUM_DIAG_WINDOW_MIN, enabled: isCanary });
       pushCompactWindowEvent('momentumFailChecks', null, { checks: combinedFailed, mint });
 
       // Always-on momentum failure telemetry (works even when canary is off)
@@ -2770,9 +2608,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         tx1m: Number(sig?.reasons?.tx_1m ?? momentumInput?.birdeye?.tx_1m ?? 0),
         tx5mAvg: Number(sig?.reasons?.tx_5m_avg ?? momentumInput?.birdeye?.tx_5m_avg ?? 0),
         tx30mAvg: Number(sig?.reasons?.tx_30m_avg ?? momentumInput?.birdeye?.tx_30m_avg ?? 0),
-        txThreshold: Number(process.env.MOMENTUM_TX_ACCEL_MIN_RATIO || 1.0),
-        volThreshold: Number(process.env.MOMENTUM_VOLUME_EXPANSION_MIN_RATIO || 1.0),
-        walletThreshold: Number(process.env.MOMENTUM_WALLET_EXPANSION_MIN_RATIO || 1.25),
+        txThreshold: Number(cfg.MOMENTUM_TX_ACCEL_MIN_RATIO || 1.0),
+        volThreshold: Number(cfg.MOMENTUM_VOLUME_EXPANSION_MIN_RATIO || 1.0),
+        walletThreshold: Number(cfg.MOMENTUM_WALLET_EXPANSION_MIN_RATIO || 1.25),
         hardRejects: Array.isArray(sig?.reasons?.hardRejects) ? sig.reasons.hardRejects.slice(0,6) : [],
         fail: combinedFailed.join('|') || 'none',
       });
@@ -2805,7 +2643,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         tx5mAvg: Number(sig?.reasons?.tx_5m_avg || 0) || null,
         tx30mAvg: Number(sig?.reasons?.tx_30m_avg || 0) || null,
         momentumScore: Number(sig?.reasons?.momentumScore ?? sig?.reasons?.momentumDiagnostics?.finalScore ?? 0) || 0,
-        momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? process.env.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
+        momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? cfg.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
         momentumScoreBand: String(sig?.reasons?.momentumScoreBand || 'weak'),
         topScoreContributors: Array.isArray(sig?.reasons?.topScoreContributors) ? sig.reasons.topScoreContributors.slice(0,3) : [],
         topPenaltyContributors: Array.isArray(sig?.reasons?.topPenaltyContributors) ? sig.reasons.topPenaltyContributors.slice(0,3) : [],
@@ -2814,7 +2652,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       pushCompactWindowEvent('momentumScoreSample', null, {
         mint,
         momentumScore: Number(sig?.reasons?.momentumScore ?? sig?.reasons?.momentumDiagnostics?.finalScore ?? 0) || 0,
-        momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? process.env.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
+        momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? cfg.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
         momentumScoreBand: String(sig?.reasons?.momentumScoreBand || 'weak'),
         topScoreContributors: Array.isArray(sig?.reasons?.topScoreContributors) ? sig.reasons.topScoreContributors.slice(0,5) : [],
         topPenaltyContributors: Array.isArray(sig?.reasons?.topPenaltyContributors) ? sig.reasons.topPenaltyContributors.slice(0,5) : [],
@@ -2822,16 +2660,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       });
 
       // Surgical hysteresis: suppress repeated near-identical momentum failures for same mint.
-      const repeatWindowSec = 180;
-      const repeatCooldownSec = 120;
-      const repeatEscalationWindowSec = 900;
-      const repeatEscalationHits = 3;
-      const repeatEscalationCooldownSec = 900;
-      const improvementDelta = 0.05;
       const coreFailedNow = combinedFailed.filter(x => CORE_MOMO_CHECKS.includes(x)).sort();
       const progressNow = coreMomentumProgress(sig);
-      state.runtime ||= {};
-      state.runtime.momentumRepeatFail ||= {};
       const prevRepeat = state.runtime.momentumRepeatFail[mint] || null;
       let repeatSuppressed = false;
       let repeatReason = null;
@@ -2844,12 +2674,12 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           for (const chk of coreFailedNow) {
             const prevV = Number(prevRepeat.progress?.[chk] || 0);
             const nowV = Number(progressNow?.[chk] || 0);
-            if (nowV >= (prevV + improvementDelta)) improvedChecks += 1;
+            if (nowV >= (prevV + repeatImprovementDelta)) improvedChecks += 1;
           }
           if (improvedChecks === 0) {
             repeatSuppressed = true;
             repeatReason = 'sameCoreNoImprovement';
-            row.cooldownUntilMs = Math.max(Number(row.cooldownUntilMs || 0), nowMs + (repeatCooldownSec * 1000));
+            row.cooldownUntilMs = Math.max(Number(row.cooldownUntilMs || 0), nowMs + (repeatFailCooldownSec * 1000));
             counters.watchlist.momentumRepeatFailSuppressed = Number(counters.watchlist.momentumRepeatFailSuppressed || 0) + 1;
             counters.watchlist.momentumRepeatFailMintsTop ||= {};
             counters.watchlist.momentumRepeatFailReasonTop ||= {};
@@ -2861,7 +2691,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       }
       const hist = Array.isArray(prevRepeat?.suppressionHistoryMs) ? prevRepeat.suppressionHistoryMs.filter(ts => (nowMs - Number(ts || 0)) <= (repeatEscalationWindowSec * 1000)) : [];
       if (repeatSuppressed) hist.push(nowMs);
-      let appliedCooldownSec = repeatSuppressed ? repeatCooldownSec : 0;
+      let appliedCooldownSec = repeatSuppressed ? repeatFailCooldownSec : 0;
       if (repeatSuppressed && hist.length >= repeatEscalationHits) {
         appliedCooldownSec = repeatEscalationCooldownSec;
         row.cooldownUntilMs = Math.max(Number(row.cooldownUntilMs || 0), nowMs + (repeatEscalationCooldownSec * 1000));
@@ -2875,7 +2705,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         suppressionHistoryMs: hist,
       };
 
-      const sampling = canaryMomoShouldSample(nowMs);
+      const sampling = canaryMomoShouldSample({ state, nowMs, limitPerMin: cfg.CANARY_MOMO_FAIL_SAMPLE_PER_MIN });
       const meta = sampling.ok ? {
         momentum: {
           strict: useStrict,
@@ -3037,9 +2867,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       tx1m: Number(sig?.reasons?.tx_1m ?? momentumInput?.birdeye?.tx_1m ?? 0),
       tx5mAvg: Number(sig?.reasons?.tx_5m_avg ?? momentumInput?.birdeye?.tx_5m_avg ?? 0),
       tx30mAvg: Number(sig?.reasons?.tx_30m_avg ?? momentumInput?.birdeye?.tx_30m_avg ?? 0),
-      txThreshold: Number(process.env.MOMENTUM_TX_ACCEL_MIN_RATIO || 1.0),
-      volThreshold: Number(process.env.MOMENTUM_VOLUME_EXPANSION_MIN_RATIO || 1.0),
-      walletThreshold: Number(process.env.MOMENTUM_WALLET_EXPANSION_MIN_RATIO || 1.25),
+      txThreshold: Number(cfg.MOMENTUM_TX_ACCEL_MIN_RATIO || 1.0),
+      volThreshold: Number(cfg.MOMENTUM_VOLUME_EXPANSION_MIN_RATIO || 1.0),
+      walletThreshold: Number(cfg.MOMENTUM_WALLET_EXPANSION_MIN_RATIO || 1.25),
       hardRejects: Array.isArray(sig?.reasons?.hardRejects) ? sig.reasons.hardRejects.slice(0,6) : [],
       fail: 'none',
     });
@@ -3064,7 +2894,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       tx5mAvg: Number(sig?.reasons?.tx_5m_avg || 0) || null,
       tx30mAvg: Number(sig?.reasons?.tx_30m_avg || 0) || null,
       momentumScore: Number(sig?.reasons?.momentumScore ?? sig?.reasons?.momentumDiagnostics?.finalScore ?? 0) || 0,
-      momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? process.env.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
+      momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? cfg.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
       momentumScoreBand: String(sig?.reasons?.momentumScoreBand || 'pass'),
       topScoreContributors: Array.isArray(sig?.reasons?.topScoreContributors) ? sig.reasons.topScoreContributors.slice(0,3) : [],
       topPenaltyContributors: Array.isArray(sig?.reasons?.topPenaltyContributors) ? sig.reasons.topPenaltyContributors.slice(0,3) : [],
@@ -3073,7 +2903,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     pushCompactWindowEvent('momentumScoreSample', null, {
       mint,
       momentumScore: Number(sig?.reasons?.momentumScore ?? sig?.reasons?.momentumDiagnostics?.finalScore ?? 0) || 0,
-      momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? process.env.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
+      momentumScoreThreshold: Number(sig?.reasons?.momentumScoreThreshold ?? cfg.MOMENTUM_SCORE_PASS_THRESHOLD ?? 60),
       momentumScoreBand: String(sig?.reasons?.momentumScoreBand || 'pass'),
       topScoreContributors: Array.isArray(sig?.reasons?.topScoreContributors) ? sig.reasons.topScoreContributors.slice(0,5) : [],
       topPenaltyContributors: Array.isArray(sig?.reasons?.topPenaltyContributors) ? sig.reasons.topPenaltyContributors.slice(0,5) : [],
