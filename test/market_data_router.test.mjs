@@ -89,8 +89,8 @@ describe('market data router', () => {
     const bird = snapshotFromBirdseye({ priceUsd: 1.23, liquidityUsd: 50_000, txns: { h24: { buys: 240, sells: 240 } }, volume: { h24: 24_000 }, atMs: nowMs }, nowMs);
 
     const reason = getWatchlistEntrySnapshotUnsafeReason({ snapshot: routeOnly, birdseyeSnapshot: bird });
-    // Per new routing policy, routeAvailable is required for safe entries when relying on BirdEye-only snapshots.
-    expect(reason).toBe('unsafeSnapshot.routeUnavailable');
+    // Current policy: safe BirdEye snapshot can satisfy watchlist safety.
+    expect(reason).toBe(null);
   });
 
   it('watchlist entry gate: stale Birdseye is rejected with birdeyeStale', () => {

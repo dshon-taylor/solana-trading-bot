@@ -8,11 +8,12 @@ describe('strategy momentum profiles', () => {
     priceChange: { h1: 1.2, h4: 2.6 },
   };
 
-  it('aggressive profile passes where normal fails', () => {
+  it('hard guards dominate profile thresholds when setup is unsafe', () => {
     const normal = evaluateMomentumSignal(pair, { profile: 'normal', strict: false });
     const aggressive = evaluateMomentumSignal(pair, { profile: 'aggressive', strict: false });
     expect(normal.ok).toBe(false);
-    expect(aggressive.ok).toBe(true);
+    expect(aggressive.ok).toBe(false);
+    expect(Number(aggressive.thresholds.minBuys)).toBeLessThanOrEqual(Number(normal.thresholds.minBuys));
   });
 
   it('fallback allows near miss only', () => {

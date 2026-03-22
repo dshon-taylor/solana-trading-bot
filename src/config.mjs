@@ -129,6 +129,7 @@ export function summarizeConfigForBoot(cfg) {
   lines.push(`  rpc=${cfg.SOLANA_RPC_URL ? 'set' : 'missing'}`);
   lines.push(`  modes: data_capture=${cfg.DATA_CAPTURE_ENABLED} execution=${cfg.EXECUTION_ENABLED} sim_tracking=${cfg.SIM_TRACKING_ENABLED} live_momo=${cfg.LIVE_MOMO_ENABLED} tracker_live_exec=${cfg.TRACKER_LIVE_EXECUTION_ENABLED} paper=${cfg.PAPER_ENABLED} scanner_entries=${cfg.SCANNER_ENTRIES_ENABLED} tracking=${cfg.SCANNER_TRACKING_ENABLED} trackResultAlerts=${cfg.TRACK_RESULT_ALERTS_ENABLED}`);
   lines.push(`  cadence: scanEveryMs=${cfg.SCAN_EVERY_MS} positionsEveryMs=${cfg.POSITIONS_EVERY_MS} heartbeatEveryMs=${cfg.HEARTBEAT_EVERY_MS}`);
+  lines.push(`  diag: retentionDays=${cfg.DIAG_RETENTION_DAYS} retentionMs=${cfg.DIAG_RETENTION_MS}`);
   lines.push(`  watchlist: mode=${cfg.WATCHLIST_TRIGGER_MODE} maxSize=${cfg.WATCHLIST_MAX_SIZE} hotQueueMax=${cfg.WATCHLIST_HOT_QUEUE_MAX} hotTtlMs=${cfg.HOT_TTL_MS} eval(cold=${cfg.COLD_EVAL_MIN_MS}-${cfg.COLD_EVAL_MAX_MS}ms hot=${cfg.HOT_EVAL_MIN_MS}-${cfg.HOT_EVAL_MAX_MS}ms confirm=${cfg.CONFIRM_DELAY_MIN_MS}-${cfg.CONFIRM_DELAY_MAX_MS}ms) evalEveryMs=${cfg.WATCHLIST_EVAL_EVERY_MS} immediateMaxPerCycle=${cfg.WATCHLIST_IMMEDIATE_ROUTE_MAX_PER_CYCLE} immediateDedupMs=${cfg.WATCHLIST_IMMEDIATE_ROUTE_DEDUP_MS} mintTtlMs=${cfg.WATCHLIST_MINT_TTL_MS} evictMaxAgeHours=${cfg.WATCHLIST_EVICT_MAX_AGE_HOURS} staleCycles=${cfg.WATCHLIST_EVICT_STALE_CYCLES} rollback=WATCHLIST_TRIGGER_MODE=false`);
   lines.push(`  debugCanary: enabled=${cfg.DEBUG_CANARY_ENABLED} verbose=${cfg.DEBUG_CANARY_VERBOSE} cooldownMs=${cfg.DEBUG_CANARY_COOLDOWN_MS}`);
   lines.push(`  conversionCanary: mode=${cfg.CONVERSION_CANARY_MODE} cooldownMs=${cfg.CONVERSION_CANARY_COOLDOWN_MS} tracePath=${cfg.CONVERSION_CANARY_TRACE_PATH} bypassMomentum=${cfg.CANARY_BYPASS_MOMENTUM ? 'on' : 'off'} until=${cfg.CANARY_BYPASS_MOMENTUM_UNTIL_ISO || 'n/a'} momoSamplePerMin=${cfg.CANARY_MOMO_FAIL_SAMPLE_PER_MIN} momoDiagWindowMin=${cfg.MOMENTUM_DIAG_WINDOW_MIN}`);
@@ -247,6 +248,11 @@ export function getConfig() {
 
   const HOURLY_DIAG_ENABLED = (process.env.HOURLY_DIAG_ENABLED || 'true').toLowerCase() === 'true';
   const HOURLY_DIAG_EVERY_MS = Number(process.env.HOURLY_DIAG_EVERY_MS || 3600000);
+  const DIAG_RETENTION_DAYS = Math.max(1, Number(process.env.DIAG_RETENTION_DAYS || 90));
+  const DIAG_RETENTION_MS = Math.max(
+    60 * 60_000,
+    Number(process.env.DIAG_MAX_WINDOW_MS || (DIAG_RETENTION_DAYS * 24 * 60 * 60_000))
+  );
 
   // Filter gates (turn off anything not in the current strategy)
   const REQUIRE_SOCIAL_META = (process.env.REQUIRE_SOCIAL_META ?? 'false') === 'true';
@@ -567,6 +573,8 @@ export function getConfig() {
     AUTO_TUNE_EVERY_MS,
     HOURLY_DIAG_ENABLED,
     HOURLY_DIAG_EVERY_MS,
+    DIAG_RETENTION_DAYS,
+    DIAG_RETENTION_MS,
     REQUIRE_SOCIAL_META,
     AI_PIPELINE_ENABLED,
     MOMENTUM_FILTER_ENABLED,

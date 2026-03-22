@@ -1,80 +1,80 @@
-# Solana Momentum Bot (scaffold)
+# Solana Trading Bot (runner-capture mode)
 
-This bot is being built to your spec:
-- Trade Solana tokens with liquidity + safety filters
-- Execute on Jupiter
-- Enforce strict risk rules + trailing stop
-- Persistent daemon + state + Telegram alerts
+This repository runs a live daemon with Telegram controls and first-class diagnostics.
 
-## Production docs
+## Pipeline (current truth)
 
-- Operator runbook: `RUNBOOK.md`
-- Full hardening checklist + evidence: `PROD_HARDENING.md`
-- Rolling log: `PROD_HARDENING_STATUS.md`
-- Strategy notes / trade ledger: `trading.md`
+`scanner → watchlist/snapshot → momentum gate → confirm continuation audition → attempt/execute → position manager`
 
-## Momentum rules (single place to change)
-Primary knobs live in `.env` / `.env.example` under **MOMENTUM RULES**:
-- Entry thresholds: `PAPER_ENTRY_*` (live momo uses the SAME thresholds)
-- Risk rules: `LIVE_MOMO_*` (paper risk defaults derive from LIVE risk)
+- Scanner discovers routeable candidates.
+- Watchlist tracks them with refreshed market snapshots.
+- Momentum is a fast detector, not final truth.
+- Confirm is the truth gate for immediate continuation.
+- Attempt executes through Jupiter route sanity + capital checks.
+- Position manager handles stops/trailing/exits.
 
-Quick sanity checks:
+## Strategy intent (current)
+
+This system is tuned for runner capture, not “clean setup perfection”.
+
+### Momentum stage
+
+- Purpose: surface potential bursts early.
+- Uses weighted score + hard safety guards.
+- Weak tx/wallet/volume generally influence score more than hard-fail.
+- Hard guards still reject thin/chaotic/risk conditions.
+
+### Confirm stage (most important)
+
+- 15-second continuation audition.
+- WS-first tracking with snapshot fallback.
+- Pass on immediate runup (~+1.5%).
+- Fail on hard dip (~-1.5%).
+- Fail at timeout if no continuation burst (`windowExpiredStall` / `windowExpiredWeak`).
+- Retry only after cooldown + measurable improvement for stall failures.
+
+Net: momentum proposes; confirm proves.
+
+## Risk and execution controls
+
+Safety rails remain enabled:
+
+- liquidity/impact/route sanity
+- capital reserve checks
+- non-tradable token handling
+- position stop/trailing enforcement
+
+In runner mode, confirm liquidity checks are biased toward relative degradation (avoid over-blocking already-qualified names unless liquidity materially worsens).
+
+## Observability philosophy
+
+Diagnostics are first-class and compact.
+
+- `/diag`, `/diag momentum`, `/diag confirm`, `/diag execution`, `/diag scanner` are operator truth views.
+- Durability source: `state/diag_events.jsonl` with compact runtime window hydration.
+- Default retention: 90 days, configurable.
+
+Diag retention knobs:
+
+- `DIAG_RETENTION_DAYS`
+- `DIAG_MAX_WINDOW_MS` (legacy override)
+- `DIAG_HYDRATE_MAX_LINES`
+
+After config changes, restart and verify using `/config` and `/diag`.
+
+## Runtime docs
+
+- [RUNBOOK.md](RUNBOOK.md)
+- [DEPLOY_WORKFLOW.md](DEPLOY_WORKFLOW.md)
+- [PROD_HARDENING.md](PROD_HARDENING.md)
+- [PROD_HARDENING_STATUS.md](PROD_HARDENING_STATUS.md)
+- [trading.md](trading.md)
+
+## Quick checks
+
 - `npm run check`
-- `npm run dryrun:rules`
-
-## Aggressive entry profile (maximize attempt/fill throughput)
-Use a single toggle:
-
-```bash
-AGGRESSIVE_MODE=true
-```
-
-What it changes automatically:
-- Enables conversion profile behavior.
-- Optional *force-attempt-on-confirm-pass* policy (aggressive-only, default ON): after confirm gate passes, the bot can attempt immediately instead of waiting for the next watchlist eval tick. Guarded by per-mint cooldown + per-mint hourly cap + global per-minute cap (see envs below).
-- Expands quote fanout and candidate shortlist width.
-- Reduces no-pair cooldown/revisit timings.
-- Enables multi-pass fast route rechecks for quote/route misses.
-- Enables momentum fallback trigger by default (can still force off via `MOMENTUM_FALLBACK_ENABLED=false`).
-- Uses a moderately looser aggressive confirm impact cap (`AGGRESSIVE_CONFIRM_MAX_PRICE_IMPACT_PCT`, bounded to `<=8`).
-- Slightly loosens aggressive momentum paper thresholds/cooldown defaults.
-- Early shortlist prefilter defaults to `minimal` anti-spam floor in aggressive mode (`AGGRESSIVE_EARLY_SHORTLIST_PREFILTER_*`: liq=1200, tx1h=1, boostUsd=5).
-- Supports explicit prefilter mode override (`EARLY_SHORTLIST_PREFILTER_MODE=off|minimal|standard`; aggressive override: `AGGRESSIVE_EARLY_SHORTLIST_PREFILTER_MODE`).
-- Prioritizes routeable candidates earlier in evaluation order.
-- Keeps hard safety gates (wallet/rpc sanity, capital/risk guardrails, circuit/playbook).
-
-Rollback (single click):
-
-```bash
-AGGRESSIVE_MODE=false
-```
-
-Force-attempt rollback/switch-off (keep aggressive mode but disable forced confirm-pass attempts):
-
-```bash
-FORCE_ATTEMPT_ON_CONFIRM_PASS=false
-```
-
-Throughput-tuning rollback (keep aggressive mode, revert pair-fetch tuning only):
-
-```bash
-PAIR_FETCH_CONCURRENCY=3
-NO_PAIR_RETRY_ATTEMPTS=6
-NO_PAIR_RETRY_BASE_MS=225
-NO_PAIR_RETRY_MAX_BACKOFF_MS=2000
-NO_PAIR_RETRY_TOTAL_BUDGET_MS=2500
-```
-
-Then restart the process (PM2/systemd) and verify with `/config` + `/diag`.
-`/diag` now shows funnel split by standard vs fallback-trigger attempts/fills.
-
-Watchlist eviction controls (dead-token buildup protection):
-- `WATCHLIST_EVICT_MAX_AGE_HOURS` — evict watchlist entries once mint age crosses this threshold.
-- `WATCHLIST_EVICT_STALE_CYCLES` — evict entries with no trigger progress after N watchlist eval cycles.
-- `/diag` watchlist line includes eviction reason breakdown: `age`, `stale`, `ttl`.
-- Aggressive profile uses tighter defaults automatically when these are unset.
-
-Audit helpers:
+- `npm run test`
+- `npm run print:config`
 - `npm run summarize:attempts`
 - `npm run summarize:lifecycle -- --since-hours 168`
 
@@ -187,24 +187,16 @@ High-level:
 The bot will run: `sops -d <file>` and load the keypair from the decrypted JSON.
 
 ## Status
-This repo is now a **running PM2 daemon** with hardening work tracked in:
-- `RUNBOOK.md`
-- `PROD_HARDENING.md`
-- `PROD_HARDENING_STATUS.md`
 
-Key capabilities are implemented (scanner/filters, state, Telegram alerts, risk engine + trailing stop, paper/live guardrails, health endpoint, log rotation).
+This bot is operating as a PM2-managed daemon with:
 
-Market-data reliability (Phase 3):
-- `src/market_data_router.mjs` provides normalized snapshots (`priceUsd`, `liquidityUsd`, tx/volume, source/timestamp/freshness, confidence).
-- Provider order (feature-flagged): Birdseye Lite (paid, optional) → DexScreener (free primary fallback) → Jupiter price (free secondary fallback) → bounded last-known-good cache.
-- Birdseye knobs: `BIRDEYE_LITE_ENABLED`, `BIRDEYE_API_KEY`, `BIRDEYE_LITE_MAX_RPS` (keep <=15; default 12), `BIRDEYE_LITE_CHAIN`.
-- Adaptive provider-health cooldown and confidence/freshness gates protect entries from low-confidence data.
-- Tracker ingest guardrail warns on replay-data integrity gaps (zero/abnormally low sample writes) and exposes explicit write counters (`hour`/`day`) via `/diag`, `/health`, and heartbeat snapshot/alerts.
+- scanner/watchlist/confirm/attempt pipeline in production
+- position manager + trailing/exit safety
+- route/capital/risk guardrails
+- Telegram controls + compact diagnostic views
+- durable diagnostics and retention controls
 
-Capital efficiency + incident automation (Feature #8/#9):
-- Soft reserve sizing guardrails (`MIN_SOL_FOR_FEES` + `CAPITAL_SOFT_RESERVE_SOL` + `CAPITAL_RETRY_BUFFER_PCT`) cap new entries before quote/submit.
-- Optional per-hour entry throttle (`MAX_NEW_ENTRIES_PER_HOUR`) limits bursty new exposure.
-- Incident playbook auto-enters degraded mode on restart/error patterns and auto-recovers after stable criteria.
+For active operational status and procedures, use:
 
-Next (remaining hardening blocker):
-- Complete key hygiene: once the bot has a 24h no-flap window, archive `keys/bot-keypair.json` offline via `./scripts/archive_plaintext_key_if_stable.sh`, then safely deploy the pending code-only patches (Telegram cooldown log rate-limit + config validation) via `./scripts/deploy_pending_after_key_archive.sh`.
+- [RUNBOOK.md](RUNBOOK.md)
+- [PROD_HARDENING_STATUS.md](PROD_HARDENING_STATUS.md)

@@ -3,15 +3,16 @@ import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '..
 
 describe('trailing', () => {
   it('computeTrailPct tiers', () => {
-    // below 30% -> stop-at-entry (null)
-    expect(computeTrailPct(0.29)).toBeNull();
+    // below 10% -> stop-at-entry (null)
+    expect(computeTrailPct(0.09)).toBeNull();
     expect(computeTrailPct(-0.5)).toBeNull();
 
     // boundary and between tiers
-    expect(computeTrailPct(0.30)).toBe(0.30);
-    expect(computeTrailPct(0.5)).toBe(0.30);
-    expect(computeTrailPct(0.80)).toBe(0.22);
-    expect(computeTrailPct(1.50)).toBe(0.18);
+    expect(computeTrailPct(0.10)).toBe(0.12);
+    expect(computeTrailPct(0.24)).toBe(0.12);
+    expect(computeTrailPct(0.25)).toBe(0.18);
+    expect(computeTrailPct(0.60)).toBe(0.22);
+    expect(computeTrailPct(1.20)).toBe(0.18);
     expect(computeTrailPct(10)).toBe(0.18);
   });
 

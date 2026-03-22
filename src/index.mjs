@@ -44,11 +44,14 @@ import { didEntryFill } from './entry_reliability.mjs';
 import { promoteRouteAvailableCandidateToImmediate } from './route_available_watchlist.mjs';
 import { resolveEntryAndStopForOpenPosition } from './entry_guard.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
+import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
+import { resolveConfirmTxMetricsFromDiagEvent } from './diag_event_invariants.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const wsmgr = require('../../src/services/wsSubscriptionManager.js');
+let runtimeStateRef = null;
 
 // Global timer registry for proper cleanup
 const globalTimers = {
@@ -1750,12 +1753,33 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
       const w = ensureCompactWindowState();
       const now = Number(opts?.tMs || nowMs || Date.now());
-      const retainMs = Math.max(60 * 60_000, Number(process.env.DIAG_MAX_WINDOW_MS || (7 * 24 * 60 * 60_000)));
+      const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
       const cutoff = now - retainMs;
       const shouldPersist = opts?.persist !== false;
       if (shouldPersist) {
         try {
-          const persistKinds = new Set(['momentumEval','momentumPassed','momentumFailChecks','momentumLiq','momentumRecent','momentumScoreSample','momentumInputSample','momentumAgeSample','repeatSuppressed','confirmReached','confirmPassed','attempt','fill','postMomentumFlow']);
+          const persistKinds = new Set([
+            'momentumEval',
+            'momentumPassed',
+            'momentumFailChecks',
+            'momentumLiq',
+            'momentumRecent',
+            'momentumScoreSample',
+            'momentumInputSample',
+            'momentumAgeSample',
+            'repeatSuppressed',
+            'confirmReached',
+            'confirmPassed',
+            'attempt',
+            'fill',
+            'postMomentumFlow',
+            'blocker',
+            'stalkableSeen',
+            'scanCycle',
+            'candidateSeen',
+            'candidateRouteable',
+            'candidateLiquiditySeen',
+          ]);
           if (persistKinds.has(String(kind || ''))) {
             appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind, reason: reason || null, extra: extra || null });
           }
@@ -2563,15 +2587,22 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     if (resolved?.pairCreatedAtMs) {
       agePicked = { value: Number(resolved.pairCreatedAtMs), source: String(resolved.source || 'resolved') };
     } else {
-      const rpcAge = await resolveMintCreatedAtFromRpc?.({ state, conn, mint, nowMs, maxPages: 3 }).catch(() => null);
-      if (rpcAge?.createdAtMs) {
+      const cachedAge = getCachedMintCreatedAt({ state, mint, nowMs, maxAgeMs: 60 * 60_000 });
+      if (cachedAge?.createdAtMs) {
         row.latest ||= {};
-        row.latest.pairCreatedAt = Number(rpcAge.createdAtMs);
-        agePicked = { value: Number(rpcAge.createdAtMs), source: String(rpcAge.source || 'rpc.mintSignatures.blockTime') };
+        row.latest.pairCreatedAt = Number(cachedAge.createdAtMs);
+        agePicked = { value: Number(cachedAge.createdAtMs), source: String(cachedAge.source || 'cache.mintCreatedAt') };
         // persist resolved caching
         row.meta.resolvedPairCreatedAt = { mint, pairCreatedAtMs: agePicked.value, source: agePicked.source, tMs: nowMs };
       } else {
-        agePicked = { value: null, source: 'missing' };
+        scheduleMintCreatedAtLookup({
+          state,
+          mint,
+          nowMs,
+          minRetryMs: Math.max(5_000, Number(process.env.MINT_AGE_LOOKUP_RETRY_MS || 30_000)),
+          lookupFn: () => resolveMintCreatedAtFromRpc?.({ state, conn, mint, nowMs: Date.now(), maxPages: 3 }),
+        });
+        agePicked = { value: null, source: 'pending_rpc' };
       }
     }
     // count age source
@@ -2628,14 +2659,35 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       const earlyBuyPressurePass = !dexFailed.includes('buyPressure');
       const earlyWalletExpansionPass = !dexFailed.includes('walletExpansion');
       const earlyPassCount = [earlyPriceBreakPass, earlyBuyPressurePass, earlyWalletExpansionPass].filter(Boolean).length;
-      // Score-model truth: momentum pass is always driven by sig.ok (score threshold + hard guards),
+      const microFreshGate = isMicroFreshEnough({
+        microPresentCount: momentumMicroPresent,
+        freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
+        maxAgeMs: Math.max(1000, Number(process.env.MOMENTUM_MICRO_MAX_AGE_MS || 10_000)),
+        requireFreshMicro: (process.env.MOMENTUM_REQUIRE_FRESH_MICRO ?? 'true') === 'true',
+        minPresentForGate: Math.max(1, Number(process.env.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3)),
+      });
+
+      // Score-model truth: momentum pass is driven by sig.ok (score threshold + hard guards)
+      // plus freshness/hysteresis overlays.
       // regardless of earlyTokenMode. Keep earlyPassCount for diagnostics only.
-      const momentumGateOk = !!sig.ok;
+      let momentumGateOk = !!sig.ok && !!microFreshGate.ok;
 
       // Paper metrics are diagnostics-only for legacy history; do not add them to live fail reasons.
       const combinedFailed = Array.from(new Set([
         ...dexFailed.map(x => `dex.${x}`),
+        ...(microFreshGate.ok ? [] : [`dex.${String(microFreshGate.reason || 'microStale')}`]),
       ]));
+
+      const hysteresis = applyMomentumPassHysteresis({
+        state,
+        mint,
+        nowMs,
+        gatePassed: momentumGateOk,
+        requiredStreak: Math.max(1, Number(process.env.MOMENTUM_PASS_STREAK_REQUIRED || 1)),
+        streakResetMs: Math.max(30_000, Number(process.env.MOMENTUM_PASS_STREAK_RESET_MS || (10 * 60_000))),
+      });
+      momentumGateOk = !!hysteresis.passed;
+      if (hysteresis.warmup) combinedFailed.push('momentum.hysteresisWarmup');
 
       if (cfg.MOMENTUM_FILTER_ENABLED && !momentumGateOk) {
       const coreDexFailures = dexFailed.filter(x => ['volumeExpansion', 'buyPressure', 'txAcceleration', 'walletExpansion'].includes(x));
@@ -2828,6 +2880,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         momentum: {
           strict: useStrict,
           profile: cfg.MOMENTUM_PROFILE,
+            freshnessGate: {
+              ok: !!microFreshGate.ok,
+              reason: String(microFreshGate.reason || 'unknown'),
+            },
+            hysteresis: {
+              required: Number(hysteresis.required || 1),
+              streak: Number(hysteresis.streak || 0),
+              warmup: !!hysteresis.warmup,
+            },
           liquidityBand: {
             liqUsd,
             lowLiqStrictUnderUsd: cfg.LOW_LIQ_STRICT_MOMENTUM_UNDER_USD,
@@ -2862,6 +2923,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         momentumCounterIncremented: false,
         confirmCounterIncremented: false,
         extra: {
+          freshnessGate: {
+            ok: !!microFreshGate.ok,
+            reason: String(microFreshGate.reason || 'unknown'),
+          },
+          hysteresis: {
+            required: Number(hysteresis.required || 1),
+            streak: Number(hysteresis.streak || 0),
+            warmup: !!hysteresis.warmup,
+          },
           failedChecks: combinedFailed,
           thresholdValues: {
             dex: sig.thresholds || null,
@@ -5081,6 +5151,7 @@ async function main() {
 
   const conn = makeConnection(cfg.SOLANA_RPC_URL);
   const state = loadState(cfg.STATE_PATH);
+  runtimeStateRef = state;
   const birdseye = createBirdseyeLiteClient({
     enabled: cfg.BIRDEYE_LITE_ENABLED,
     apiKey: cfg.BIRDEYE_API_KEY,
@@ -5308,6 +5379,45 @@ async function main() {
   counters.watchlist ||= {};
   counters.watchlist.compactWindow = state.runtime.compactWindow;
   state.runtime.confirmTxCarryByMint ||= {};
+  const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
+    state.runtime.compactWindow ||= {};
+    const cw = state.runtime.compactWindow;
+    const tMs = Number(opts?.tMs || Date.now());
+    const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
+    const cutoff = tMs - retainMs;
+    const ensureArr = (k) => {
+      cw[k] ||= [];
+      return cw[k];
+    };
+    const pushTs = (k) => {
+      const arr = ensureArr(k);
+      arr.push(tMs);
+      while (arr.length && Number(arr[0] || 0) < cutoff) arr.shift();
+    };
+    const pushObj = (k, obj) => {
+      const arr = ensureArr(k);
+      arr.push({ tMs, ...(obj || {}) });
+      while (arr.length && Number(arr[0]?.tMs || 0) < cutoff) arr.shift();
+    };
+
+    const tsKinds = new Set(['watchlistSeen', 'watchlistEvaluated', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill']);
+    if (tsKinds.has(kind)) return pushTs(kind);
+
+    if (kind === 'blocker') return pushObj('blockers', { reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') });
+    if (kind === 'momentumFailChecks') return pushObj('momentumFailChecks', { checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') });
+    if (kind === 'momentumLiq') return pushObj('momentumLiqValues', { liqUsd: Number(extra?.liqUsd || 0) });
+    if (kind === 'stalkableSeen') return pushObj('stalkableSeen', { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+    if (kind === 'candidateSeen') return pushObj('candidateSeen', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
+    if (kind === 'candidateRouteable') return pushObj('candidateRouteable', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
+    if (kind === 'candidateLiquiditySeen') return pushObj('candidateLiquiditySeen', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+    if (kind === 'scanCycle') return pushObj('scanCycles', extra || {});
+    if (kind === 'repeatSuppressed') return pushObj('repeatSuppressed', { mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
+    if (kind === 'momentumRecent') return pushObj('momentumRecent', extra || {});
+    if (kind === 'momentumScoreSample') return pushObj('momentumScoreSamples', extra || {});
+    if (kind === 'momentumInputSample') return pushObj('momentumInputSamples', extra || {});
+    if (kind === 'momentumAgeSample') return pushObj('momentumAgeSamples', extra || {});
+    if (kind === 'postMomentumFlow') return pushObj('postMomentumFlow', extra || {});
+  };
 
   // Hydrate compact diagnostic window from durable diag events log for retro windows across restarts.
   // Skip replay if compact window is already populated in persisted counters.
@@ -5316,8 +5426,9 @@ async function main() {
     const diagEventsPath = path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl');
     if (!compactHasData && fs.existsSync(diagEventsPath)) {
       const raw = fs.readFileSync(diagEventsPath, 'utf8');
-      const lines = raw.trim().split('\n').slice(-20000);
-      const retainMs = Math.max(60 * 60_000, Number(process.env.DIAG_MAX_WINDOW_MS || (7 * 24 * 60 * 60_000)));
+      const replayMaxLines = Math.max(10_000, Number(process.env.DIAG_HYDRATE_MAX_LINES || 500_000));
+      const lines = raw.trim().split('\n').slice(-replayMaxLines);
+      const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
       const cutoff = Date.now() - retainMs;
       for (const ln of lines) {
         try {
@@ -6237,15 +6348,11 @@ async function main() {
             const hasPassReason = String(x?.continuationPassReason || 'none') !== 'none';
             return hasRunup || hasDip || hasPassReason;
           }) || flow.find((x) => String(x?.outcome || '') === 'passed' || String(x?.outcome || '') === 'rejected') || ev;
-          const liveRow = state?.watchlist?.mints?.[mint] || null;
-          const tx1mResolved = Number((withTx?.tx1m ?? liveRow?.latest?.tx1m ?? liveRow?.snapshot?.tx_1m ?? liveRow?.pair?.birdeye?.tx_1m) ?? NaN);
-          const tx5mAvgResolved = Number((withTx?.tx5mAvg ?? liveRow?.latest?.tx5mAvg ?? liveRow?.snapshot?.tx_5m_avg ?? liveRow?.pair?.birdeye?.tx_5m_avg) ?? NaN);
-          const tx30mAvgResolved = Number((withTx?.tx30mAvg ?? liveRow?.latest?.tx30mAvg ?? liveRow?.snapshot?.tx_30m_avg ?? liveRow?.pair?.birdeye?.tx_30m_avg) ?? NaN);
-          const txAccelObservedResolved = Number.isFinite(Number(withTx?.txAccelObserved))
-            ? Number(withTx?.txAccelObserved)
-            : ((Number.isFinite(tx1mResolved) && Number.isFinite(tx5mAvgResolved) && tx5mAvgResolved > 0)
-              ? (tx1mResolved / Math.max(1, tx5mAvgResolved))
-              : NaN);
+          const confirmTxResolved = resolveConfirmTxMetricsFromDiagEvent(withTx || null);
+          const tx1mResolved = Number(confirmTxResolved?.tx1m ?? NaN);
+          const tx5mAvgResolved = Number(confirmTxResolved?.tx5mAvg ?? NaN);
+          const tx30mAvgResolved = Number(confirmTxResolved?.tx30mAvg ?? NaN);
+          const txAccelObservedResolved = Number(confirmTxResolved?.txAccelObserved ?? NaN);
           const final = flow.find((x) => String(x?.outcome || '') === 'passed')
             ? 'passed'
             : (flow.find((x) => String(x?.outcome || '') === 'rejected') ? 'rejected' : 'reached');
@@ -6262,7 +6369,7 @@ async function main() {
             tx5mAvg: tx5mAvgResolved,
             tx30mAvg: tx30mAvgResolved,
             freshnessMs: Number(withTx?.freshnessMs ?? ev?.freshnessMs ?? NaN),
-            txMetricSource: String(withTx?.txMetricSource || (Number.isFinite(tx1mResolved) || Number.isFinite(tx5mAvgResolved) || Number.isFinite(tx30mAvgResolved) ? 'diag.backfill.row.latest' : 'unknown')),
+            txMetricSource: String(confirmTxResolved?.txMetricSource || 'unknown'),
             carryPresent: !!withTx?.carryPresent,
             carryTx1m: Number(withTx?.carryTx1m ?? NaN),
             carryTx5mAvg: Number(withTx?.carryTx5mAvg ?? NaN),
@@ -6891,31 +6998,16 @@ async function main() {
         ? `momentumEvaluated=0 (downstream idle)`
         : `momentum=${cumulativeMomentumEvaluated}/${cumulativeMomentumPassed} confirm=${cumulativeConfirmReached}/${cumulativeConfirmPassed} attempt=${cumulativeAttempt} fill=${cumulativeFill}`;
 
-      const lookupMintMetrics = (mint) => {
-        const m = String(mint || '').trim();
-        if (!m) return { liq: null, mcap: null };
-        const row = state?.watchlist?.mints?.[m] || null;
-        const liq = Number(row?.latest?.liqUsd ?? row?.snapshot?.liquidityUsd ?? row?.pair?.liquidity?.usd ?? 0);
-        const mcap = Number(row?.latest?.mcapUsd ?? row?.snapshot?.marketCapUsd ?? row?.pair?.marketCap ?? row?.pair?.fdv ?? 0);
-        return {
-          liq: Number.isFinite(liq) && liq > 0 ? liq : null,
-          mcap: Number.isFinite(mcap) && mcap > 0 ? mcap : null,
-        };
-      };
-
       const examples = [];
       if (recentMomo.length) {
         examples.push(...recentMomo.slice(-5).map(x => `${x} stage=momentum`));
       } else if (Array.isArray(counters?.watchlist?.hotBypassTraceLast10) && counters.watchlist.hotBypassTraceLast10.length) {
         examples.push(...counters.watchlist.hotBypassTraceLast10.slice(-5).map(x => {
-          const mm = lookupMintMetrics(x?.mint);
-          return `- ${String(x?.mint||'unknown').slice(0,6)} liq=${mm.liq != null ? Math.round(mm.liq) : 'unknown'} mcap=${mm.mcap != null ? Math.round(mm.mcap) : 'unknown'} stage=${x?.next||'hot'} reason=${x?.final||x?.decision||'unknown'}`;
+          const liq = Number(x?.liq || 0);
+          return `- ${String(x?.mint||'unknown').slice(0,6)} liq=${Number.isFinite(liq) && liq > 0 ? Math.round(liq) : 'unknown'} mcap=unknown stage=${x?.next||'hot'} reason=${x?.final||x?.decision||'unknown'}`;
         }));
       } else {
-        const earlyBlockers = blockersWin.slice(-5).map(x => {
-          const mm = lookupMintMetrics(x?.mint);
-          return `- ${String(x?.mint||'unknown').slice(0,6)} liq=${mm.liq != null ? Math.round(mm.liq) : 'unknown'} mcap=${mm.mcap != null ? Math.round(mm.mcap) : 'unknown'} stage=${String(x?.reason||'unknown').split('.')[0]} reason=${blockerRename(String(x?.reason||'unknown'))}`;
-        });
+        const earlyBlockers = blockersWin.slice(-5).map(x => `- ${String(x?.mint||'unknown').slice(0,6)} liq=unknown mcap=unknown stage=${String(x?.reason||'unknown').split('.')[0]} reason=${blockerRename(String(x?.reason||'unknown'))}`);
         examples.push(...earlyBlockers);
       }
 
@@ -7487,6 +7579,11 @@ async function main() {
             maybePruneJsonlByAge({ filePath: fp, maxAgeDays: cfg.JSONL_RETENTION_DAYS, nowMs: t });
           } catch {}
         }
+        try {
+          const diagEventsPath = path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl');
+          maybeRotateBySize({ filePath: diagEventsPath, maxBytes: cfg.JSONL_ROTATE_MAX_BYTES, nowMs: t });
+          maybePruneJsonlByAge({ filePath: diagEventsPath, maxAgeDays: cfg.DIAG_RETENTION_DAYS, nowMs: t });
+        } catch {}
       } catch {}
     }
 
@@ -7799,24 +7896,27 @@ async function main() {
         counters.watchlist.compactWindow ||= {};
         const w = counters.watchlist.compactWindow;
         const now = Date.now();
-        const retainMs = Math.max(60 * 60_000, Number(process.env.DIAG_MAX_WINDOW_MS || (7 * 24 * 60 * 60_000)));
+        const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
         const cutoff = now - retainMs;
         if (kind === 'candidateSeen') {
           if (!Array.isArray(w.candidateSeen)) w.candidateSeen = [];
           w.candidateSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
           while (w.candidateSeen.length && Number(w.candidateSeen[0]?.tMs || 0) < cutoff) w.candidateSeen.shift();
+          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateSeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } }); } catch {}
           return;
         }
         if (kind === 'candidateRouteable') {
           if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
           w.candidateRouteable.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
           while (w.candidateRouteable.length && Number(w.candidateRouteable[0]?.tMs || 0) < cutoff) w.candidateRouteable.shift();
+          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateRouteable', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } }); } catch {}
           return;
         }
         if (kind === 'candidateLiquiditySeen') {
           if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
           w.candidateLiquiditySeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
           while (w.candidateLiquiditySeen.length && Number(w.candidateLiquiditySeen[0]?.tMs || 0) < cutoff) w.candidateLiquiditySeen.shift();
+          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateLiquiditySeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } }); } catch {}
         }
       };
 
@@ -7834,7 +7934,7 @@ async function main() {
         counters.watchlist.compactWindow ||= {};
         const w = counters.watchlist.compactWindow;
         if (!Array.isArray(w.scanCycles)) w.scanCycles = [];
-        const retainMs = Math.max(60 * 60_000, Number(process.env.DIAG_MAX_WINDOW_MS || (7 * 24 * 60 * 60_000)));
+        const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
         const cutoff = Date.now() - retainMs;
         scanPhase.candidateOtherMs = Math.max(0,
           Number(scanPhase.candidateDiscoveryMs || 0)
@@ -7871,7 +7971,7 @@ async function main() {
           + Number(scanPhase.snapshotBuildMs || 0)
           + Number(scanPhase.shortlistMs || 0)
           + Number(scanPhase.watchlistWriteMs || 0);
-        w.scanCycles.push({
+        const scanCycleEvent = {
           tMs: Date.now(),
           intervalMs: Number.isFinite(Number(scanIntervalMs)) ? Number(scanIntervalMs) : null,
           durationMs: scanDurationMs,
@@ -7922,8 +8022,10 @@ async function main() {
           totalCycleMs: Number(scanDurationMs || 0),
           scanAggregateTaskMs: Number(totalWorkMs || 0),
           scanWallClockMs: Number(scanDurationMs || 0),
-        });
+        };
+        w.scanCycles.push(scanCycleEvent);
         while (w.scanCycles.length && Number(w.scanCycles[0]?.tMs || 0) < cutoff) w.scanCycles.shift();
+        try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: Number(scanCycleEvent.tMs || Date.now()), kind: 'scanCycle', reason: null, extra: { ...scanCycleEvent } }); } catch {}
       };
 
       try {
@@ -9397,7 +9499,7 @@ async function main() {
                     usdTarget: finalUsdTarget,
                     slippageBps: finalSlip,
                     expectedOutAmount: Number(quoteFinal?.outAmount || 0),
-                    expectedInAmount: Number(quoteFinal?.inAmount || inAmountLamports || 0),
+                    expectedInAmount: Number(quoteFinal?.inAmount || 0),
                     // Apply the same stop/trailing rules as LIVE momo
                     stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                     stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -9478,7 +9580,7 @@ async function main() {
                   usdTarget: finalUsdTarget,
                   slippageBps: finalSlip,
                   expectedOutAmount: Number(quoteFinal?.outAmount || 0),
-                  expectedInAmount: Number(quoteFinal?.inAmount || inAmountLamports || 0),
+                  expectedInAmount: Number(quoteFinal?.inAmount || 0),
                   // Apply the same stop/trailing rules as LIVE momo
                   stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                   stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -10020,7 +10122,7 @@ main().catch(async (e) => {
 
 function pruneRuntimeMaps() {
   try {
-    const runtime = state?.runtime;
+    const runtime = runtimeStateRef?.runtime;
     if (!runtime) return;
     const now = Date.now();
     const maxAgeMs = Math.max(5 * 60_000, Number(process.env.RUNTIME_MAP_MAX_AGE_MS || (6 * 60 * 60_000)));
@@ -10074,8 +10176,8 @@ if (!globalTimers.memoryMonitor) {
 setInterval(() => {
   try {
     pruneRuntimeMaps();
-    const runtime = state?.runtime || {};
-    const watchlist = state?.watchlist || {};
+    const runtime = runtimeStateRef?.runtime || {};
+    const watchlist = runtimeStateRef?.watchlist || {};
 
     console.log("[mem-debug]", {
       trackedMints: Object.keys(watchlist.mints || {}).length,
