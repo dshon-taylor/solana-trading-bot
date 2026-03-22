@@ -45,6 +45,7 @@ import { promoteRouteAvailableCandidateToImmediate } from './route_available_wat
 import { resolveEntryAndStopForOpenPosition } from './entry_guard.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
+import { resolveConfirmTxMetricsFromDiagEvent } from './diag_event_invariants.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
@@ -6347,14 +6348,11 @@ async function main() {
             const hasPassReason = String(x?.continuationPassReason || 'none') !== 'none';
             return hasRunup || hasDip || hasPassReason;
           }) || flow.find((x) => String(x?.outcome || '') === 'passed' || String(x?.outcome || '') === 'rejected') || ev;
-          const tx1mResolved = Number(withTx?.tx1m ?? NaN);
-          const tx5mAvgResolved = Number(withTx?.tx5mAvg ?? NaN);
-          const tx30mAvgResolved = Number(withTx?.tx30mAvg ?? NaN);
-          const txAccelObservedResolved = Number.isFinite(Number(withTx?.txAccelObserved))
-            ? Number(withTx?.txAccelObserved)
-            : ((Number.isFinite(tx1mResolved) && Number.isFinite(tx5mAvgResolved) && tx5mAvgResolved > 0)
-              ? (tx1mResolved / Math.max(1, tx5mAvgResolved))
-              : NaN);
+          const confirmTxResolved = resolveConfirmTxMetricsFromDiagEvent(withTx || null);
+          const tx1mResolved = Number(confirmTxResolved?.tx1m ?? NaN);
+          const tx5mAvgResolved = Number(confirmTxResolved?.tx5mAvg ?? NaN);
+          const tx30mAvgResolved = Number(confirmTxResolved?.tx30mAvg ?? NaN);
+          const txAccelObservedResolved = Number(confirmTxResolved?.txAccelObserved ?? NaN);
           const final = flow.find((x) => String(x?.outcome || '') === 'passed')
             ? 'passed'
             : (flow.find((x) => String(x?.outcome || '') === 'rejected') ? 'rejected' : 'reached');
@@ -6371,7 +6369,7 @@ async function main() {
             tx5mAvg: tx5mAvgResolved,
             tx30mAvg: tx30mAvgResolved,
             freshnessMs: Number(withTx?.freshnessMs ?? ev?.freshnessMs ?? NaN),
-            txMetricSource: String(withTx?.txMetricSource || 'unknown'),
+            txMetricSource: String(confirmTxResolved?.txMetricSource || 'unknown'),
             carryPresent: !!withTx?.carryPresent,
             carryTx1m: Number(withTx?.carryTx1m ?? NaN),
             carryTx5mAvg: Number(withTx?.carryTx5mAvg ?? NaN),
