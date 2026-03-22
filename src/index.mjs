@@ -2666,7 +2666,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       let repeatSuppressed = false;
       let repeatReason = null;
       if (prevRepeat && coreFailedNow.length > 0) {
-        const withinWindow = (nowMs - Number(prevRepeat.tMs || 0)) <= (repeatWindowSec * 1000);
+        const withinWindow = (nowMs - Number(prevRepeat.tMs || 0)) <= (repeatFailWindowSec * 1000);
         const prevCore = Array.isArray(prevRepeat.coreFailed) ? prevRepeat.coreFailed.slice().sort() : [];
         const sameCore = prevCore.length === coreFailedNow.length && prevCore.every((v, i) => v === coreFailedNow[i]);
         if (withinWindow && sameCore) {
@@ -2785,7 +2785,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           },
           repeatFailSuppressed: repeatSuppressed,
           repeatFailReason: repeatReason,
-          repeatFailWindowSec: repeatWindowSec,
+          repeatFailWindowSec: repeatFailWindowSec,
           repeatFailCooldownSecApplied: appliedCooldownSec,
           repeatFailEscalationHits: repeatEscalationHits,
           repeatFailEscalationWindowSec: repeatEscalationWindowSec,
