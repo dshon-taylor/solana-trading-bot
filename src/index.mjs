@@ -6231,7 +6231,14 @@ async function main() {
             return tx >= tStart && tx < nextReachedTs;
           });
           const withTx = flow.find((x) => Number.isFinite(Number(x?.txAccelObserved)) || Number.isFinite(Number(x?.tx1m)) || Number.isFinite(Number(x?.tx5mAvg)) || Number.isFinite(Number(x?.tx30mAvg))) || ev;
-          const withContinuation = flow.find((x) => Number.isFinite(Number(x?.continuationMaxRunupPct)) || Number.isFinite(Number(x?.continuationMaxDipPct)) || String(x?.continuationPassReason || 'none') !== 'none') || flow.find((x) => String(x?.outcome || '') === 'passed' || String(x?.outcome || '') === 'rejected') || ev;
+          const withContinuation = flow.find((x) => {
+            const runupRaw = x?.continuationMaxRunupPct;
+            const dipRaw = x?.continuationMaxDipPct;
+            const hasRunup = runupRaw != null && Number.isFinite(Number(runupRaw));
+            const hasDip = dipRaw != null && Number.isFinite(Number(dipRaw));
+            const hasPassReason = String(x?.continuationPassReason || 'none') !== 'none';
+            return hasRunup || hasDip || hasPassReason;
+          }) || flow.find((x) => String(x?.outcome || '') === 'passed' || String(x?.outcome || '') === 'rejected') || ev;
           const liveRow = state?.watchlist?.mints?.[mint] || null;
           const tx1mResolved = Number((withTx?.tx1m ?? liveRow?.latest?.tx1m ?? liveRow?.snapshot?.tx_1m ?? liveRow?.pair?.birdeye?.tx_1m) ?? NaN);
           const tx5mAvgResolved = Number((withTx?.tx5mAvg ?? liveRow?.latest?.tx5mAvg ?? liveRow?.snapshot?.tx_5m_avg ?? liveRow?.pair?.birdeye?.tx_5m_avg) ?? NaN);
