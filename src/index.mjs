@@ -44,6 +44,7 @@ import { didEntryFill } from './entry_reliability.mjs';
 import { promoteRouteAvailableCandidateToImmediate } from './route_available_watchlist.mjs';
 import { resolveEntryAndStopForOpenPosition } from './entry_guard.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
+import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
@@ -2563,15 +2564,22 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     if (resolved?.pairCreatedAtMs) {
       agePicked = { value: Number(resolved.pairCreatedAtMs), source: String(resolved.source || 'resolved') };
     } else {
-      const rpcAge = await resolveMintCreatedAtFromRpc?.({ state, conn, mint, nowMs, maxPages: 3 }).catch(() => null);
-      if (rpcAge?.createdAtMs) {
+      const cachedAge = getCachedMintCreatedAt({ state, mint, nowMs, maxAgeMs: 60 * 60_000 });
+      if (cachedAge?.createdAtMs) {
         row.latest ||= {};
-        row.latest.pairCreatedAt = Number(rpcAge.createdAtMs);
-        agePicked = { value: Number(rpcAge.createdAtMs), source: String(rpcAge.source || 'rpc.mintSignatures.blockTime') };
+        row.latest.pairCreatedAt = Number(cachedAge.createdAtMs);
+        agePicked = { value: Number(cachedAge.createdAtMs), source: String(cachedAge.source || 'cache.mintCreatedAt') };
         // persist resolved caching
         row.meta.resolvedPairCreatedAt = { mint, pairCreatedAtMs: agePicked.value, source: agePicked.source, tMs: nowMs };
       } else {
-        agePicked = { value: null, source: 'missing' };
+        scheduleMintCreatedAtLookup({
+          state,
+          mint,
+          nowMs,
+          minRetryMs: Math.max(5_000, Number(process.env.MINT_AGE_LOOKUP_RETRY_MS || 30_000)),
+          lookupFn: () => resolveMintCreatedAtFromRpc?.({ state, conn, mint, nowMs: Date.now(), maxPages: 3 }),
+        });
+        agePicked = { value: null, source: 'pending_rpc' };
       }
     }
     // count age source
@@ -2628,14 +2636,35 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       const earlyBuyPressurePass = !dexFailed.includes('buyPressure');
       const earlyWalletExpansionPass = !dexFailed.includes('walletExpansion');
       const earlyPassCount = [earlyPriceBreakPass, earlyBuyPressurePass, earlyWalletExpansionPass].filter(Boolean).length;
-      // Score-model truth: momentum pass is always driven by sig.ok (score threshold + hard guards),
+      const microFreshGate = isMicroFreshEnough({
+        microPresentCount: momentumMicroPresent,
+        freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
+        maxAgeMs: Math.max(1000, Number(process.env.MOMENTUM_MICRO_MAX_AGE_MS || 10_000)),
+        requireFreshMicro: (process.env.MOMENTUM_REQUIRE_FRESH_MICRO ?? 'true') === 'true',
+        minPresentForGate: Math.max(1, Number(process.env.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3)),
+      });
+
+      // Score-model truth: momentum pass is driven by sig.ok (score threshold + hard guards)
+      // plus freshness/hysteresis overlays.
       // regardless of earlyTokenMode. Keep earlyPassCount for diagnostics only.
-      const momentumGateOk = !!sig.ok;
+      let momentumGateOk = !!sig.ok && !!microFreshGate.ok;
 
       // Paper metrics are diagnostics-only for legacy history; do not add them to live fail reasons.
       const combinedFailed = Array.from(new Set([
         ...dexFailed.map(x => `dex.${x}`),
+        ...(microFreshGate.ok ? [] : [`dex.${String(microFreshGate.reason || 'microStale')}`]),
       ]));
+
+      const hysteresis = applyMomentumPassHysteresis({
+        state,
+        mint,
+        nowMs,
+        gatePassed: momentumGateOk,
+        requiredStreak: Math.max(1, Number(process.env.MOMENTUM_PASS_STREAK_REQUIRED || 1)),
+        streakResetMs: Math.max(30_000, Number(process.env.MOMENTUM_PASS_STREAK_RESET_MS || (10 * 60_000))),
+      });
+      momentumGateOk = !!hysteresis.passed;
+      if (hysteresis.warmup) combinedFailed.push('momentum.hysteresisWarmup');
 
       if (cfg.MOMENTUM_FILTER_ENABLED && !momentumGateOk) {
       const coreDexFailures = dexFailed.filter(x => ['volumeExpansion', 'buyPressure', 'txAcceleration', 'walletExpansion'].includes(x));
@@ -2828,6 +2857,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         momentum: {
           strict: useStrict,
           profile: cfg.MOMENTUM_PROFILE,
+            freshnessGate: {
+              ok: !!microFreshGate.ok,
+              reason: String(microFreshGate.reason || 'unknown'),
+            },
+            hysteresis: {
+              required: Number(hysteresis.required || 1),
+              streak: Number(hysteresis.streak || 0),
+              warmup: !!hysteresis.warmup,
+            },
           liquidityBand: {
             liqUsd,
             lowLiqStrictUnderUsd: cfg.LOW_LIQ_STRICT_MOMENTUM_UNDER_USD,
@@ -2862,6 +2900,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         momentumCounterIncremented: false,
         confirmCounterIncremented: false,
         extra: {
+          freshnessGate: {
+            ok: !!microFreshGate.ok,
+            reason: String(microFreshGate.reason || 'unknown'),
+          },
+          hysteresis: {
+            required: Number(hysteresis.required || 1),
+            streak: Number(hysteresis.streak || 0),
+            warmup: !!hysteresis.warmup,
+          },
           failedChecks: combinedFailed,
           thresholdValues: {
             dex: sig.thresholds || null,
