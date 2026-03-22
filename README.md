@@ -67,6 +67,7 @@ NO_PAIR_RETRY_TOTAL_BUDGET_MS=2500
 
 Then restart the process (PM2/systemd) and verify with `/config` + `/diag`.
 `/diag` now shows funnel split by standard vs fallback-trigger attempts/fills.
+`/diag` historical retention defaults to 90 days and is tunable via `DIAG_RETENTION_DAYS` (legacy override: `DIAG_MAX_WINDOW_MS`).
 
 Watchlist eviction controls (dead-token buildup protection):
 - `WATCHLIST_EVICT_MAX_AGE_HOURS` — evict watchlist entries once mint age crosses this threshold.
