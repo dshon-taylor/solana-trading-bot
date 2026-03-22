@@ -454,7 +454,7 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
     const wsPrice = Number(ws?.priceUsd ?? ws?.price ?? 0);
     const wsTsMs = Number(ws?.tsMs || 0);
     const wsFreshMs = wsTsMs > 0 ? (Date.now() - wsTsMs) : null;
-    const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= 5000 : false;
+    const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= 15000 : false;
     if (Number.isFinite(wsPrice) && wsPrice > 0 && wsFreshEnough) return { price: wsPrice, source: 'ws', wsFreshMs };
     const p = Number(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd ?? 0);
     return { price: Number.isFinite(p) && p > 0 ? p : null, source: wsTsMs > 0 ? 'snapshot_fallback_wsStale' : 'snapshot_fallback', wsFreshMs };
@@ -3537,13 +3537,16 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     const retryTxAccel = Number.isFinite(confirmTxAccelObserved) ? Number(confirmTxAccelObserved) : 0;
     let retryImprovedThisPass = false;
     if (continuationActive && retryGate) {
+      const retryMinDelayMs = Math.max(3000, Number(process.env.CONFIRM_RETRY_MIN_DELAY_MS || 10000));
+      const retryAgeMs = Math.max(0, nowMs - Number(retryGate?.failedAtMs || 0));
       const improvedMomentum = retryMomentumScore > (Number(retryGate?.momentumScore || 0) + 1);
       const improvedTx = retryTxAccel > (Number(retryGate?.txAccelObserved || 0) + 0.10);
       const improvedWallet = retryWalletExpansion > (Number(retryGate?.walletExpansion || 0) + 0.05);
       const improvedBreakout = retryStartPrice > (Number(retryGate?.startPrice || 0) * 1.002);
       retryImprovedThisPass = !!(improvedMomentum || improvedTx || improvedWallet || improvedBreakout);
-      if (!retryImprovedThisPass) {
-        const retryReason = 'confirmContinuation.retryNoImprovement';
+      const retryReadyByTime = retryAgeMs >= retryMinDelayMs;
+      if (!retryImprovedThisPass || !retryReadyByTime) {
+        const retryReason = !retryReadyByTime ? 'confirmContinuation.retryCooldown' : 'confirmContinuation.retryNoImprovement';
         pushCompactWindowEvent('postMomentumFlow', null, {
           mint,
           liq: Number(liqForEntry || 0),
@@ -3558,7 +3561,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           continuationMode: true,
           continuationPassReason: 'none',
         });
-        if (fail(retryReason, { stage: 'confirm', cooldownMs: 20_000, meta: { retryGate } }) === 'break') break;
+        if (fail(retryReason, { stage: 'confirm', cooldownMs: 20_000, meta: { retryGate, retryAgeMs, retryMinDelayMs } }) === 'break') break;
         continue;
       }
     }
@@ -6640,7 +6643,7 @@ async function main() {
           '',
           'CONTINUATION OUTCOMES',
           `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
-          `- passReasons: runup=${Number(continuationPassReasonCounts.runup || 0)} hold=${Number(continuationPassReasonCounts.hold || 0)} windowClose=${Number(continuationPassReasonCounts.windowClose || 0)}`,
+          `- passReasons: runup=${Number(continuationPassReasonCounts.runup || 0)} (legacyHold=${Number(continuationPassReasonCounts.hold || 0)} legacyWindowClose=${Number(continuationPassReasonCounts.windowClose || 0)})`,
           `- failReasons: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpired=${continuationFailMix.windowExpired} liq=${continuationFailMix.liq} impact=${continuationFailMix.impact} route=${continuationFailMix.route} other=${continuationFailMix.other}`,
           `- confirmReached +1.5% in-window=${confirmReachedRunup15}`,
           `- median maxRunupPctWithinConfirm=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} median maxDipPctWithinConfirm=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'}`,
