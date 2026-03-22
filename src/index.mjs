@@ -6488,7 +6488,7 @@ async function main() {
           else if (k.includes('confirmContinuation.retryNoImprovement')) continuationFailMix.retryNoImprovement += n;
           else continuationFailMix.other += n;
         }
-        const showCircuitAbnormal = circuitOpen || Number(circuitFailures?.dex || 0) > 0 || Number(circuitFailures?.rpc || 0) > 0 || Number(circuitFailures?.jup || 0) > 0;
+        const showCircuitAbnormal = !!circuitOpen;
         const freshnessMajorBlocker = Number(confirmRejectCounts['confirm.mcapStaleRejected'] || 0) > 0;
 
         return [
