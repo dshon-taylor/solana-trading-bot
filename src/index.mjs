@@ -441,7 +441,7 @@ function confirmQualityGate({ cfg, sigReasons, snapshot }) {
   return { ok: true };
 }
 
-async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct }) {
+async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct, confirmStartLiqUsd = null }) {
   const active = (process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true';
   if (!active) return { ok: true, mode: 'legacy' };
 
@@ -487,9 +487,11 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
     const dipPct = (startPrice - lowPrice) / startPrice;
 
     const liqNow = Number(row?.latest?.liqUsd ?? snapshot?.liquidityUsd ?? pair?.liquidity?.usd ?? 0) || 0;
-    if (liqNow < Number(confirmMinLiqUsd || 0)) {
-      failReason = 'liq';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
+    const startLiq = Number(confirmStartLiqUsd || 0) || 0;
+    const liqChangePct = startLiq > 0 ? ((liqNow - startLiq) / startLiq) : null;
+    if (startLiq > 0 && liqNow < (startLiq * 0.85)) {
+      failReason = 'liqDegraded';
+      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null, confirmStartLiqUsd: startLiq, currentLiqUsd: liqNow, liqChangePct } };
     }
     const maxPi = Number(cfg.EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT || 0);
     if (Number.isFinite(Number(confirmPriceImpactPct)) && Number(confirmPriceImpactPct) > maxPi) {
@@ -2040,6 +2042,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           continuationMaxDipPct: Number.isFinite(Number(extra?.continuationMaxDipPct)) ? Number(extra.continuationMaxDipPct) : null,
           continuationTimeToRunupPassMs: Number.isFinite(Number(extra?.continuationTimeToRunupPassMs)) ? Number(extra.continuationTimeToRunupPassMs) : null,
           continuationTimeoutWasFlatOrNegative: !!extra?.continuationTimeoutWasFlatOrNegative,
+          continuationConfirmStartLiqUsd: Number.isFinite(Number(extra?.continuationConfirmStartLiqUsd)) ? Number(extra.continuationConfirmStartLiqUsd) : null,
+          continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
+          continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
           stage: String(extra?.stage || 'unknown'),
           outcome: String(extra?.outcome || 'unknown'),
           reason: String(extra?.reason || 'none'),
@@ -3450,7 +3455,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       counters.watchlist.hotLiqBypassReachedConfirm = Number(counters.watchlist.hotLiqBypassReachedConfirm || 0) + 1;
       counters.watchlist.hotPostBypassReachedConfirm = Number(counters.watchlist.hotPostBypassReachedConfirm || 0) + 1;
     }
-    if (liqForEntry < confirmMinLiqUsd) {
+    if (!((process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true') && liqForEntry < confirmMinLiqUsd) {
       counters.watchlist.confirmFullLiqRejected = Number(counters.watchlist.confirmFullLiqRejected || 0) + 1;
       finalizeHotBypassTrace({ nextStageReached: 'confirm', finalPreMomentumRejectReason: 'confirm.fullLiqRejected', momentumCounterIncremented: !!hotBypassTraceCtx?._momentumPassed, confirmCounterIncremented: false });
       if (fail('fullLiqRejected', { stage: 'confirm', cooldownMs: 20_000, meta: { liqForEntry, required: confirmMinLiqUsd } }) === 'break') break;
@@ -3549,8 +3554,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       }
     }
 
+    const confirmStartLiqUsd = Number(liqForEntry || 0) || 0;
     const confirmGate = continuationActive
-      ? await confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct })
+      ? await confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct, confirmStartLiqUsd })
       : confirmQualityGate({ cfg, sigReasons: confirmSigReasons, snapshot });
     if (!confirmGate.ok) {
       const rejectReason = continuationActive ? `confirmContinuation.${String(confirmGate?.failReason || 'windowExpired')}` : String(confirmGate.reason || 'confirmGateRejected');
@@ -3590,6 +3596,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
         continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
         continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
+        continuationConfirmStartLiqUsd: Number(confirmGate?.diag?.confirmStartLiqUsd || 0) || null,
+        continuationCurrentLiqUsd: Number(confirmGate?.diag?.currentLiqUsd || 0) || null,
+        continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
       });
       if (continuationActive && ['windowExpiredStall', 'windowExpired'].includes(String(confirmGate?.failReason || ''))) {
         state.runtime ||= {};
@@ -3663,6 +3672,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
       continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
       continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
+      continuationConfirmStartLiqUsd: Number(confirmGate?.diag?.confirmStartLiqUsd || 0) || null,
+      continuationCurrentLiqUsd: Number(confirmGate?.diag?.currentLiqUsd || 0) || null,
+      continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
     });
     if (continuationActive && retryGate) {
       state.runtime ||= {};
@@ -6324,6 +6336,9 @@ async function main() {
             continuationMaxDipPct: Number(withContinuation?.continuationMaxDipPct ?? withTx?.continuationMaxDipPct ?? ev?.continuationMaxDipPct ?? NaN),
             continuationTimeToRunupPassMs: Number(withContinuation?.continuationTimeToRunupPassMs ?? withTx?.continuationTimeToRunupPassMs ?? ev?.continuationTimeToRunupPassMs ?? NaN),
             continuationTimeoutWasFlatOrNegative: !!(withContinuation?.continuationTimeoutWasFlatOrNegative ?? withTx?.continuationTimeoutWasFlatOrNegative ?? ev?.continuationTimeoutWasFlatOrNegative),
+            continuationConfirmStartLiqUsd: Number(withContinuation?.continuationConfirmStartLiqUsd ?? withTx?.continuationConfirmStartLiqUsd ?? ev?.continuationConfirmStartLiqUsd ?? NaN),
+            continuationCurrentLiqUsd: Number(withContinuation?.continuationCurrentLiqUsd ?? withTx?.continuationCurrentLiqUsd ?? ev?.continuationCurrentLiqUsd ?? NaN),
+            continuationLiqChangePct: Number(withContinuation?.continuationLiqChangePct ?? withTx?.continuationLiqChangePct ?? ev?.continuationLiqChangePct ?? NaN),
             final,
           };
         });
@@ -6561,7 +6576,11 @@ async function main() {
           .map((r) => {
             const frag = `${r.mint.slice(0,5)}...`;
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
-            return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} reason=${String(r.rejectReason || 'unknown').replace(/^confirm\./, '')}`;
+            const reason = String(r.rejectReason || 'unknown').replace(/^confirm\./, '');
+            const liqDiag = reason.includes('confirmContinuation.liqDegraded')
+              ? ` startLiq=${Number.isFinite(Number(r.continuationConfirmStartLiqUsd)) ? Math.round(Number(r.continuationConfirmStartLiqUsd)) : 'null'} currentLiq=${Number.isFinite(Number(r.continuationCurrentLiqUsd)) ? Math.round(Number(r.continuationCurrentLiqUsd)) : 'null'} liqChangePct=${Number.isFinite(Number(r.continuationLiqChangePct)) ? Number(r.continuationLiqChangePct).toFixed(3) : 'null'}`
+              : '';
+            return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} reason=${reason}${liqDiag}`;
           });
         const strongestPassedConfirmCompact = confirmCandidatesDecorated
           .filter((r) => r.final === 'passed')
@@ -6578,7 +6597,7 @@ async function main() {
           if (k.includes('confirmContinuation.hardDip')) continuationFailMix.hardDip += n;
           else if (k.includes('confirmContinuation.windowExpiredStall')) continuationFailMix.windowExpiredStall += n;
           else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpired += n;
-          else if (k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liq += n;
+          else if (k.includes('confirmContinuation.liqDegraded') || k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liq += n;
           else if (k.includes('confirmContinuation.impact') || k.includes('confirmPriceImpact')) continuationFailMix.impact += n;
           else if (k.includes('confirmNoRoute')) continuationFailMix.route += n;
           else continuationFailMix.other += n;
