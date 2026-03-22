@@ -445,12 +445,9 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
   const active = (process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true';
   if (!active) return { ok: true, mode: 'legacy' };
 
-  const windowMs = Math.max(250, Number(process.env.CONFIRM_CONTINUATION_WINDOW_MS || 4000));
+  const windowMs = Math.max(250, Number(process.env.CONFIRM_CONTINUATION_WINDOW_MS || 15000));
   const passPct = Math.max(0, Number(process.env.CONFIRM_CONTINUATION_PASS_PCT || 0.015));
-  const maxDipPct = Math.max(0, Number(process.env.CONFIRM_CONTINUATION_MAX_DIP_PCT || 0.015));
-  const hardFailDipPct = Math.max(maxDipPct, Number(process.env.CONFIRM_CONTINUATION_HARD_FAIL_DIP_PCT || 0.020));
-  const requireHigherHigh = (process.env.CONFIRM_CONTINUATION_REQUIRE_HIGHER_HIGH ?? 'false') === 'true';
-  const allowStrongRunup = (process.env.CONFIRM_CONTINUATION_ALLOW_STRONG_RUNUP ?? 'true') === 'true';
+  const hardFailDipPct = Math.max(0, Number(process.env.CONFIRM_CONTINUATION_HARD_FAIL_DIP_PCT || 0.015));
 
   const readWsOrFallbackPrice = () => {
     const ws = cache.get(`birdeye:ws:price:${mint}`) || null;
@@ -463,7 +460,7 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
   const start = readWsOrFallbackPrice();
   const startPrice = Number(start?.price || 0);
   if (!(startPrice > 0)) {
-    return { ok: false, failReason: 'windowExpired', mode: 'continuation', diag: { startPrice: null, highPrice: null, lowPrice: null, finalPrice: null, maxRunupPctWithinConfirm: null, maxDipPctWithinConfirm: null, passReason: 'none', failReason: 'windowExpired', priceSource: start?.source || 'unknown' } };
+    return { ok: false, failReason: 'windowExpiredStall', mode: 'continuation', diag: { startPrice: null, highPrice: null, lowPrice: null, finalPrice: null, maxRunupPctWithinConfirm: null, maxDipPctWithinConfirm: null, passReason: 'none', failReason: 'windowExpiredStall', priceSource: start?.source || 'unknown', timeToRunupPassMs: null, timeoutWasFlatOrNegative: null } };
   }
 
   let highPrice = startPrice;
@@ -471,6 +468,7 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
   let finalPrice = startPrice;
   let passReason = 'none';
   let failReason = 'none';
+  let timeToRunupPassMs = null;
 
   const startedAt = Date.now();
   const deadline = startedAt + windowMs;
@@ -491,27 +489,23 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
     const liqNow = Number(row?.latest?.liqUsd ?? snapshot?.liquidityUsd ?? pair?.liquidity?.usd ?? 0) || 0;
     if (liqNow < Number(confirmMinLiqUsd || 0)) {
       failReason = 'liq';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown' } };
+      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
     }
     const maxPi = Number(cfg.EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT || 0);
     if (Number.isFinite(Number(confirmPriceImpactPct)) && Number(confirmPriceImpactPct) > maxPi) {
       failReason = 'impact';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown' } };
+      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
     }
 
     if (dipPct >= hardFailDipPct) {
       failReason = 'hardDip';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown' } };
+      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
     }
 
-    if (allowStrongRunup && runupPct >= passPct) {
+    if (runupPct >= passPct || p >= (startPrice * (1 + passPct))) {
       passReason = 'runup';
-      return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown' } };
-    }
-
-    if (p >= (startPrice * (1 + passPct))) {
-      passReason = 'runup';
-      return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown' } };
+      timeToRunupPassMs = Math.max(0, Date.now() - startedAt);
+      return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: false } };
     }
 
     await new Promise((r) => setTimeout(r, 120));
@@ -520,19 +514,9 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
   const maxRunupPctWithinConfirm = (highPrice / startPrice) - 1;
   const maxDipPctWithinConfirm = (startPrice - lowPrice) / startPrice;
   const finalRet = (finalPrice / startPrice) - 1;
-
-  if (!requireHigherHigh && finalPrice >= (startPrice * 0.997) && maxDipPctWithinConfirm <= maxDipPct) {
-    passReason = 'hold';
-    return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm, maxDipPctWithinConfirm, passReason, failReason, priceSource: start?.source || 'unknown' } };
-  }
-
-  if (allowStrongRunup && maxRunupPctWithinConfirm >= passPct) {
-    passReason = 'windowClose';
-    return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm, maxDipPctWithinConfirm, passReason, failReason, priceSource: start?.source || 'unknown' } };
-  }
-
-  failReason = finalRet < 0 ? 'windowExpired' : 'windowClose';
-  return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm, maxDipPctWithinConfirm, passReason, failReason, priceSource: start?.source || 'unknown' } };
+  const timeoutWasFlatOrNegative = finalRet <= 0;
+  failReason = timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired';
+  return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm, maxDipPctWithinConfirm, passReason, failReason, priceSource: start?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative } };
 }
 
 function recordConfirmCarryTrace(state, mint, stage, payload = {}) {
@@ -2054,6 +2038,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           continuationFinalPrice: Number.isFinite(Number(extra?.continuationFinalPrice)) ? Number(extra.continuationFinalPrice) : null,
           continuationMaxRunupPct: Number.isFinite(Number(extra?.continuationMaxRunupPct)) ? Number(extra.continuationMaxRunupPct) : null,
           continuationMaxDipPct: Number.isFinite(Number(extra?.continuationMaxDipPct)) ? Number(extra.continuationMaxDipPct) : null,
+          continuationTimeToRunupPassMs: Number.isFinite(Number(extra?.continuationTimeToRunupPassMs)) ? Number(extra.continuationTimeToRunupPassMs) : null,
+          continuationTimeoutWasFlatOrNegative: !!extra?.continuationTimeoutWasFlatOrNegative,
           stage: String(extra?.stage || 'unknown'),
           outcome: String(extra?.outcome || 'unknown'),
           reason: String(extra?.reason || 'none'),
@@ -3527,6 +3513,42 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continue;
     }
 
+    state.runtime ||= {};
+    state.runtime.confirmRetryGateByMint ||= {};
+    state.runtime.confirmRetryRequalifiedPassed ||= 0;
+    const retryGate = state.runtime.confirmRetryGateByMint[mint] || null;
+    const retryStartPrice = Number(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd ?? 0) || 0;
+    const retryMomentumScore = Number(confirmSigReasons?.momentumScore || sig?.reasons?.momentumScore || 0) || 0;
+    const retryWalletExpansion = Number(confirmSigReasons?.walletExpansion || sig?.reasons?.walletExpansion || 0) || 0;
+    const retryTxAccel = Number.isFinite(confirmTxAccelObserved) ? Number(confirmTxAccelObserved) : 0;
+    let retryImprovedThisPass = false;
+    if (continuationActive && retryGate) {
+      const improvedMomentum = retryMomentumScore > (Number(retryGate?.momentumScore || 0) + 1);
+      const improvedTx = retryTxAccel > (Number(retryGate?.txAccelObserved || 0) + 0.10);
+      const improvedWallet = retryWalletExpansion > (Number(retryGate?.walletExpansion || 0) + 0.05);
+      const improvedBreakout = retryStartPrice > (Number(retryGate?.startPrice || 0) * 1.002);
+      retryImprovedThisPass = !!(improvedMomentum || improvedTx || improvedWallet || improvedBreakout);
+      if (!retryImprovedThisPass) {
+        const retryReason = 'confirmContinuation.retryNoImprovement';
+        pushCompactWindowEvent('postMomentumFlow', null, {
+          mint,
+          liq: Number(liqForEntry || 0),
+          mcap: Number(mcapForEntry || 0),
+          ageMin: Number.isFinite(tokenAgeMinutes) ? tokenAgeMinutes : null,
+          freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
+          priceImpactPct: confirmPriceImpactPct,
+          slippageBps: confirmSlippageBps,
+          stage: 'confirm',
+          outcome: 'rejected',
+          reason: retryReason,
+          continuationMode: true,
+          continuationPassReason: 'none',
+        });
+        if (fail(retryReason, { stage: 'confirm', cooldownMs: 20_000, meta: { retryGate } }) === 'break') break;
+        continue;
+      }
+    }
+
     const confirmGate = continuationActive
       ? await confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct })
       : confirmQualityGate({ cfg, sigReasons: confirmSigReasons, snapshot });
@@ -3566,7 +3588,22 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationFinalPrice: Number(confirmGate?.diag?.finalPrice || 0) || null,
         continuationMaxRunupPct: Number(confirmGate?.diag?.maxRunupPctWithinConfirm || 0) || null,
         continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
+        continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
+        continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
       });
+      if (continuationActive && ['windowExpiredStall', 'windowExpired'].includes(String(confirmGate?.failReason || ''))) {
+        state.runtime ||= {};
+        state.runtime.confirmRetryGateByMint ||= {};
+        state.runtime.confirmRetryGateByMint[mint] = {
+          failedAtMs: nowMs,
+          failReason: String(confirmGate?.failReason || 'windowExpiredStall'),
+          momentumScore: retryMomentumScore,
+          txAccelObserved: retryTxAccel,
+          walletExpansion: retryWalletExpansion,
+          startPrice: Number(confirmGate?.diag?.startPrice || retryStartPrice || 0) || 0,
+          highPrice: Number(confirmGate?.diag?.highPrice || 0) || 0,
+        };
+      }
       finalizeHotBypassTrace({ nextStageReached: 'confirm', finalPreMomentumRejectReason: `confirm.${rejectReason}`, momentumCounterIncremented: !!hotBypassTraceCtx?._momentumPassed, confirmCounterIncremented: false });
       if (fail(rejectReason, { stage: 'confirm', cooldownMs: 20_000, meta: {
         txAccelObserved: Number.isFinite(confirmTxAccelObserved) ? confirmTxAccelObserved : null,
@@ -3624,7 +3661,15 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationFinalPrice: Number(confirmGate?.diag?.finalPrice || 0) || null,
       continuationMaxRunupPct: Number(confirmGate?.diag?.maxRunupPctWithinConfirm || 0) || null,
       continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
+      continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
+      continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
     });
+    if (continuationActive && retryGate) {
+      state.runtime ||= {};
+      state.runtime.confirmRetryGateByMint ||= {};
+      delete state.runtime.confirmRetryGateByMint[mint];
+      if (retryImprovedThisPass) state.runtime.confirmRetryRequalifiedPassed = Number(state.runtime.confirmRetryRequalifiedPassed || 0) + 1;
+    }
     canaryLog('confirm', 'passed');
     if (hotBypassTraceCtx) {
       counters.watchlist.hotPostBypassReachedConfirm = Number(counters.watchlist.hotPostBypassReachedConfirm || 0) + 1;
@@ -6277,6 +6322,8 @@ async function main() {
             continuationFinalPrice: Number(withContinuation?.continuationFinalPrice ?? withTx?.continuationFinalPrice ?? ev?.continuationFinalPrice ?? NaN),
             continuationMaxRunupPct: Number(withContinuation?.continuationMaxRunupPct ?? withTx?.continuationMaxRunupPct ?? ev?.continuationMaxRunupPct ?? NaN),
             continuationMaxDipPct: Number(withContinuation?.continuationMaxDipPct ?? withTx?.continuationMaxDipPct ?? ev?.continuationMaxDipPct ?? NaN),
+            continuationTimeToRunupPassMs: Number(withContinuation?.continuationTimeToRunupPassMs ?? withTx?.continuationTimeToRunupPassMs ?? ev?.continuationTimeToRunupPassMs ?? NaN),
+            continuationTimeoutWasFlatOrNegative: !!(withContinuation?.continuationTimeoutWasFlatOrNegative ?? withTx?.continuationTimeoutWasFlatOrNegative ?? ev?.continuationTimeoutWasFlatOrNegative),
             final,
           };
         });
@@ -6501,6 +6548,9 @@ async function main() {
         const medianLocal = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
         const medianRunupPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxRunupPct || NaN)).filter((v) => Number.isFinite(v)));
         const medianDipPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxDipPct || NaN)).filter((v) => Number.isFinite(v)));
+        const medianTimeToRunupPassMs = medianLocal(confirmCandidatesDecorated.filter((r) => r.final === 'passed').map((r) => Number(r.continuationTimeToRunupPassMs || NaN)).filter((v) => Number.isFinite(v) && v >= 0));
+        const timeoutFlatOrNegativeCount = confirmCandidatesDecorated.filter((r) => r.final === 'rejected' && !!r.continuationTimeoutWasFlatOrNegative).length;
+        const recycledRequalifiedPassedCount = Number(state?.runtime?.confirmRetryRequalifiedPassed || 0);
         const top3ConfirmBlockers = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3AttemptBlockers = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const topHandoffBlocker = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
@@ -6522,10 +6572,11 @@ async function main() {
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
             return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} passReason=${String(r.continuationPassReason || 'none')}`;
           });
-        const continuationFailMix = { hardDip: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
+        const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
         for (const [k, v] of Object.entries(confirmRejectCounts)) {
           const n = Number(v || 0);
           if (k.includes('confirmContinuation.hardDip')) continuationFailMix.hardDip += n;
+          else if (k.includes('confirmContinuation.windowExpiredStall')) continuationFailMix.windowExpiredStall += n;
           else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpired += n;
           else if (k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liq += n;
           else if (k.includes('confirmContinuation.impact') || k.includes('confirmPriceImpact')) continuationFailMix.impact += n;
@@ -6553,9 +6604,10 @@ async function main() {
           'CONTINUATION OUTCOMES',
           `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
           `- passReasons: runup=${Number(continuationPassReasonCounts.runup || 0)} hold=${Number(continuationPassReasonCounts.hold || 0)} windowClose=${Number(continuationPassReasonCounts.windowClose || 0)}`,
-          `- failReasons: hardDip=${continuationFailMix.hardDip} windowExpired=${continuationFailMix.windowExpired} liq=${continuationFailMix.liq} impact=${continuationFailMix.impact} route=${continuationFailMix.route} other=${continuationFailMix.other}`,
+          `- failReasons: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpired=${continuationFailMix.windowExpired} liq=${continuationFailMix.liq} impact=${continuationFailMix.impact} route=${continuationFailMix.route} other=${continuationFailMix.other}`,
           `- confirmReached +1.5% in-window=${confirmReachedRunup15}`,
           `- median maxRunupPctWithinConfirm=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} median maxDipPctWithinConfirm=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'}`,
+          `- median timeToRunupPassMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'} timedOutFlatOrNegative=${timeoutFlatOrNegativeCount} recycledRequalifiedPassed=${recycledRequalifiedPassedCount}`,
           '',
           'BLOCKER SUMMARY',
           `- top3 confirm blockers: ${top3ConfirmBlockers}`,
