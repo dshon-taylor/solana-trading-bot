@@ -452,10 +452,18 @@ async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirm
   const readWsOrFallbackPrice = () => {
     const ws = cache.get(`birdeye:ws:price:${mint}`) || null;
     const wsPrice = Number(ws?.priceUsd ?? ws?.price ?? 0);
-    if (Number.isFinite(wsPrice) && wsPrice > 0) return { price: wsPrice, source: 'ws' };
+    const wsTsMs = Number(ws?.tsMs || 0);
+    const wsFreshMs = wsTsMs > 0 ? (Date.now() - wsTsMs) : null;
+    const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= 5000 : false;
+    if (Number.isFinite(wsPrice) && wsPrice > 0 && wsFreshEnough) return { price: wsPrice, source: 'ws', wsFreshMs };
     const p = Number(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd ?? 0);
-    return { price: Number.isFinite(p) && p > 0 ? p : null, source: 'snapshot_fallback' };
+    return { price: Number.isFinite(p) && p > 0 ? p : null, source: wsTsMs > 0 ? 'snapshot_fallback_wsStale' : 'snapshot_fallback', wsFreshMs };
   };
+
+  try {
+    const subTtlSec = Math.max(30, Math.ceil((windowMs + 15_000) / 1000));
+    cache.set(`birdeye:sub:${mint}`, true, subTtlSec);
+  } catch {}
 
   const start = readWsOrFallbackPrice();
   const startPrice = Number(start?.price || 0);
