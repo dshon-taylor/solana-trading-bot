@@ -2045,6 +2045,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           continuationConfirmStartLiqUsd: Number.isFinite(Number(extra?.continuationConfirmStartLiqUsd)) ? Number(extra.continuationConfirmStartLiqUsd) : null,
           continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
           continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
+          continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
           stage: String(extra?.stage || 'unknown'),
           outcome: String(extra?.outcome || 'unknown'),
           reason: String(extra?.reason || 'none'),
@@ -3588,17 +3589,18 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         carryBuySellRatio: Number(carryObj?.buySellRatio || 0) || null,
         continuationMode: continuationActive,
         continuationPassReason: continuationActive ? String(confirmGate?.passReason || 'none') : null,
-        continuationStartPrice: Number(confirmGate?.diag?.startPrice || 0) || null,
-        continuationHighPrice: Number(confirmGate?.diag?.highPrice || 0) || null,
-        continuationLowPrice: Number(confirmGate?.diag?.lowPrice || 0) || null,
-        continuationFinalPrice: Number(confirmGate?.diag?.finalPrice || 0) || null,
-        continuationMaxRunupPct: Number(confirmGate?.diag?.maxRunupPctWithinConfirm || 0) || null,
-        continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
-        continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
+        continuationStartPrice: Number.isFinite(Number(confirmGate?.diag?.startPrice)) ? Number(confirmGate.diag.startPrice) : null,
+        continuationHighPrice: Number.isFinite(Number(confirmGate?.diag?.highPrice)) ? Number(confirmGate.diag.highPrice) : null,
+        continuationLowPrice: Number.isFinite(Number(confirmGate?.diag?.lowPrice)) ? Number(confirmGate.diag.lowPrice) : null,
+        continuationFinalPrice: Number.isFinite(Number(confirmGate?.diag?.finalPrice)) ? Number(confirmGate.diag.finalPrice) : null,
+        continuationMaxRunupPct: Number.isFinite(Number(confirmGate?.diag?.maxRunupPctWithinConfirm)) ? Number(confirmGate.diag.maxRunupPctWithinConfirm) : null,
+        continuationMaxDipPct: Number.isFinite(Number(confirmGate?.diag?.maxDipPctWithinConfirm)) ? Number(confirmGate.diag.maxDipPctWithinConfirm) : null,
+        continuationTimeToRunupPassMs: Number.isFinite(Number(confirmGate?.diag?.timeToRunupPassMs)) ? Number(confirmGate.diag.timeToRunupPassMs) : null,
         continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
-        continuationConfirmStartLiqUsd: Number(confirmGate?.diag?.confirmStartLiqUsd || 0) || null,
-        continuationCurrentLiqUsd: Number(confirmGate?.diag?.currentLiqUsd || 0) || null,
+        continuationConfirmStartLiqUsd: Number.isFinite(Number(confirmGate?.diag?.confirmStartLiqUsd)) ? Number(confirmGate.diag.confirmStartLiqUsd) : null,
+        continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
         continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
+        continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
       });
       if (continuationActive && ['windowExpiredStall', 'windowExpired'].includes(String(confirmGate?.failReason || ''))) {
         state.runtime ||= {};
@@ -3664,17 +3666,18 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       carryBuySellRatio: Number(carryObj?.buySellRatio || 0) || null,
       continuationMode: continuationActive,
       continuationPassReason: continuationActive ? String(confirmGate?.passReason || 'none') : null,
-      continuationStartPrice: Number(confirmGate?.diag?.startPrice || 0) || null,
-      continuationHighPrice: Number(confirmGate?.diag?.highPrice || 0) || null,
-      continuationLowPrice: Number(confirmGate?.diag?.lowPrice || 0) || null,
-      continuationFinalPrice: Number(confirmGate?.diag?.finalPrice || 0) || null,
-      continuationMaxRunupPct: Number(confirmGate?.diag?.maxRunupPctWithinConfirm || 0) || null,
-      continuationMaxDipPct: Number(confirmGate?.diag?.maxDipPctWithinConfirm || 0) || null,
-      continuationTimeToRunupPassMs: Number(confirmGate?.diag?.timeToRunupPassMs || 0) || null,
+      continuationStartPrice: Number.isFinite(Number(confirmGate?.diag?.startPrice)) ? Number(confirmGate.diag.startPrice) : null,
+      continuationHighPrice: Number.isFinite(Number(confirmGate?.diag?.highPrice)) ? Number(confirmGate.diag.highPrice) : null,
+      continuationLowPrice: Number.isFinite(Number(confirmGate?.diag?.lowPrice)) ? Number(confirmGate.diag.lowPrice) : null,
+      continuationFinalPrice: Number.isFinite(Number(confirmGate?.diag?.finalPrice)) ? Number(confirmGate.diag.finalPrice) : null,
+      continuationMaxRunupPct: Number.isFinite(Number(confirmGate?.diag?.maxRunupPctWithinConfirm)) ? Number(confirmGate.diag.maxRunupPctWithinConfirm) : null,
+      continuationMaxDipPct: Number.isFinite(Number(confirmGate?.diag?.maxDipPctWithinConfirm)) ? Number(confirmGate.diag.maxDipPctWithinConfirm) : null,
+      continuationTimeToRunupPassMs: Number.isFinite(Number(confirmGate?.diag?.timeToRunupPassMs)) ? Number(confirmGate.diag.timeToRunupPassMs) : null,
       continuationTimeoutWasFlatOrNegative: !!confirmGate?.diag?.timeoutWasFlatOrNegative,
-      continuationConfirmStartLiqUsd: Number(confirmGate?.diag?.confirmStartLiqUsd || 0) || null,
-      continuationCurrentLiqUsd: Number(confirmGate?.diag?.currentLiqUsd || 0) || null,
+      continuationConfirmStartLiqUsd: Number.isFinite(Number(confirmGate?.diag?.confirmStartLiqUsd)) ? Number(confirmGate.diag.confirmStartLiqUsd) : null,
+      continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
       continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
+      continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
     });
     if (continuationActive && retryGate) {
       state.runtime ||= {};
@@ -6339,6 +6342,7 @@ async function main() {
             continuationConfirmStartLiqUsd: Number(withContinuation?.continuationConfirmStartLiqUsd ?? withTx?.continuationConfirmStartLiqUsd ?? ev?.continuationConfirmStartLiqUsd ?? NaN),
             continuationCurrentLiqUsd: Number(withContinuation?.continuationCurrentLiqUsd ?? withTx?.continuationCurrentLiqUsd ?? ev?.continuationCurrentLiqUsd ?? NaN),
             continuationLiqChangePct: Number(withContinuation?.continuationLiqChangePct ?? withTx?.continuationLiqChangePct ?? ev?.continuationLiqChangePct ?? NaN),
+            continuationPriceSource: String(withContinuation?.continuationPriceSource ?? withTx?.continuationPriceSource ?? ev?.continuationPriceSource ?? 'unknown'),
             final,
           };
         });
@@ -6566,6 +6570,12 @@ async function main() {
         const medianTimeToRunupPassMs = medianLocal(confirmCandidatesDecorated.filter((r) => r.final === 'passed').map((r) => Number(r.continuationTimeToRunupPassMs || NaN)).filter((v) => Number.isFinite(v) && v >= 0));
         const timeoutFlatOrNegativeCount = confirmCandidatesDecorated.filter((r) => r.final === 'rejected' && !!r.continuationTimeoutWasFlatOrNegative).length;
         const recycledRequalifiedPassedCount = Number(state?.runtime?.confirmRetryRequalifiedPassed || 0);
+        const continuationPriceSourceCounts = {};
+        for (const r of confirmCandidatesDecorated) {
+          const src = String(r?.continuationPriceSource || 'unknown');
+          continuationPriceSourceCounts[src] = Number(continuationPriceSourceCounts[src] || 0) + 1;
+        }
+        const continuationPriceSourceLine = Object.entries(continuationPriceSourceCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3ConfirmBlockers = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3AttemptBlockers = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const topHandoffBlocker = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
@@ -6627,6 +6637,7 @@ async function main() {
           `- confirmReached +1.5% in-window=${confirmReachedRunup15}`,
           `- median maxRunupPctWithinConfirm=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} median maxDipPctWithinConfirm=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'}`,
           `- median timeToRunupPassMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'} timedOutFlatOrNegative=${timeoutFlatOrNegativeCount} recycledRequalifiedPassed=${recycledRequalifiedPassedCount}`,
+          `- continuationPriceSource=${continuationPriceSourceLine}`,
           '',
           'BLOCKER SUMMARY',
           `- top3 confirm blockers: ${top3ConfirmBlockers}`,
