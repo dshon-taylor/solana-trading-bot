@@ -50,6 +50,7 @@ import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const wsmgr = require('../../src/services/wsSubscriptionManager.js');
+let runtimeStateRef = null;
 
 // Global timer registry for proper cleanup
 const globalTimers = {
@@ -5128,6 +5129,7 @@ async function main() {
 
   const conn = makeConnection(cfg.SOLANA_RPC_URL);
   const state = loadState(cfg.STATE_PATH);
+  runtimeStateRef = state;
   const birdseye = createBirdseyeLiteClient({
     enabled: cfg.BIRDEYE_LITE_ENABLED,
     apiKey: cfg.BIRDEYE_API_KEY,
@@ -5355,6 +5357,19 @@ async function main() {
   counters.watchlist ||= {};
   counters.watchlist.compactWindow = state.runtime.compactWindow;
   state.runtime.confirmTxCarryByMint ||= {};
+  const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
+    state.runtime.compactWindow ||= {};
+    const cw = state.runtime.compactWindow;
+    cw.bootstrapEvents ||= [];
+    const tMs = Number(opts?.tMs || Date.now());
+    cw.bootstrapEvents.push({
+      tMs,
+      kind: String(kind || 'unknown'),
+      reason: reason == null ? null : String(reason),
+      extra: extra ?? null,
+    });
+    if (cw.bootstrapEvents.length > 1000) cw.bootstrapEvents = cw.bootstrapEvents.slice(-1000);
+  };
 
   // Hydrate compact diagnostic window from durable diag events log for retro windows across restarts.
   // Skip replay if compact window is already populated in persisted counters.
@@ -9444,7 +9459,7 @@ async function main() {
                     usdTarget: finalUsdTarget,
                     slippageBps: finalSlip,
                     expectedOutAmount: Number(quoteFinal?.outAmount || 0),
-                    expectedInAmount: Number(quoteFinal?.inAmount || inAmountLamports || 0),
+                    expectedInAmount: Number(quoteFinal?.inAmount || 0),
                     // Apply the same stop/trailing rules as LIVE momo
                     stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                     stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -9525,7 +9540,7 @@ async function main() {
                   usdTarget: finalUsdTarget,
                   slippageBps: finalSlip,
                   expectedOutAmount: Number(quoteFinal?.outAmount || 0),
-                  expectedInAmount: Number(quoteFinal?.inAmount || inAmountLamports || 0),
+                  expectedInAmount: Number(quoteFinal?.inAmount || 0),
                   // Apply the same stop/trailing rules as LIVE momo
                   stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                   stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -10067,7 +10082,7 @@ main().catch(async (e) => {
 
 function pruneRuntimeMaps() {
   try {
-    const runtime = state?.runtime;
+    const runtime = runtimeStateRef?.runtime;
     if (!runtime) return;
     const now = Date.now();
     const maxAgeMs = Math.max(5 * 60_000, Number(process.env.RUNTIME_MAP_MAX_AGE_MS || (6 * 60 * 60_000)));
@@ -10121,8 +10136,8 @@ if (!globalTimers.memoryMonitor) {
 setInterval(() => {
   try {
     pruneRuntimeMaps();
-    const runtime = state?.runtime || {};
-    const watchlist = state?.watchlist || {};
+    const runtime = runtimeStateRef?.runtime || {};
+    const watchlist = runtimeStateRef?.watchlist || {};
 
     console.log("[mem-debug]", {
       trackedMints: Object.keys(watchlist.mints || {}).length,
