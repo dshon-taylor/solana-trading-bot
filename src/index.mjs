@@ -6578,15 +6578,14 @@ async function main() {
         const medianLocal = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
         const medianRunupPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxRunupPct || NaN)).filter((v) => Number.isFinite(v)));
         const medianDipPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxDipPct || NaN)).filter((v) => Number.isFinite(v)));
+        const medianFinalPct = medianLocal(confirmCandidatesDecorated.map((r) => {
+          const s = Number(r.continuationStartPrice || NaN);
+          const f = Number(r.continuationFinalPrice || NaN);
+          if (!(Number.isFinite(s) && Number.isFinite(f) && s > 0)) return NaN;
+          return (f / s) - 1;
+        }).filter((v) => Number.isFinite(v)));
         const medianTimeToRunupPassMs = medianLocal(confirmCandidatesDecorated.filter((r) => r.final === 'passed').map((r) => Number(r.continuationTimeToRunupPassMs || NaN)).filter((v) => Number.isFinite(v) && v >= 0));
-        const timeoutFlatOrNegativeCount = confirmCandidatesDecorated.filter((r) => r.final === 'rejected' && !!r.continuationTimeoutWasFlatOrNegative).length;
         const recycledRequalifiedPassedCount = Number(state?.runtime?.confirmRetryRequalifiedPassed || 0);
-        const continuationPriceSourceCounts = {};
-        for (const r of confirmCandidatesDecorated) {
-          const src = String(r?.continuationPriceSource || 'unknown');
-          continuationPriceSourceCounts[src] = Number(continuationPriceSourceCounts[src] || 0) + 1;
-        }
-        const continuationPriceSourceLine = Object.entries(continuationPriceSourceCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3ConfirmBlockers = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3AttemptBlockers = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const topHandoffBlocker = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
@@ -6612,15 +6611,17 @@ async function main() {
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
             return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} passReason=${String(r.continuationPassReason || 'none')}`;
           });
-        const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpired: 0, liq: 0, impact: 0, route: 0, other: 0 };
+        const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpiredWeak: 0, liqDegraded: 0, impact: 0, route: 0, retryCooldown: 0, retryNoImprovement: 0, other: 0 };
         for (const [k, v] of Object.entries(confirmRejectCounts)) {
           const n = Number(v || 0);
           if (k.includes('confirmContinuation.hardDip')) continuationFailMix.hardDip += n;
           else if (k.includes('confirmContinuation.windowExpiredStall')) continuationFailMix.windowExpiredStall += n;
-          else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpired += n;
-          else if (k.includes('confirmContinuation.liqDegraded') || k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liq += n;
+          else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpiredWeak += n;
+          else if (k.includes('confirmContinuation.liqDegraded') || k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liqDegraded += n;
           else if (k.includes('confirmContinuation.impact') || k.includes('confirmPriceImpact')) continuationFailMix.impact += n;
           else if (k.includes('confirmNoRoute')) continuationFailMix.route += n;
+          else if (k.includes('confirmContinuation.retryCooldown')) continuationFailMix.retryCooldown += n;
+          else if (k.includes('confirmContinuation.retryNoImprovement')) continuationFailMix.retryNoImprovement += n;
           else continuationFailMix.other += n;
         }
         const showCircuitAbnormal = circuitOpen || Number(circuitFailures?.dex || 0) > 0 || Number(circuitFailures?.rpc || 0) > 0 || Number(circuitFailures?.jup || 0) > 0;
@@ -6643,30 +6644,29 @@ async function main() {
           '',
           'CONTINUATION OUTCOMES',
           `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
-          `- passReasons: runup=${Number(continuationPassReasonCounts.runup || 0)} (legacyHold=${Number(continuationPassReasonCounts.hold || 0)} legacyWindowClose=${Number(continuationPassReasonCounts.windowClose || 0)})`,
-          `- failReasons: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpired=${continuationFailMix.windowExpired} liq=${continuationFailMix.liq} impact=${continuationFailMix.impact} route=${continuationFailMix.route} other=${continuationFailMix.other}`,
-          `- confirmReached +1.5% in-window=${confirmReachedRunup15}`,
-          `- median maxRunupPctWithinConfirm=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} median maxDipPctWithinConfirm=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'}`,
-          `- median timeToRunupPassMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'} timedOutFlatOrNegative=${timeoutFlatOrNegativeCount} recycledRequalifiedPassed=${recycledRequalifiedPassedCount}`,
-          `- continuationPriceSource=${continuationPriceSourceLine}`,
+          `- pass: runup=${Number(continuationPassReasonCounts.runup || 0)}`,
+          `- fail: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpiredWeak=${continuationFailMix.windowExpiredWeak} liqDegraded=${continuationFailMix.liqDegraded} route=${continuationFailMix.route} impact=${continuationFailMix.impact} retryCooldown=${continuationFailMix.retryCooldown} retryNoImprovement=${continuationFailMix.retryNoImprovement} other=${continuationFailMix.other}`,
+          `- reached+1.5%InWindow=${confirmReachedRunup15}`,
+          `- medianTimeToRunupMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'}`,
           '',
           'BLOCKER SUMMARY',
-          `- top3 confirm blockers: ${top3ConfirmBlockers}`,
-          `- top3 attempt blockers: ${top3AttemptBlockers}`,
+          `- topConfirmBlockers=${top3ConfirmBlockers}`,
+          `- topAttemptBlockers=${top3AttemptBlockers}`,
+          '',
+          'RETRY BEHAVIOR',
+          `- attempted=${continuationFailMix.retryCooldown + continuationFailMix.retryNoImprovement} blockedCooldown=${continuationFailMix.retryCooldown} blockedNoImprovement=${continuationFailMix.retryNoImprovement} requalifiedAndPassed=${recycledRequalifiedPassedCount}`,
           '',
           'ATTEMPT/FILL HANDOFF',
           `- confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill} topHandoffBlocker=${topHandoffBlocker}`,
           '',
+          'CONFIRM SHAPE',
+          `- medianRunupPct=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} medianDipPct=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'} medianFinalPct=${Number.isFinite(medianFinalPct) ? Number(medianFinalPct).toFixed(4) : 'n/a'}`,
+          '',
           'TOP EXAMPLES',
-          '- strongest failed confirm candidates:',
-          ...(strongestFailedConfirmCompact.length ? strongestFailedConfirmCompact : ['- none']),
-          '- strongest passed confirm candidates:',
-          ...(strongestPassedConfirmCompact.length ? strongestPassedConfirmCompact : ['- none']),
-          ...((!continuationModeActive || freshnessMajorBlocker) ? [
-            '',
-            'FRESHNESS (conditional)',
-            `- 5–10s=${freshnessBuckets.b5_10} 10–15s=${freshnessBuckets.b10_15} 15–20s=${freshnessBuckets.b15_20} 20s+=${freshnessBuckets.gte20}`,
-          ] : []),
+          '- failed:',
+          ...(strongestFailedConfirmCompact.length ? strongestFailedConfirmCompact.slice(0,3) : ['- none']),
+          '- passed:',
+          ...(strongestPassedConfirmCompact.length ? strongestPassedConfirmCompact.slice(0,3) : ['- none']),
         ].join('\n');
       }
 
