@@ -43,6 +43,7 @@ import { createBirdseyeLiteClient } from './birdeye_lite.mjs';
 import { didEntryFill } from './entry_reliability.mjs';
 import { promoteRouteAvailableCandidateToImmediate } from './route_available_watchlist.mjs';
 import { resolveEntryAndStopForOpenPosition } from './entry_guard.mjs';
+import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
 import { createRequire } from 'module';
@@ -442,91 +443,17 @@ function confirmQualityGate({ cfg, sigReasons, snapshot }) {
 }
 
 async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct, confirmStartLiqUsd = null }) {
-  const active = (process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true';
-  if (!active) return { ok: true, mode: 'legacy' };
-
-  const windowMs = Math.max(250, Number(process.env.CONFIRM_CONTINUATION_WINDOW_MS || 15000));
-  const passPct = Math.max(0, Number(process.env.CONFIRM_CONTINUATION_PASS_PCT || 0.015));
-  const hardFailDipPct = Math.max(0, Number(process.env.CONFIRM_CONTINUATION_HARD_FAIL_DIP_PCT || 0.015));
-
-  const readWsOrFallbackPrice = () => {
-    const ws = cache.get(`birdeye:ws:price:${mint}`) || null;
-    const wsPrice = Number(ws?.priceUsd ?? ws?.price ?? 0);
-    const wsTsMs = Number(ws?.tsMs || 0);
-    const wsFreshMs = wsTsMs > 0 ? (Date.now() - wsTsMs) : null;
-    const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= 15000 : false;
-    if (Number.isFinite(wsPrice) && wsPrice > 0 && wsFreshEnough) return { price: wsPrice, source: 'ws', wsFreshMs };
-    const p = Number(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd ?? 0);
-    return { price: Number.isFinite(p) && p > 0 ? p : null, source: wsTsMs > 0 ? 'snapshot_fallback_wsStale' : 'snapshot_fallback', wsFreshMs };
-  };
-
-  try {
-    const subTtlSec = Math.max(30, Math.ceil((windowMs + 15_000) / 1000));
-    cache.set(`birdeye:sub:${mint}`, true, subTtlSec);
-  } catch {}
-
-  const start = readWsOrFallbackPrice();
-  const startPrice = Number(start?.price || 0);
-  if (!(startPrice > 0)) {
-    return { ok: false, failReason: 'windowExpiredStall', mode: 'continuation', diag: { startPrice: null, highPrice: null, lowPrice: null, finalPrice: null, maxRunupPctWithinConfirm: null, maxDipPctWithinConfirm: null, passReason: 'none', failReason: 'windowExpiredStall', priceSource: start?.source || 'unknown', timeToRunupPassMs: null, timeoutWasFlatOrNegative: null } };
-  }
-
-  let highPrice = startPrice;
-  let lowPrice = startPrice;
-  let finalPrice = startPrice;
-  let passReason = 'none';
-  let failReason = 'none';
-  let timeToRunupPassMs = null;
-
-  const startedAt = Date.now();
-  const deadline = startedAt + windowMs;
-  while (Date.now() <= deadline) {
-    const tick = readWsOrFallbackPrice();
-    const p = Number(tick?.price || 0);
-    if (!(p > 0)) {
-      await new Promise((r) => setTimeout(r, 120));
-      continue;
-    }
-    finalPrice = p;
-    if (p > highPrice) highPrice = p;
-    if (p < lowPrice) lowPrice = p;
-
-    const runupPct = (highPrice / startPrice) - 1;
-    const dipPct = (startPrice - lowPrice) / startPrice;
-
-    const liqNow = Number(row?.latest?.liqUsd ?? snapshot?.liquidityUsd ?? pair?.liquidity?.usd ?? 0) || 0;
-    const startLiq = Number(confirmStartLiqUsd || 0) || 0;
-    const liqChangePct = startLiq > 0 ? ((liqNow - startLiq) / startLiq) : null;
-    if (startLiq > 0 && liqNow < (startLiq * 0.85)) {
-      failReason = 'liqDegraded';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null, confirmStartLiqUsd: startLiq, currentLiqUsd: liqNow, liqChangePct } };
-    }
-    const maxPi = Number(cfg.EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT || 0);
-    if (Number.isFinite(Number(confirmPriceImpactPct)) && Number(confirmPriceImpactPct) > maxPi) {
-      failReason = 'impact';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
-    }
-
-    if (dipPct >= hardFailDipPct) {
-      failReason = 'hardDip';
-      return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: null } };
-    }
-
-    if (runupPct >= passPct || p >= (startPrice * (1 + passPct))) {
-      passReason = 'runup';
-      timeToRunupPassMs = Math.max(0, Date.now() - startedAt);
-      return { ok: true, passReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm: runupPct, maxDipPctWithinConfirm: dipPct, passReason, failReason, priceSource: tick?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative: false } };
-    }
-
-    await new Promise((r) => setTimeout(r, 120));
-  }
-
-  const maxRunupPctWithinConfirm = (highPrice / startPrice) - 1;
-  const maxDipPctWithinConfirm = (startPrice - lowPrice) / startPrice;
-  const finalRet = (finalPrice / startPrice) - 1;
-  const timeoutWasFlatOrNegative = finalRet <= 0;
-  failReason = timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired';
-  return { ok: false, failReason, mode: 'continuation', diag: { startPrice, highPrice, lowPrice, finalPrice, maxRunupPctWithinConfirm, maxDipPctWithinConfirm, passReason, failReason, priceSource: start?.source || 'unknown', timeToRunupPassMs, timeoutWasFlatOrNegative } };
+  return runConfirmContinuationGate({
+    cfg,
+    mint,
+    row,
+    snapshot,
+    pair,
+    confirmMinLiqUsd,
+    confirmPriceImpactPct,
+    confirmStartLiqUsd,
+    cacheImpl: cache,
+  });
 }
 
 function recordConfirmCarryTrace(state, mint, stage, payload = {}) {
