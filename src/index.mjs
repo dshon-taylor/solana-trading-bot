@@ -5990,122 +5990,172 @@ async function main() {
       const hourFill = Number(fillWin.filter(t=>t>=hourCutoffMs).length);
 
       if (mode === 'execution') {
+        const medianLocal = (arr) => { const a = arr.filter((v) => Number.isFinite(Number(v))).map(Number); if (!a.length) return null; const srt=a.slice().sort((x,y)=>x-y); const m=Math.floor(srt.length/2); return srt.length%2?srt[m]:(srt[m-1]+srt[m])/2; };
+        const fmtMed = (v, d=0) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : 'n/a';
+
         const lastAttemptTs = Math.max(...attemptWin.slice(-1), ...fillWin.slice(-1), ...confirmPassedWin.slice(-1), 0);
         const lastAttemptAgeSec = lastAttemptTs > 0 ? Math.max(0, Math.round((nowMs - lastAttemptTs) / 1000)) : 'n/a';
-        const hourConfirmPassedE = Number(confirmPassedWin.filter(t=>t>=hourCutoffMs).length);
-        const hourAttemptReachedE = Number(attemptWin.filter(t=>t>=hourCutoffMs).length);
-        const hourFillE = Number(fillWin.filter(t=>t>=hourCutoffMs).length);
-        const hourAttemptPassedE = hourFillE;
-        const cumConfirmPassedE = Number(confirmPassedWin.length);
-        const cumAttemptReachedE = Number(attemptWin.length);
-        const cumFillE = Number(fillWin.length);
-        const cumAttemptPassedE = cumFillE;
 
-        const finalLaneRejectCounts = {};
+        const hourAttemptReached = Number(attemptWin.filter(t=>t>=hourCutoffMs).length);
+        const hourFill = Number(fillWin.filter(t=>t>=hourCutoffMs).length);
+        const hourAttemptPassed = hourFill;
+        const hourSwapFailed = Number(postFlowWin.filter((e)=>Number(e?.tMs||0)>=hourCutoffMs && String(e?.stage||'')==='swap' && String(e?.outcome||'')==='rejected').length);
+
+        const cumConfirmPassed = Number(confirmPassedWin.length);
+        const cumAttemptReached = Number(attemptWin.length);
+        const cumFill = Number(fillWin.length);
+        const cumAttemptPassed = cumFill;
+        const cumSwapFailed = Number(postFlowWin.filter((e)=>String(e?.stage||'')==='swap' && String(e?.outcome||'')==='rejected').length);
+
+        const attemptPassRate = cumAttemptReached > 0 ? (cumAttemptPassed / cumAttemptReached) : 0;
+        const fillFromAttemptRate = cumAttemptReached > 0 ? (cumFill / cumAttemptReached) : 0;
+        const fillFromConfirmRate = cumConfirmPassed > 0 ? (cumFill / cumConfirmPassed) : 0;
+
+        const normExecReason = (r) => {
+          const x = String(r || 'unknown');
+          if (x.includes('entryMcapTooLow')) return 'entryMcapTooLow';
+          if (x.includes('noRoute') || x.includes('routeMissing') || x.includes('noRouteConfirmed') || x.includes('route')) return 'noRoute/routeMissing';
+          if (x.includes('priceImpactTooHigh') || x.includes('impact')) return 'priceImpactTooHigh';
+          if (x.includes('slippageTooHigh') || x.includes('slippage')) return 'slippageTooHigh';
+          if (x.includes('mintSuppressed') || x.includes('attemptMintSuppressed')) return 'mintSuppressed';
+          if (x.includes('targetUsdTooSmall')) return 'targetUsdTooSmall';
+          if (x.includes('reserveBlocked')) return 'reserveBlocked';
+          if (x.includes('missingDecimals')) return 'missingDecimals';
+          if (x.includes('preflight') || x.includes('swapError') || x.startsWith('attempt.swap') || x.startsWith('swap.')) return 'preflight/swapApiError';
+          return x;
+        };
+
+        const executionRejectCounts = {};
         for (const ev of postFlowWin) {
           if (String(ev?.outcome || '') !== 'rejected') continue;
-          const r = String(ev?.reason || 'unknown');
-          finalLaneRejectCounts[r] = Number(finalLaneRejectCounts[r] || 0) + 1;
+          const stage = String(ev?.stage || '');
+          if (!['attempt','swap','execution','forcePolicy'].includes(stage)) continue;
+          const k = normExecReason(String(ev?.reason || 'unknown'));
+          executionRejectCounts[k] = Number(executionRejectCounts[k] || 0) + 1;
         }
-        const topFinalLaneBlockers = Object.entries(finalLaneRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,8).map(([k,v])=>`- ${k} = ${v}`);
+        const topExecutionBlockers = Object.entries(executionRejectCounts)
+          .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))
+          .slice(0,5)
+          .map(([k,v])=>`- ${k}:${v}`);
 
-        const momentumPassedRowsE = inWindowObj(compactWindow.momentumRecent || []).filter(x => String(x?.final || '').includes('momentum.passed')).slice(-20);
-        const postByMintE = {};
+        const attemptReachedRows = postFlowWin.filter((e) => String(e?.stage || '') === 'attempt' && String(e?.outcome || '') === 'reached');
+        const fillRows = postFlowWin.filter((e) => String(e?.stage || '') === 'fill' && String(e?.outcome || '') === 'passed');
+        const executionPathRows = (counters?.watchlist?.executionPathLast10 || []);
+
+        const quoteToSendMs = executionPathRows.map((x)=>Number(x?.quoteAgeMs || NaN)).filter((v)=>Number.isFinite(v) && v>=0);
+        const sendToFillMs = fillRows.map((x)=>Number(x?.fillLatencyMs ?? x?.sendToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>=0);
+        const totalAttemptToFillMs = fillRows.map((x)=>Number(x?.attemptToFillMs ?? x?.totalAttemptToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>=0);
+        const realizedSlippageBps = fillRows.map((x)=>Number(x?.realizedSlippageBps ?? NaN)).filter((v)=>Number.isFinite(v));
+        const quotedPriceImpactPct = fillRows.map((x)=>Number(x?.priceImpactPct ?? NaN)).filter((v)=>Number.isFinite(v));
+
+        const entryLiq = attemptReachedRows.map((x)=>Number(x?.liq ?? NaN)).filter((v)=>Number.isFinite(v) && v>0);
+        const entryMcap = attemptReachedRows.map((x)=>Number(x?.mcap ?? NaN)).filter((v)=>Number.isFinite(v) && v>0);
+        const entryPi = attemptReachedRows.map((x)=>Number(x?.priceImpactPct ?? NaN)).filter((v)=>Number.isFinite(v));
+        const entrySlip = attemptReachedRows.map((x)=>Number(x?.slippageBps ?? NaN)).filter((v)=>Number.isFinite(v));
+        const routeMix = {};
+        for (const x of executionPathRows) {
+          const src = String(x?.routeSource || 'unknown');
+          routeMix[src] = Number(routeMix[src] || 0) + 1;
+        }
+        const routeMixStr = Object.entries(routeMix).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,4).map(([k,v])=>`${k}:${v}`).join(', ') || 'n/a';
+
+        const handoffBlockers = {};
         for (const ev of postFlowWin) {
-          const m = String(ev?.mint || 'unknown');
-          postByMintE[m] ||= [];
-          postByMintE[m].push(ev);
+          const r = String(ev?.reason || '');
+          if (String(ev?.outcome || '') === 'rejected' && (r.startsWith('attempt.') || r.startsWith('swap.') || r.includes('reserveBlocked') || r.includes('targetUsdTooSmall') || r.includes('missingDecimals'))) {
+            handoffBlockers[r] = Number(handoffBlockers[r] || 0) + 1;
+          }
         }
+        const topHandoffBlocker = Object.entries(handoffBlockers).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
 
-        const recentAttemptCandidates = momentumPassedRowsE.slice(-8).map((x) => {
-          const mint = String(x?.mint || 'unknown');
-          const flow = (postByMintE[mint] || []).filter(e => Number(e?.tMs||0) >= Number(x?.tMs||0));
-          const confirmResult = flow.find(e=>e.stage==='confirm'&&e.outcome==='passed') ? 'passed' : (flow.find(e=>e.stage==='confirm'&&e.outcome==='rejected') ? 'rejected' : (flow.find(e=>e.stage==='confirm') ? 'reached' : 'none'));
-          const attemptResult = flow.find(e=>e.stage==='attempt'&&e.outcome==='reached') ? 'reached' : (flow.find(e=>e.stage==='attempt'&&e.outcome==='rejected') ? 'rejected' : 'none');
-          const fillResult = flow.find(e=>e.stage==='fill'&&e.outcome==='passed') ? 'passed' : 'none';
-          const finalReason = flow.slice().reverse().find(e=>String(e?.reason||'none')!=='none')?.reason || (fillResult === 'passed' ? 'filled' : 'none');
-          const freshness = flow.find(e=>Number.isFinite(Number(e?.freshnessMs)))?.freshnessMs;
-          const pi = flow.find(e=>Number.isFinite(Number(e?.priceImpactPct)))?.priceImpactPct;
-          const slip = flow.find(e=>Number.isFinite(Number(e?.slippageBps)))?.slippageBps;
-          return `- ${mint.slice(0,6)} liq=${Math.round(Number(x?.liq||0))} mcap=${Math.round(Number(x?.mcap||0))} freshnessMs=${Number.isFinite(Number(freshness)) ? Math.round(Number(freshness)) : 'null'} priceImpactPct=${Number.isFinite(Number(pi)) ? Number(pi).toFixed(4) : 'null'} slippageBps=${Number.isFinite(Number(slip)) ? Number(slip) : 'null'} confirm=${confirmResult} attempt=${attemptResult} reason=${finalReason}`;
-        });
+        const byMint = {};
+        for (const ev of postFlowWin) {
+          const m = String(ev?.mint || '');
+          if (!m) continue;
+          byMint[m] ||= [];
+          byMint[m].push(ev);
+        }
+        const failedAttemptsCompact = Object.entries(byMint).map(([mint, flow]) => {
+          const attempt = flow.find((e)=>String(e?.stage||'')==='attempt' && String(e?.outcome||'')==='reached');
+          if (!attempt) return null;
+          const filled = flow.find((e)=>String(e?.stage||'')==='fill' && String(e?.outcome||'')==='passed');
+          if (filled) return null;
+          const rej = flow.slice().reverse().find((e)=>String(e?.outcome||'')==='rejected');
+          const pi = Number(attempt?.priceImpactPct ?? NaN);
+          const sl = Number(attempt?.slippageBps ?? NaN);
+          return {
+            mint,
+            liq: Number(attempt?.liq || 0),
+            mcap: Number(attempt?.mcap || 0),
+            reason: String(rej?.reason || 'no_fill'),
+            pi, sl,
+            score: Number(attempt?.mcap || 0) + Number(attempt?.liq || 0),
+          };
+        }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,3)
+          .map((r)=>`- ${r.mint.slice(0,6)}... liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
 
-        const recentSuccessE = postFlowWin.filter(e => e.stage === 'fill' && e.outcome === 'passed').slice(-5).map((e) => `- ${String(e?.mint||'n/a').slice(0,6)} liq=${Math.round(Number(e?.liq||0))} mcap=${Math.round(Number(e?.mcap||0))} priceImpactPct=${Number.isFinite(Number(e?.priceImpactPct)) ? Number(e.priceImpactPct).toFixed(4) : 'null'} slippageBps=${Number.isFinite(Number(e?.slippageBps)) ? Number(e.slippageBps) : 'null'} fill=passed`);
+        const filledAttemptsCompact = fillRows
+          .map((e)=>({ mint:String(e?.mint||'unknown'), liq:Number(e?.liq||0), mcap:Number(e?.mcap||0), reason:'fill.passed', pi:Number(e?.priceImpactPct??NaN), sl:Number(e?.slippageBps??NaN), score:Number(e?.mcap||0)+Number(e?.liq||0) }))
+          .sort((a,b)=>b.score-a.score)
+          .slice(0,3)
+          .map((r)=>`- ${r.mint.slice(0,6)}... liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
 
-        const attemptReachedRows = postFlowWin.filter((e) => String(e?.stage || '') === 'attempt' && String(e?.outcome || '') === 'reached').slice(-10);
-        const attemptBranchDebugRows = (counters?.watchlist?.attemptBranchDebugLast10 || []);
-        const attemptTransitionLast10 = attemptReachedRows.map((e) => {
-          const mint = String(e?.mint || 'unknown');
-          const reachedTs = Number(e?.tMs || 0);
-          const flow = (postByMintE[mint] || [])
-            .filter((x) => Number(x?.tMs || 0) >= reachedTs)
-            .filter((x) => ['attempt', 'swap', 'fill', 'executeSwap'].includes(String(x?.stage || '')))
-            .sort((a,b)=>Number(a?.tMs||0)-Number(b?.tMs||0));
-          const next = flow.find((x) => !(String(x?.stage||'') === 'attempt' && String(x?.outcome||'') === 'reached')) || null;
-          const fill = flow.find((x) => String(x?.stage||'') === 'fill' && String(x?.outcome||'') === 'passed') || null;
-          const swapReject = flow.find((x) => String(x?.stage||'') === 'swap' && String(x?.outcome||'') === 'rejected') || null;
-          const branch = attemptBranchDebugRows.slice().reverse().find((x) => String(x?.mint || '') === mint) || null;
-          const swapSubmitted = branch ? !!branch?.swapSubmissionEntered : !!fill;
-          const nextState = fill ? 'fill.passed' : (next ? `${String(next?.stage||'unknown')}.${String(next?.outcome||'unknown')}` : 'none');
-          const finalState = branch
-            ? String(branch?.finalReason || 'none')
-            : (fill ? 'filled' : (swapReject ? `rejected(${String(swapReject?.reason||'unknown')})` : (next ? `observed(${nextState})` : 'no_followup_recorded')));
-          return `- ${mint.slice(0,6)} reachedAt=${reachedTs ? fmtCt(reachedTs) : 'n/a'} swapSubmitted=${swapSubmitted ? 'true' : 'false'} nextState=${nextState} final=${finalState}`;
-        });
-        const attemptBranchDebugLast10 = attemptBranchDebugRows.slice(-10).map((x) => `- ${String(x?.mint||'n/a').slice(0,6)} attemptEntered=${x?.attemptEntered ? 'true' : 'false'} swapSubmissionEntered=${x?.swapSubmissionEntered ? 'true' : 'false'} branchTaken=${String(x?.branchTaken||'unknown')} finalReason=${String(x?.finalReason||'none')}`);
+        const swapErrSummary = Object.entries(executionRejectCounts).filter(([k,v]) => k === 'preflight/swapApiError' && Number(v||0) > 0).map(([k,v])=>`- ${k}:${v}`);
+        const missingDecimalsN = Number(executionRejectCounts['missingDecimals'] || 0);
+        const reserveBlockedN = Number(executionRejectCounts['reserveBlocked'] || 0);
+        const targetUsdTooSmallN = Number(executionRejectCounts['targetUsdTooSmall'] || 0);
 
-        const swapErrors = Object.entries(finalLaneRejectCounts).filter(([k]) => k.startsWith('attempt.swap') || k.startsWith('swap.')).reduce((a,[,v])=>a+Number(v||0),0);
-        const attemptFailures = Object.entries(finalLaneRejectCounts).filter(([k]) => k.startsWith('attempt.')).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,6).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
-
-        return [
-          `🧪 *Diag (execution)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`, 
+        const lines = [
+          `🧪 *Diag (execution)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
           'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} lastAttemptAgeSec=${lastAttemptAgeSec} status=${warmingUp ? 'warming_up' : 'ready'}`,
-          `circuit: circuitOpen=${circuitOpen ? 'true' : 'false'} circuitOpenReason=${circuitOpenReason} circuitOpenSince=${circuitOpenSinceMs ? fmtCt(circuitOpenSinceMs) : 'n/a'} circuitCooldownRemainingSec=${circuitOpenRemainingSec} failures(dex/rpc/jup)=${Number(circuitFailures?.dex || 0)}/${Number(circuitFailures?.rpc || 0)}/${Number(circuitFailures?.jup || 0)}`, 
+          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastAttemptAgeSec=${lastAttemptAgeSec}`,
+        ];
+        if (circuitOpen) {
+          lines.push(`circuit: open=true reason=${circuitOpenReason} since=${circuitOpenSinceMs ? fmtCt(circuitOpenSinceMs) : 'n/a'} cooldownRemainingSec=${circuitOpenRemainingSec}`);
+        }
+        lines.push('',
+          'FLOW',
+          `- lastHour: attemptReached=${hourAttemptReached} attemptPassed=${hourAttemptPassed} fill=${hourFill} swapFailed=${hourSwapFailed}`,
+          `- cumulative: attemptReached=${cumAttemptReached} attemptPassed=${cumAttemptPassed} fill=${cumFill} swapFailed=${cumSwapFailed}`,
+          `- attemptPassRate=${cumAttemptPassed}/${cumAttemptReached || 0} (${(attemptPassRate*100).toFixed(1)}%)`,
+          `- fillFromAttemptRate=${cumFill}/${cumAttemptReached || 0} (${(fillFromAttemptRate*100).toFixed(1)}%)`,
+          `- fillFromConfirmRate=${cumFill}/${cumConfirmPassed || 0} (${(fillFromConfirmRate*100).toFixed(1)}%)`,
           '',
-          'ACTIVITY',
-          `lastHour: confirmPassed=${hourConfirmPassedE} attemptReached=${hourAttemptReachedE} attemptPassed=${hourAttemptPassedE} fill=${hourFillE}`,
-          `cumulative: confirmPassed=${cumConfirmPassedE} attemptReached=${cumAttemptReachedE} attemptPassed=${cumAttemptPassedE} fill=${cumFillE}`,
-          `attemptSemantics: attemptReached=entered attempt stage pre-swap; attemptPassed=swap submission completed and fill recorded (currently equivalent to fill)`,
+          'EXECUTION BLOCKERS',
+          ...(topExecutionBlockers.length ? topExecutionBlockers : ['- none']),
           '',
-          'TOP BLOCKERS',
-          ...(topFinalLaneBlockers.length ? topFinalLaneBlockers : ['- none']),
+          'FILL QUALITY',
+          `- median quoteToSendMs=${fmtMed(medianLocal(quoteToSendMs),0)}`,
+          `- median sendToFillMs=${fmtMed(medianLocal(sendToFillMs),0)}`,
+          `- median totalAttemptToFillMs=${fmtMed(medianLocal(totalAttemptToFillMs),0)}`,
+          `- median realizedSlippageBps=${fmtMed(medianLocal(realizedSlippageBps),1)}`,
+          `- median quotedPriceImpactPct=${fmtMed(medianLocal(quotedPriceImpactPct),4)}`,
           '',
-          'EXECUTION RULES',
-          `- LIVE_ATTEMPT_MIN_LIQ_USD=${Number(cfg.LIVE_ATTEMPT_MIN_LIQ_USD ?? cfg.LIVE_CONFIRM_MIN_LIQ_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD)}`,
-          `- MIN_LIQUIDITY_FLOOR_USD=${Number(cfg.MIN_LIQUIDITY_FLOOR_USD || 0)}`,
-          `- slippage.maxAllowedBps=${Number(cfg.DEFAULT_SLIPPAGE_BPS || 0)}`,
-          `- maxPriceImpactPct=${Number(cfg.EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT || 0)}`,
-          `- reservePolicy=minSolForFees=${Number(cfg.MIN_SOL_FOR_FEES || 0)} softReserveSol=${Number(cfg.CAPITAL_SOFT_RESERVE_SOL || 0)} retryBufferPct=${Number(cfg.CAPITAL_RETRY_BUFFER_PCT || 0)}`,
+          'ATTEMPT SHAPE',
+          `- median entry liq=${fmtMed(medianLocal(entryLiq),0)}`,
+          `- median entry mcap=${fmtMed(medianLocal(entryMcap),0)}`,
+          `- median entry priceImpactPct=${fmtMed(medianLocal(entryPi),4)}`,
+          `- median entry slippageBps=${fmtMed(medianLocal(entrySlip),0)}`,
+          `- routeSourceMix=${routeMixStr}`,
           '',
-          'RESERVE / CAPITAL',
-          `- execution.reserveBlocked=${Number(counters?.watchlist?.executionReserveBlocked || 0)}`,
-          `- execution.targetUsdTooSmall=${Number(counters?.watchlist?.executionTargetUsdTooSmall || 0)} trigger=(adjustedUsdTarget < 1.0)`,
-          `- reserveRule=block when !applySoftReserveToUsdTarget.ok (policy=MIN_SOL_FOR_FEES + CAPITAL_SOFT_RESERVE_SOL + retryBufferPct*plannedSol); adjustedUsdTarget<1 -> execution.targetUsdTooSmall`,
-          `- reserveLast=${(counters?.watchlist?.executionReserveLast || []).slice(-1).map(x => `mint=${String(x?.mint||'n/a').slice(0,6)} reserveRequired=${Number(x?.reserveRequired||0).toFixed(4)} reserveAvailable=${Number(x?.reserveAvailable||0).toFixed(4)} walletBalanceUsed=${Number(x?.walletBalanceUsed||0).toFixed(4)} reason=${String(x?.reason||'unknown')} ok=${x?.ok ? 'true' : 'false'}`).join(' | ') || 'none'}`,
-          `- topReserveBlockReasons=${Object.entries(counters?.watchlist?.executionReserveBlockedReasons || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${k}:${v}`).join(', ') || 'none'}`,
-          `- reserveBlockDebugLast10=${(counters?.watchlist?.executionReserveBlockedLast10 || []).slice(-10).map(x => `${String(x?.mint||'n/a').slice(0,6)} req=${Number(x?.reserveRequired||0).toFixed(4)} avail=${Number(x?.reserveAvailable||0).toFixed(4)} bal=${Number(x?.walletBalanceUsed||0).toFixed(4)} policy=${String(x?.thresholdPolicyFailed||'unknown')} final=${String(x?.finalReserveRejectReason||'execution.reserveBlocked')}`).join(' | ') || 'none'}`,
-          `- reserveTraceLast5=${(counters?.watchlist?.executionReserveTraceLast5 || []).slice(-5).map(x => `${String(x?.mint||'n/a').slice(0,6)} reserveOk=${x?.reserveOk ? 'true' : 'false'} adjustedUsdTarget=${Number.isFinite(Number(x?.adjustedUsdTarget)) ? Number(x.adjustedUsdTarget).toFixed(6) : 'null'} branchTaken=${String(x?.branchTaken||'unknown')} finalReason=${String(x?.finalReason||'none')}`).join(' | ') || 'none'}`,
-          `- targetUsdTooSmallLast10=${(counters?.watchlist?.targetUsdTooSmallLast10 || []).slice(-10).map(x => `${String(x?.mint||'n/a').slice(0,6)} initialUsdTarget=${Number.isFinite(Number(x?.initialUsdTarget)) ? Number(x.initialUsdTarget).toFixed(6) : 'null'} adjustedUsdTarget=${Number.isFinite(Number(x?.adjustedUsdTarget)) ? Number(x.adjustedUsdTarget).toFixed(6) : 'null'} plannedSol=${Number.isFinite(Number(x?.plannedSol)) ? Number(x.plannedSol).toFixed(9) : 'null'} reserveRequired=${Number.isFinite(Number(x?.reserveRequired)) ? Number(x.reserveRequired).toFixed(9) : 'null'} reserveAvailable=${Number.isFinite(Number(x?.reserveAvailable)) ? Number(x.reserveAvailable).toFixed(9) : 'null'} retryBufferApplied=${Number.isFinite(Number(x?.retryBufferAppliedSol)) ? Number(x.retryBufferAppliedSol).toFixed(9) : 'null'} retryBufferPct=${Number.isFinite(Number(x?.retryBufferPct)) ? Number(x.retryBufferPct).toFixed(6) : 'null'} final=${String(x?.finalReason||'execution.targetUsdTooSmall')}`).join(' | ') || 'none'}`,
-          `- execution.nonTradableMintRejected=${Number(counters?.execution?.nonTradableMintRejected || 0)} execution.nonTradableMintCooldownActive=${Number(counters?.execution?.nonTradableMintCooldownActive || 0)} execution.nonTradableMintsTop=${Object.entries(counters?.execution?.nonTradableMintsTop || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${String(k).slice(0,6)}:${v}`).join(', ') || 'none'}`,
+          'HANDOFF SUMMARY',
+          `- confirmPassed=${cumConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill} topHandoffBlocker=${topHandoffBlocker}`,
           '',
-          'ATTEMPT QUALITY',
-          `- decimalsResolutionPolicy=decimalsHint -> pair.baseToken.decimals -> rpc.getTokenSupply.value.decimals`,
-          `- swap.entryBlocked=${Number(counters?.guardrails?.entryBlocked || 0)} topReasons=${Object.entries(counters?.guardrails?.entryBlockedReasons || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${k}:${v}`).join(', ') || 'none'}`,
-          `- swapEntryBlockedMissingDecimalsLast10=${(counters?.guardrails?.entryBlockedLast10 || []).filter(x => String(x?.reason||'') === 'missingDecimals').slice(-10).map(x => { const rpc=(Array.isArray(x?.decimalsSourcesTried)?x.decimalsSourcesTried.find(s=>String(s?.source||'')==='rpc.getTokenSupply.value.decimals'):null); return `${String(x?.mint||'n/a').slice(0,6)} candMint=${String(x?.mint||'n/a')} pairMint=${String(x?.pairBaseTokenAddress||'none')} rpcTarget=${String(x?.mintResolvedForDecimals||'none')} decimalsSource=${String(x?.decimalsSource||'none')} failedLookups=${String(x?.missingLookup||'none')} rpcSuccess=${rpc?.rpcSuccess === true ? 'true' : (rpc?.rpcSuccess === false ? 'false' : 'n/a')} rpcDecimals=${Number.isFinite(Number(rpc?.value)) ? Number(rpc.value) : 'null'} rpcErr=${String(rpc?.error || rpc?.parseReason || 'none')} final=${String(x?.finalMissingDecimalsReason||'swap.entryBlocked_missingDecimals')}`; }).join(' | ') || 'none'}`,
-          ...(recentAttemptCandidates.length ? recentAttemptCandidates : ['- none']),
-          '',
-          'RECENT SUCCESS PATHS',
-          ...(recentSuccessE.length ? recentSuccessE : ['- none']),
-          '',
-          'FILL OUTCOMES',
-          `- fills=${cumFillE} swapErrors=${swapErrors}`,
-          `- attemptFailuresByReason=${attemptFailures}`,
-          `- attemptTransitionLast10=${attemptTransitionLast10.join(' | ') || 'none'}`,
-          `- attemptBranchDebugLast10=${attemptBranchDebugLast10.join(' | ') || 'none'}`,
-          `- quoteDegradeLast10=${(counters?.watchlist?.quoteDegradeLast10 || []).slice(-10).map(x => `${String(x?.mint||'n/a').slice(0,6)} quotedOut=${Number(x?.quotedOut||0)} finalOut=${Number(x?.finalOut||0)} minOut=${Number(x?.minOut||0)} slippageBps=${Number(x?.slippageBps||0)} priceImpactPct=${Number.isFinite(Number(x?.priceImpactPct)) ? Number(x.priceImpactPct).toFixed(4) : 'null'} quoteAgeMs=${Number(x?.quoteAgeMs||0)} routeSource=${String(x?.routeSource||'unknown')} routeChanged=${x?.routeChanged==null?'unknown':(x.routeChanged?'true':'false')} quoteRefreshed=${x?.quoteRefreshed?'true':'false'} finalReason=${String(x?.finalReason||'none')}`).join(' | ') || 'none'}`,
-          `- executionPathLast10=${(counters?.watchlist?.executionPathLast10 || []).slice(-10).map(x => `${String(x?.mint||'n/a').slice(0,6)} attemptEntered=${x?.attemptEntered?'true':'false'} quoteBuilt=${x?.quoteBuilt?'true':'false'} quoteRefreshed=${x?.quoteRefreshed?'true':'false'} swapSubmissionEntered=${x?.swapSubmissionEntered?'true':'false'} outcome=${String(x?.outcome||'unknown')} finalReason=${String(x?.finalReason||'none')}`).join(' | ') || 'none'}`,
-        ].join('\n');
+          'TOP EXAMPLES',
+          '- strongest failed attempts:',
+          ...(failedAttemptsCompact.length ? failedAttemptsCompact : ['- none']),
+          '- strongest filled attempts:',
+          ...(filledAttemptsCompact.length ? filledAttemptsCompact : ['- none'])
+        );
+
+        if (swapErrSummary.length) {
+          lines.push('', 'SWAP/PREFLIGHT ERRORS', ...swapErrSummary);
+        }
+        if (missingDecimalsN > 0) lines.push(`- missingDecimals=${missingDecimalsN}`);
+        if (reserveBlockedN > 0) lines.push(`- reserveBlocked=${reserveBlockedN}`);
+        if (targetUsdTooSmallN > 0) lines.push(`- targetUsdTooSmall=${targetUsdTooSmallN}`);
+
+        return lines.join('\n');
       }
 
       if (mode === 'scanner') {
