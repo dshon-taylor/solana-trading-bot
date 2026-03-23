@@ -3621,7 +3621,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       const quoteBuilt = Number.isFinite(Number(expectedOutAmount)) && Number(expectedOutAmount) > 0;
       const quoteRefreshed = !usedRouteCacheForAttempt;
       const routeSource = usedRouteCacheForAttempt ? 'routeCache.recheck' : 'confirm.finalQuote';
-      const quoteAgeMs = 0;
+      const attemptEnteredAtMs = Date.now();
+      const quoteAgeMs = null;
       const pushExecutionPath = ({ swapSubmissionEntered = false, outcome = 'unknown', finalReason = 'none' }) => {
         counters.watchlist.executionPathLast10.push({
           t: nowIso(), mint,
@@ -3720,6 +3721,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         snapshot?.pair?.baseToken?.decimals,
         pair?.baseToken?.decimals,
       ].map((x) => Number(x)).find((x) => Number.isInteger(x) && x >= 0) ?? null;
+      const swapSubmittedAtMs = Date.now();
       const entryRes = await openPosition(cfg, conn, wallet, state, solUsdNow, pair, mcap.mcapUsd, decimalsHintForAttempt, report, sig.reasons, {
         mint,
         tokenName: pair?.baseToken?.name || snapshot?.tokenName || snapshot?.raw?.name || row?.pair?.baseToken?.name || null,
@@ -3793,6 +3795,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         }
       }
       pushCompactWindowEvent('fill');
+      const fillAtMs = Date.now();
+      const sendToFillMs = Number.isFinite(Number(swapSubmittedAtMs)) ? Math.max(0, fillAtMs - Number(swapSubmittedAtMs)) : null;
+      const totalAttemptToFillMs = Number.isFinite(Number(attemptEnteredAtMs)) ? Math.max(0, fillAtMs - Number(attemptEnteredAtMs)) : null;
       pushCompactWindowEvent('postMomentumFlow', null, {
         mint,
         liq: Number(liqForAttempt || 0),
@@ -3801,6 +3806,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
         priceImpactPct: confirmPriceImpactPct,
         slippageBps: confirmSlippageBps,
+        sendToFillMs,
+        totalAttemptToFillMs,
+        quoteAgeMs,
         stage: 'fill',
         outcome: 'passed',
         reason: 'none',
@@ -3836,7 +3844,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       if (counters.watchlist.attemptBranchDebugLast10.length > 10) counters.watchlist.attemptBranchDebugLast10 = counters.watchlist.attemptBranchDebugLast10.slice(-10);
       counters.watchlist.executionPathLast10 ||= [];
       counters.watchlist.executionPathLast10.push({
-        t: nowIso(), mint, attemptEntered: true, quoteBuilt: Number.isFinite(Number(expectedOutAmount)) && Number(expectedOutAmount) > 0, quoteRefreshed: !usedRouteCacheForAttempt, routeSource: usedRouteCacheForAttempt ? 'routeCache.recheck' : 'confirm.finalQuote', quoteAgeMs: 0, swapSubmissionEntered: true, outcome: 'threw', finalReason: `swapError(${safeMsg(e)})`
+        t: nowIso(), mint, attemptEntered: true, quoteBuilt: Number.isFinite(Number(expectedOutAmount)) && Number(expectedOutAmount) > 0, quoteRefreshed: !usedRouteCacheForAttempt, routeSource: usedRouteCacheForAttempt ? 'routeCache.recheck' : 'confirm.finalQuote', quoteAgeMs: null, swapSubmissionEntered: true, outcome: 'threw', finalReason: `swapError(${safeMsg(e)})`
       });
       if (counters.watchlist.executionPathLast10.length > 10) counters.watchlist.executionPathLast10 = counters.watchlist.executionPathLast10.slice(-10);
       const degradeMsg = safeMsg(e);
@@ -3851,7 +3859,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
           minOut: Number(m[2] || 0),
           slippageBps: Number(cfg.DEFAULT_SLIPPAGE_BPS || 0),
           priceImpactPct: Number(confirmPriceImpactPct || 0) || null,
-          quoteAgeMs: 0,
+          quoteAgeMs: null,
           routeSource: usedRouteCacheForAttempt ? 'routeCache.recheck' : 'confirm.finalQuote',
           quoteRefreshed: !usedRouteCacheForAttempt,
           routeChanged: null,
@@ -6042,9 +6050,9 @@ async function main() {
         const fillRows = postFlowWin.filter((e) => String(e?.stage || '') === 'fill' && String(e?.outcome || '') === 'passed');
         const executionPathRows = (counters?.watchlist?.executionPathLast10 || []);
 
-        const quoteToSendMs = executionPathRows.map((x)=>Number(x?.quoteAgeMs || NaN)).filter((v)=>Number.isFinite(v) && v>=0);
-        const sendToFillMs = fillRows.map((x)=>Number(x?.fillLatencyMs ?? x?.sendToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>=0);
-        const totalAttemptToFillMs = fillRows.map((x)=>Number(x?.attemptToFillMs ?? x?.totalAttemptToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>=0);
+        const quoteToSendMs = executionPathRows.map((x)=>Number(x?.quoteAgeMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>0);
+        const sendToFillMs = fillRows.map((x)=>Number(x?.fillLatencyMs ?? x?.sendToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>0);
+        const totalAttemptToFillMs = fillRows.map((x)=>Number(x?.attemptToFillMs ?? x?.totalAttemptToFillMs ?? NaN)).filter((v)=>Number.isFinite(v) && v>0);
         const realizedSlippageBps = fillRows.map((x)=>Number(x?.realizedSlippageBps ?? NaN)).filter((v)=>Number.isFinite(v));
         const quotedPriceImpactPct = fillRows.map((x)=>Number(x?.priceImpactPct ?? NaN)).filter((v)=>Number.isFinite(v));
 
