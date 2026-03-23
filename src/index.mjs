@@ -5997,6 +5997,18 @@ async function main() {
       const hourAttempt = Number(attemptWin.filter(t=>t>=hourCutoffMs).length);
       const hourFill = Number(fillWin.filter(t=>t>=hourCutoffMs).length);
 
+      const formatDiagMintLabel = (mint) => {
+        const m = String(mint || 'unknown');
+        const frag = `${m.slice(0,6)}...`;
+        const rowRef = state?.watchlist?.mints?.[m] || null;
+        const name = String(rowRef?.pair?.baseToken?.name || rowRef?.latest?.tokenName || '').trim();
+        const symbol = String(rowRef?.pair?.baseToken?.symbol || rowRef?.latest?.tokenSymbol || '').trim();
+        if (name && symbol) return `${name} (${symbol}) ${frag}`;
+        if (!name && symbol) return `${symbol} (${frag})`;
+        if (name && !symbol) return `${name} (${frag})`;
+        return frag;
+      };
+
       if (mode === 'execution') {
         const medianLocal = (arr) => { const a = arr.filter((v) => Number.isFinite(Number(v))).map(Number); if (!a.length) return null; const srt=a.slice().sort((x,y)=>x-y); const m=Math.floor(srt.length/2); return srt.length%2?srt[m]:(srt[m-1]+srt[m])/2; };
         const fmtMed = (v, d=0) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : 'n/a';
@@ -6100,13 +6112,13 @@ async function main() {
             score: Number(attempt?.mcap || 0) + Number(attempt?.liq || 0),
           };
         }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,3)
-          .map((r)=>`- ${r.mint.slice(0,6)}... liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
+          .map((r)=>`- ${formatDiagMintLabel(r.mint)} liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
 
         const filledAttemptsCompact = fillRows
           .map((e)=>({ mint:String(e?.mint||'unknown'), liq:Number(e?.liq||0), mcap:Number(e?.mcap||0), reason:'fill.passed', pi:Number(e?.priceImpactPct??NaN), sl:Number(e?.slippageBps??NaN), score:Number(e?.mcap||0)+Number(e?.liq||0) }))
           .sort((a,b)=>b.score-a.score)
           .slice(0,3)
-          .map((r)=>`- ${r.mint.slice(0,6)}... liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
+          .map((r)=>`- ${formatDiagMintLabel(r.mint)} liq=${Math.round(r.liq)} mcap=${Math.round(r.mcap)} reason=${r.reason}${Number.isFinite(r.pi)?` impact=${r.pi.toFixed(4)}`:''}${Number.isFinite(r.sl)?` slippage=${Math.round(r.sl)}`:''}`);
 
         const swapErrSummary = Object.entries(executionRejectCounts).filter(([k,v]) => k === 'preflight/swapApiError' && Number(v||0) > 0).map(([k,v])=>`- ${k}:${v}`);
         const missingDecimalsN = Number(executionRejectCounts['missingDecimals'] || 0);
@@ -6560,8 +6572,7 @@ async function main() {
           .sort((a, b) => Number(b.failedStrength || 0) - Number(a.failedStrength || 0))
           .slice(0, 3)
           .map((r) => {
-            const frag = `${r.mint.slice(0,5)}...`;
-            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            const label = formatDiagMintLabel(r.mint);
             const reason = String(r.rejectReason || 'unknown').replace(/^confirm\./, '');
             const liqDiag = reason.includes('confirmContinuation.liqDegraded')
               ? ` startLiq=${Number.isFinite(Number(r.continuationConfirmStartLiqUsd)) ? Math.round(Number(r.continuationConfirmStartLiqUsd)) : 'null'} currentLiq=${Number.isFinite(Number(r.continuationCurrentLiqUsd)) ? Math.round(Number(r.continuationCurrentLiqUsd)) : 'null'} liqChangePct=${Number.isFinite(Number(r.continuationLiqChangePct)) ? Number(r.continuationLiqChangePct).toFixed(3) : 'null'}`
@@ -6573,16 +6584,14 @@ async function main() {
           .sort((a, b) => Number(b.passStrength || 0) - Number(a.passStrength || 0))
           .slice(0, 3)
           .map((r) => {
-            const frag = `${r.mint.slice(0,5)}...`;
-            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            const label = formatDiagMintLabel(r.mint);
             return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} passReason=${String(r.continuationPassReason || 'none')}`;
           });
         const wsTraceSampleRows = confirmCandidatesDecorated
           .filter((r) => Number(r?.continuationWsUpdateCountWithinWindow || 0) > 0 || String(r?.continuationPriceSource || '').includes('snapshot_fallback'))
           .slice(-3)
           .map((r) => {
-            const frag = `${r.mint.slice(0,5)}...`;
-            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            const label = formatDiagMintLabel(r.mint);
             const source = String(r?.continuationPriceSource || 'unknown');
             const wsTs = Array.isArray(r?.continuationWsUpdateTimestamps) ? r.continuationWsUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const wsPx = Array.isArray(r?.continuationWsUpdatePrices) ? r.continuationWsUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
