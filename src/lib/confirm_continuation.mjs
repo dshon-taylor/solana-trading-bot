@@ -21,7 +21,7 @@ function readRuntimeTuning() {
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices }) {
   return {
     startPrice,
     highPrice,
@@ -38,6 +38,10 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, f
     wsFreshReads,
     wsObservedTicks,
     snapshotReads,
+    confirmStartedAtMs,
+    wsUpdateCountWithinWindow: Array.isArray(wsUpdateTimestamps) ? wsUpdateTimestamps.length : 0,
+    wsUpdateTimestamps: Array.isArray(wsUpdateTimestamps) ? wsUpdateTimestamps : [],
+    wsUpdatePrices: Array.isArray(wsUpdatePrices) ? wsUpdatePrices : [],
   };
 }
 
@@ -74,6 +78,9 @@ export async function confirmContinuationGate({
   let wsObservedTicks = 0;
   let snapshotReads = 0;
   let lastSubRefreshMs = nowFn();
+  let lastWsTsSeen = 0;
+  const wsUpdateTimestamps = [];
+  const wsUpdatePrices = [];
 
   const readWsOrFallbackPrice = (nowMs) => {
     const ws = cacheImpl.get(`birdeye:ws:price:${mint}`) || null;
@@ -84,8 +91,7 @@ export async function confirmContinuationGate({
     const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= rt.wsFreshMs : false;
     if (Number.isFinite(wsPrice) && wsPrice > 0 && wsFreshEnough) {
       wsFreshReads += 1;
-      wsObservedTicks += 1;
-      return { price: wsPrice, source: 'ws', wsFreshMs };
+      return { price: wsPrice, source: 'ws', wsFreshMs, wsTsMs };
     }
 
     snapshotReads += 1;
@@ -121,6 +127,9 @@ export async function confirmContinuationGate({
           wsFreshReads,
           wsObservedTicks,
           snapshotReads,
+          confirmStartedAtMs: startNow,
+          wsUpdateTimestamps,
+          wsUpdatePrices,
         }),
       },
     };
@@ -149,6 +158,17 @@ export async function confirmContinuationGate({
       continue;
     }
     finalPrice = p;
+    if (tick?.source === 'ws') {
+      const tickTs = toNum(tick?.wsTsMs, 0);
+      if (tickTs > 0 && tickTs !== lastWsTsSeen) {
+        lastWsTsSeen = tickTs;
+        wsObservedTicks += 1;
+        wsUpdateTimestamps.push(tickTs);
+        wsUpdatePrices.push(p);
+        if (wsUpdateTimestamps.length > 24) wsUpdateTimestamps.shift();
+        if (wsUpdatePrices.length > 24) wsUpdatePrices.shift();
+      }
+    }
     if (p > highPrice) highPrice = p;
     if (p < lowPrice) lowPrice = p;
 
@@ -179,6 +199,9 @@ export async function confirmContinuationGate({
             wsFreshReads,
             wsObservedTicks,
             snapshotReads,
+            confirmStartedAtMs: startedAt,
+            wsUpdateTimestamps,
+            wsUpdatePrices,
           }),
           confirmStartLiqUsd: startLiq,
           currentLiqUsd: liqNow,
@@ -209,6 +232,9 @@ export async function confirmContinuationGate({
           wsFreshReads,
           wsObservedTicks,
           snapshotReads,
+          confirmStartedAtMs: startedAt,
+          wsUpdateTimestamps,
+          wsUpdatePrices,
         }),
       };
     }
@@ -233,6 +259,9 @@ export async function confirmContinuationGate({
           wsFreshReads,
           wsObservedTicks,
           snapshotReads,
+          confirmStartedAtMs: startedAt,
+          wsUpdateTimestamps,
+          wsUpdatePrices,
         }),
       };
     }
@@ -258,6 +287,9 @@ export async function confirmContinuationGate({
           wsFreshReads,
           wsObservedTicks,
           snapshotReads,
+          confirmStartedAtMs: startedAt,
+          wsUpdateTimestamps,
+          wsUpdatePrices,
         }),
       };
     }
@@ -286,6 +318,9 @@ export async function confirmContinuationGate({
       wsFreshReads,
       wsObservedTicks,
       snapshotReads,
+      confirmStartedAtMs: startedAt,
+      wsUpdateTimestamps,
+      wsUpdatePrices,
     }),
   };
 }

@@ -1817,6 +1817,10 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
         continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
         continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
+        continuationConfirmStartedAtMs: Number.isFinite(Number(extra?.continuationConfirmStartedAtMs)) ? Number(extra.continuationConfirmStartedAtMs) : null,
+        continuationWsUpdateCountWithinWindow: Number(extra?.continuationWsUpdateCountWithinWindow || 0) || 0,
+        continuationWsUpdateTimestamps: Array.isArray(extra?.continuationWsUpdateTimestamps) ? extra.continuationWsUpdateTimestamps.slice(0, 24) : [],
+        continuationWsUpdatePrices: Array.isArray(extra?.continuationWsUpdatePrices) ? extra.continuationWsUpdatePrices.slice(0, 24) : [],
         stage: String(extra?.stage || 'unknown'),
         outcome: String(extra?.outcome || 'unknown'),
         reason: String(extra?.reason || 'none'),
@@ -3439,6 +3443,10 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
         continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
         continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
+        continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
+        continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
+        continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
+        continuationWsUpdatePrices: Array.isArray(confirmGate?.diag?.wsUpdatePrices) ? confirmGate.diag.wsUpdatePrices.slice(0, 24) : [],
       });
       if (continuationActive && ['windowExpiredStall', 'windowExpired'].includes(String(confirmGate?.failReason || ''))) {
         state.runtime ||= {};
@@ -3516,6 +3524,10 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
       continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
       continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
+      continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
+      continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
+      continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
+      continuationWsUpdatePrices: Array.isArray(confirmGate?.diag?.wsUpdatePrices) ? confirmGate.diag.wsUpdatePrices.slice(0, 24) : [],
     });
     if (continuationActive && retryGate) {
       state.runtime ||= {};
@@ -6218,6 +6230,10 @@ async function main() {
             continuationCurrentLiqUsd: Number(withContinuation?.continuationCurrentLiqUsd ?? withTx?.continuationCurrentLiqUsd ?? ev?.continuationCurrentLiqUsd ?? NaN),
             continuationLiqChangePct: Number(withContinuation?.continuationLiqChangePct ?? withTx?.continuationLiqChangePct ?? ev?.continuationLiqChangePct ?? NaN),
             continuationPriceSource: String(withContinuation?.continuationPriceSource ?? withTx?.continuationPriceSource ?? ev?.continuationPriceSource ?? 'unknown'),
+            continuationConfirmStartedAtMs: Number(withContinuation?.continuationConfirmStartedAtMs ?? withTx?.continuationConfirmStartedAtMs ?? ev?.continuationConfirmStartedAtMs ?? NaN),
+            continuationWsUpdateCountWithinWindow: Number(withContinuation?.continuationWsUpdateCountWithinWindow ?? withTx?.continuationWsUpdateCountWithinWindow ?? ev?.continuationWsUpdateCountWithinWindow ?? 0),
+            continuationWsUpdateTimestamps: Array.isArray(withContinuation?.continuationWsUpdateTimestamps) ? withContinuation.continuationWsUpdateTimestamps.slice(0,24) : (Array.isArray(withTx?.continuationWsUpdateTimestamps) ? withTx.continuationWsUpdateTimestamps.slice(0,24) : (Array.isArray(ev?.continuationWsUpdateTimestamps) ? ev.continuationWsUpdateTimestamps.slice(0,24) : [])),
+            continuationWsUpdatePrices: Array.isArray(withContinuation?.continuationWsUpdatePrices) ? withContinuation.continuationWsUpdatePrices.slice(0,24) : (Array.isArray(withTx?.continuationWsUpdatePrices) ? withTx.continuationWsUpdatePrices.slice(0,24) : (Array.isArray(ev?.continuationWsUpdatePrices) ? ev.continuationWsUpdatePrices.slice(0,24) : [])),
             final,
           };
         });
@@ -6475,6 +6491,16 @@ async function main() {
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
             return `- ${label} liq=${Math.round(Number(r.liq || 0))} mcap=${Math.round(Number(r.mcap || 0))} passReason=${String(r.continuationPassReason || 'none')}`;
           });
+        const wsTraceSampleRows = confirmCandidatesDecorated
+          .filter((r) => Number(r?.continuationWsUpdateCountWithinWindow || 0) > 0 || String(r?.continuationPriceSource || '').includes('snapshot_fallback'))
+          .slice(-3)
+          .map((r) => {
+            const frag = `${r.mint.slice(0,5)}...`;
+            const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            const ts = Array.isArray(r?.continuationWsUpdateTimestamps) ? r.continuationWsUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
+            const px = Array.isArray(r?.continuationWsUpdatePrices) ? r.continuationWsUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
+            return `- ${label} startedAt=${Number.isFinite(Number(r?.continuationConfirmStartedAtMs)) ? fmtCt(Number(r.continuationConfirmStartedAtMs)) : 'n/a'} startPx=${Number.isFinite(Number(r?.continuationStartPrice)) ? Number(r.continuationStartPrice).toFixed(10) : 'n/a'} source=${String(r?.continuationPriceSource || 'unknown')} wsUpdates=${Number(r?.continuationWsUpdateCountWithinWindow || 0)} wsTs=[${ts}] wsPx=[${px}] final=${r.final} reason=${String(r?.rejectReason || r?.continuationPassReason || 'none')}`;
+          });
         const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpiredWeak: 0, liqDegraded: 0, impact: 0, route: 0, retryCooldown: 0, retryNoImprovement: 0, other: 0 };
         for (const [k, v] of Object.entries(confirmRejectCounts)) {
           const n = Number(v || 0);
@@ -6531,6 +6557,9 @@ async function main() {
           ...(strongestFailedConfirmCompact.length ? strongestFailedConfirmCompact.slice(0,3) : ['- none']),
           '- passed:',
           ...(strongestPassedConfirmCompact.length ? strongestPassedConfirmCompact.slice(0,3) : ['- none']),
+          '',
+          'WS AUDITION TRACE (temporary sample)',
+          ...(wsTraceSampleRows.length ? wsTraceSampleRows : ['- none']),
         ].join('\n');
       }
 
