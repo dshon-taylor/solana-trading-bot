@@ -24,6 +24,33 @@ describe('birdeye_ws manager', ()=>{
     expect(s.subscribedCount).toBe(0);
   });
 
+  it('derives tx priceUsd from TXS_DATA and stores tx trace entry', async ()=>{
+    const mint = 'MintTxA';
+    const nowSec = Math.floor(Date.now() / 1000);
+    const msg = {
+      type: 'TXS_DATA',
+      data: {
+        tokenAddress: mint,
+        blockUnixTime: nowSec,
+        side: 'buy',
+        txHash: 'abc123',
+        volumeUSD: 42.5,
+        tokenPrice: 0.0123,
+        pricePair: 0.0119,
+      },
+    };
+
+    birdeye._onMessage(JSON.stringify(msg));
+    const arr = cache.get(`birdeye:ws:tx:${mint}`) || [];
+    expect(arr.length).toBeGreaterThan(0);
+    const last = arr[arr.length - 1];
+    expect(last.side).toBe('buy');
+    expect(last.txHash).toBe('abc123');
+    expect(last.volumeUSD).toBe(42.5);
+    expect(last.t).toBe(nowSec * 1000);
+    expect(last.priceUsd).toBe(0.0123);
+  });
+
   afterAll(async ()=>{
     birdeye.stop();
   });
