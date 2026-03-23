@@ -1819,6 +1819,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
         continuationConfirmStartedAtMs: Number.isFinite(Number(extra?.continuationConfirmStartedAtMs)) ? Number(extra.continuationConfirmStartedAtMs) : null,
         continuationWsUpdateCountWithinWindow: Number(extra?.continuationWsUpdateCountWithinWindow || 0) || 0,
+        continuationUniqueOhlcvTicksWithinWindow: Number(extra?.continuationUniqueOhlcvTicksWithinWindow || 0) || 0,
+        continuationTradeUpdateCountWithinWindow: Number(extra?.continuationTradeUpdateCountWithinWindow || 0) || 0,
+        continuationUniqueTradeTicksWithinWindow: Number(extra?.continuationUniqueTradeTicksWithinWindow || 0) || 0,
         continuationSelectedTradeReads: Number(extra?.continuationSelectedTradeReads || 0) || 0,
         continuationSelectedOhlcvReads: Number(extra?.continuationSelectedOhlcvReads || 0) || 0,
         continuationWsUpdateTimestamps: Array.isArray(extra?.continuationWsUpdateTimestamps) ? extra.continuationWsUpdateTimestamps.slice(0, 24) : [],
@@ -3449,6 +3452,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
         continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
         continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
+        continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
+        continuationTradeUpdateCountWithinWindow: Number(confirmGate?.diag?.tradeUpdateCountWithinWindow || 0) || 0,
+        continuationUniqueTradeTicksWithinWindow: Number(confirmGate?.diag?.uniqueTradeTicksWithinWindow || 0) || 0,
         continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,
         continuationSelectedOhlcvReads: Number(confirmGate?.diag?.selectedOhlcvReads || 0) || 0,
         continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
@@ -3534,6 +3540,9 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
       continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
       continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
+      continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
+      continuationTradeUpdateCountWithinWindow: Number(confirmGate?.diag?.tradeUpdateCountWithinWindow || 0) || 0,
+      continuationUniqueTradeTicksWithinWindow: Number(confirmGate?.diag?.uniqueTradeTicksWithinWindow || 0) || 0,
       continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,
       continuationSelectedOhlcvReads: Number(confirmGate?.diag?.selectedOhlcvReads || 0) || 0,
       continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
@@ -6244,6 +6253,9 @@ async function main() {
             continuationPriceSource: String(withContinuation?.continuationPriceSource ?? withTx?.continuationPriceSource ?? ev?.continuationPriceSource ?? 'unknown'),
             continuationConfirmStartedAtMs: Number(withContinuation?.continuationConfirmStartedAtMs ?? withTx?.continuationConfirmStartedAtMs ?? ev?.continuationConfirmStartedAtMs ?? NaN),
             continuationWsUpdateCountWithinWindow: Number(withContinuation?.continuationWsUpdateCountWithinWindow ?? withTx?.continuationWsUpdateCountWithinWindow ?? ev?.continuationWsUpdateCountWithinWindow ?? 0),
+            continuationUniqueOhlcvTicksWithinWindow: Number(withContinuation?.continuationUniqueOhlcvTicksWithinWindow ?? withTx?.continuationUniqueOhlcvTicksWithinWindow ?? ev?.continuationUniqueOhlcvTicksWithinWindow ?? 0),
+            continuationTradeUpdateCountWithinWindow: Number(withContinuation?.continuationTradeUpdateCountWithinWindow ?? withTx?.continuationTradeUpdateCountWithinWindow ?? ev?.continuationTradeUpdateCountWithinWindow ?? 0),
+            continuationUniqueTradeTicksWithinWindow: Number(withContinuation?.continuationUniqueTradeTicksWithinWindow ?? withTx?.continuationUniqueTradeTicksWithinWindow ?? ev?.continuationUniqueTradeTicksWithinWindow ?? 0),
             continuationSelectedTradeReads: Number(withContinuation?.continuationSelectedTradeReads ?? withTx?.continuationSelectedTradeReads ?? ev?.continuationSelectedTradeReads ?? 0),
             continuationSelectedOhlcvReads: Number(withContinuation?.continuationSelectedOhlcvReads ?? withTx?.continuationSelectedOhlcvReads ?? ev?.continuationSelectedOhlcvReads ?? 0),
             continuationWsUpdateTimestamps: Array.isArray(withContinuation?.continuationWsUpdateTimestamps) ? withContinuation.continuationWsUpdateTimestamps.slice(0,24) : (Array.isArray(withTx?.continuationWsUpdateTimestamps) ? withTx.continuationWsUpdateTimestamps.slice(0,24) : (Array.isArray(ev?.continuationWsUpdateTimestamps) ? ev.continuationWsUpdateTimestamps.slice(0,24) : [])),
@@ -6513,11 +6525,20 @@ async function main() {
           .map((r) => {
             const frag = `${r.mint.slice(0,5)}...`;
             const label = (r.symbol === frag) ? frag : `${r.symbol} (${frag})`;
+            const source = String(r?.continuationPriceSource || 'unknown');
             const wsTs = Array.isArray(r?.continuationWsUpdateTimestamps) ? r.continuationWsUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const wsPx = Array.isArray(r?.continuationWsUpdatePrices) ? r.continuationWsUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
             const trTs = Array.isArray(r?.continuationTradeUpdateTimestamps) ? r.continuationTradeUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const trPx = Array.isArray(r?.continuationTradeUpdatePrices) ? r.continuationTradeUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
-            return `- ${label} startedAt=${Number.isFinite(Number(r?.continuationConfirmStartedAtMs)) ? fmtCt(Number(r.continuationConfirmStartedAtMs)) : 'n/a'} startPx=${Number.isFinite(Number(r?.continuationStartPrice)) ? Number(r.continuationStartPrice).toFixed(10) : 'n/a'} source=${String(r?.continuationPriceSource || 'unknown')} wsUpdates=${Number(r?.continuationWsUpdateCountWithinWindow || 0)} selectedTrade=${Number(r?.continuationSelectedTradeReads || 0)} selectedOhlcv=${Number(r?.continuationSelectedOhlcvReads || 0)} wsTs=[${wsTs}] wsPx=[${wsPx}] tradeTs=[${trTs}] tradePx=[${trPx}] final=${r.final} reason=${String(r?.rejectReason || r?.continuationPassReason || 'none')}`;
+            const readsPart = `selectedTradeReads=${Number(r?.continuationSelectedTradeReads || 0)} selectedOhlcvReads=${Number(r?.continuationSelectedOhlcvReads || 0)} uniqueTradeTicks=${Number(r?.continuationUniqueTradeTicksWithinWindow || 0)} uniqueOhlcvTicks=${Number(r?.continuationUniqueOhlcvTicksWithinWindow || 0)}`;
+            const sourcePart = source === 'ws_trade'
+              ? `tradeTs=[${trTs}] tradePx=[${trPx}]`
+              : (source === 'ws_ohlcv'
+                ? `wsTs=[${wsTs}] wsPx=[${wsPx}]`
+                : (source.includes('snapshot_fallback_wsStale')
+                  ? `staleFallback wsTs=[${wsTs}] wsPx=[${wsPx}] tradeTs=[${trTs}] tradePx=[${trPx}]`
+                  : `fallback(no fresh ws/trade in window)`));
+            return `- ${label} startedAt=${Number.isFinite(Number(r?.continuationConfirmStartedAtMs)) ? fmtCt(Number(r.continuationConfirmStartedAtMs)) : 'n/a'} startPx=${Number.isFinite(Number(r?.continuationStartPrice)) ? Number(r.continuationStartPrice).toFixed(10) : 'n/a'} source=${source} ${readsPart} ${sourcePart} final=${r.final} reason=${String(r?.rejectReason || r?.continuationPassReason || 'none')}`;
           });
         const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpiredWeak: 0, liqDegraded: 0, impact: 0, route: 0, retryCooldown: 0, retryNoImprovement: 0, other: 0 };
         for (const [k, v] of Object.entries(confirmRejectCounts)) {
