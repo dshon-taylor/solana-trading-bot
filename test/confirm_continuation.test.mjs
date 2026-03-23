@@ -260,6 +260,39 @@ describe('confirmContinuationGate', () => {
     expect(Number(res.diag.maxRunupPctWithinConfirm || 0)).toBeGreaterThanOrEqual(0.015);
   });
 
+  it('requires consecutive trade upticks when enabled', async () => {
+    const clock = makeClock(6_000_000);
+    const t0 = clock.nowFn();
+    const cache = new FakeCache({
+      wsSeq: [
+        { priceUsd: 1.0, tsMs: t0 - 60_000 },
+        { priceUsd: 1.0, tsMs: t0 - 60_000 },
+      ],
+      txSeq: [
+        [{ t: t0 + 100, priceUsd: 1.0, side: 'buy' }],
+        [{ t: t0 + 100, priceUsd: 1.0, side: 'buy' }, { t: t0 + 500, priceUsd: 1.016, side: 'buy' }],
+      ],
+    });
+
+    const res = await confirmContinuationGate({
+      cfg: { EFFECTIVE_CONFIRM_MAX_PRICE_IMPACT_PCT: 3 },
+      mint: 'MintTrendNeed',
+      row: { latest: { liqUsd: 100_000, priceUsd: 1.0 } },
+      snapshot: { priceUsd: 1.0, liquidityUsd: 100_000 },
+      pair: { priceUsd: 1.0, liquidity: { usd: 100_000 } },
+      confirmPriceImpactPct: 0.5,
+      confirmStartLiqUsd: 100_000,
+      cacheImpl: cache,
+      nowFn: clock.nowFn,
+      sleepFn: clock.sleepFn,
+      tuning: { active: true, windowMs: 1_000, passPct: 0.015, hardFailDipPct: 0.2, wsFreshMs: 15_000, sleepMs: 250, subRefreshMs: 200, requireTradeUpticks: true, minConsecutiveTradeUpticks: 2 },
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.failReason).toBe('runupNoTradeTrendConfirm');
+    expect(Number(res.diag.maxConsecutiveTradeUpticks || 0)).toBeLessThan(2);
+  });
+
   it('shows trade feed detects burst where flat OHLCV stalls', async () => {
     const clockA = makeClock(4_000_000);
     const flatOhlcv = new FakeCache({

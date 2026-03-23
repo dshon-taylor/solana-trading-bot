@@ -18,10 +18,12 @@ function readRuntimeTuning() {
     wsFreshMs: Math.max(500, toNum(process.env.CONFIRM_CONTINUATION_WS_FRESH_MS, DEFAULT_WS_FRESH_MS)),
     sleepMs: Math.max(25, toNum(process.env.CONFIRM_CONTINUATION_SLEEP_MS, DEFAULT_SLEEP_MS)),
     subRefreshMs: Math.max(500, toNum(process.env.CONFIRM_CONTINUATION_SUB_REFRESH_MS, DEFAULT_SUB_REFRESH_MS)),
+    requireTradeUpticks: (process.env.CONFIRM_CONTINUATION_REQUIRE_TRADE_UPTICKS ?? 'false') === 'true',
+    minConsecutiveTradeUpticks: Math.max(1, Math.floor(toNum(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS, 2))),
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks }) {
   return {
     startPrice,
     highPrice,
@@ -49,6 +51,10 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, f
     tradeUpdatePrices: Array.isArray(tradeUpdatePrices) ? tradeUpdatePrices : [],
     selectedTradeReads: Number(selectedTradeReads || 0),
     selectedOhlcvReads: Number(selectedOhlcvReads || 0),
+    consecutiveTradeUpticks: Number(consecutiveTradeUpticks || 0),
+    maxConsecutiveTradeUpticks: Number(maxConsecutiveTradeUpticks || 0),
+    requireTradeUpticks: !!requireTradeUpticks,
+    minConsecutiveTradeUpticks: Number(minConsecutiveTradeUpticks || 0),
   };
 }
 
@@ -93,6 +99,10 @@ export async function confirmContinuationGate({
   const wsUpdatePrices = [];
   const tradeUpdateTimestamps = [];
   const tradeUpdatePrices = [];
+  let consecutiveTradeUpticks = 0;
+  let maxConsecutiveTradeUpticks = 0;
+  let prevTradePriceForTrend = null;
+  let runupSeenInWindow = false;
 
   const readWsOrFallbackPrice = (nowMs) => {
     const txArr = cacheImpl.get(`birdeye:ws:tx:${mint}`) || [];
@@ -161,6 +171,10 @@ export async function confirmContinuationGate({
           tradeUpdatePrices,
           selectedTradeReads,
           selectedOhlcvReads,
+          consecutiveTradeUpticks,
+          maxConsecutiveTradeUpticks,
+          requireTradeUpticks: rt.requireTradeUpticks,
+          minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
         }),
       },
     };
@@ -208,6 +222,13 @@ export async function confirmContinuationGate({
         tradeUpdatePrices.push(p);
         if (tradeUpdateTimestamps.length > 24) tradeUpdateTimestamps.shift();
         if (tradeUpdatePrices.length > 24) tradeUpdatePrices.shift();
+        if (Number.isFinite(prevTradePriceForTrend) && prevTradePriceForTrend > 0) {
+          consecutiveTradeUpticks = p > prevTradePriceForTrend ? (consecutiveTradeUpticks + 1) : 0;
+        } else {
+          consecutiveTradeUpticks = 0;
+        }
+        if (consecutiveTradeUpticks > maxConsecutiveTradeUpticks) maxConsecutiveTradeUpticks = consecutiveTradeUpticks;
+        prevTradePriceForTrend = p;
       }
     }
     if (p > highPrice) highPrice = p;
@@ -243,6 +264,14 @@ export async function confirmContinuationGate({
             confirmStartedAtMs: startedAt,
             wsUpdateTimestamps,
             wsUpdatePrices,
+            tradeUpdateTimestamps,
+            tradeUpdatePrices,
+            selectedTradeReads,
+            selectedOhlcvReads,
+            consecutiveTradeUpticks,
+            maxConsecutiveTradeUpticks,
+            requireTradeUpticks: rt.requireTradeUpticks,
+            minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           }),
           confirmStartLiqUsd: startLiq,
           currentLiqUsd: liqNow,
@@ -280,6 +309,10 @@ export async function confirmContinuationGate({
           tradeUpdatePrices,
           selectedTradeReads,
           selectedOhlcvReads,
+          consecutiveTradeUpticks,
+          maxConsecutiveTradeUpticks,
+          requireTradeUpticks: rt.requireTradeUpticks,
+          minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
         }),
       };
     }
@@ -311,11 +344,21 @@ export async function confirmContinuationGate({
           tradeUpdatePrices,
           selectedTradeReads,
           selectedOhlcvReads,
+          consecutiveTradeUpticks,
+          maxConsecutiveTradeUpticks,
+          requireTradeUpticks: rt.requireTradeUpticks,
+          minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
         }),
       };
     }
 
     if (runupPct >= rt.passPct || p >= (startPrice * (1 + rt.passPct))) {
+      runupSeenInWindow = true;
+      const tradeTrendOk = !rt.requireTradeUpticks || maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
+      if (!tradeTrendOk) {
+        await sleepFn(rt.sleepMs);
+        continue;
+      }
       passReason = 'runup';
       timeToRunupPassMs = Math.max(0, nowMs - startedAt);
       return {
@@ -343,6 +386,10 @@ export async function confirmContinuationGate({
           tradeUpdatePrices,
           selectedTradeReads,
           selectedOhlcvReads,
+          consecutiveTradeUpticks,
+          maxConsecutiveTradeUpticks,
+          requireTradeUpticks: rt.requireTradeUpticks,
+          minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
         }),
       };
     }
@@ -352,7 +399,8 @@ export async function confirmContinuationGate({
 
   const finalRet = (finalPrice / startPrice) - 1;
   const timeoutWasFlatOrNegative = finalRet <= 0;
-  failReason = timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired';
+  const tradeTrendMissing = rt.requireTradeUpticks && runupSeenInWindow && maxConsecutiveTradeUpticks < rt.minConsecutiveTradeUpticks;
+  failReason = tradeTrendMissing ? 'runupNoTradeTrendConfirm' : (timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired');
   return {
     ok: false,
     failReason,
