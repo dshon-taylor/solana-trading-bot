@@ -147,10 +147,25 @@ class BirdEyeWS extends EventEmitter {
     if (type === 'TXS_DATA') {
       const k = `birdeye:ws:tx:${mint}`;
       const arr = cache.get(k) || [];
-      const now = Date.now();
+      const tsMs = Number(d?.blockUnixTime || 0) > 0 ? (Number(d.blockUnixTime) * 1000) : Date.now();
       const side = String(d?.side || '').toLowerCase();
-      arr.push({ t: now, side });
-      const cutoff = now - (65 * 60 * 1000);
+      const priceUsdCandidates = [
+        Number(d?.tokenPrice),
+        Number(d?.pricePair),
+        Number(d?.to?.price),
+        Number(d?.from?.price),
+        Number(d?.to?.nearestPrice),
+        Number(d?.from?.nearestPrice),
+      ].filter((x) => Number.isFinite(x) && x > 0);
+      const priceUsd = priceUsdCandidates.length ? priceUsdCandidates[0] : null;
+      arr.push({
+        t: tsMs,
+        side,
+        priceUsd,
+        txHash: String(d?.txHash || ''),
+        volumeUSD: Number.isFinite(Number(d?.volumeUSD)) ? Number(d.volumeUSD) : null,
+      });
+      const cutoff = Date.now() - (65 * 60 * 1000);
       while (arr.length && Number(arr[0]?.t || 0) < cutoff) arr.shift();
       cache.set(k, arr, 3600);
     }

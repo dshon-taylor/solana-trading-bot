@@ -21,7 +21,7 @@ function readRuntimeTuning() {
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads }) {
   return {
     startPrice,
     highPrice,
@@ -42,6 +42,10 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, f
     wsUpdateCountWithinWindow: Array.isArray(wsUpdateTimestamps) ? wsUpdateTimestamps.length : 0,
     wsUpdateTimestamps: Array.isArray(wsUpdateTimestamps) ? wsUpdateTimestamps : [],
     wsUpdatePrices: Array.isArray(wsUpdatePrices) ? wsUpdatePrices : [],
+    tradeUpdateTimestamps: Array.isArray(tradeUpdateTimestamps) ? tradeUpdateTimestamps : [],
+    tradeUpdatePrices: Array.isArray(tradeUpdatePrices) ? tradeUpdatePrices : [],
+    selectedTradeReads: Number(selectedTradeReads || 0),
+    selectedOhlcvReads: Number(selectedOhlcvReads || 0),
   };
 }
 
@@ -77,29 +81,49 @@ export async function confirmContinuationGate({
   let wsFreshReads = 0;
   let wsObservedTicks = 0;
   let snapshotReads = 0;
+  let selectedTradeReads = 0;
+  let selectedOhlcvReads = 0;
   let lastSubRefreshMs = nowFn();
   let lastWsTsSeen = 0;
+  let lastTradeTsSeen = 0;
   const wsUpdateTimestamps = [];
   const wsUpdatePrices = [];
+  const tradeUpdateTimestamps = [];
+  const tradeUpdatePrices = [];
 
   const readWsOrFallbackPrice = (nowMs) => {
+    const txArr = cacheImpl.get(`birdeye:ws:tx:${mint}`) || [];
+    const latestTrade = Array.isArray(txArr) ? [...txArr].reverse().find((x) => Number.isFinite(Number(x?.priceUsd)) && Number(x?.priceUsd) > 0) : null;
+    const tradePrice = toNum(latestTrade?.priceUsd, 0);
+    const tradeTsMs = toNum(latestTrade?.t, 0);
+    const tradeFreshMs = tradeTsMs > 0 ? (nowMs - tradeTsMs) : null;
+    const tradeFreshEnough = tradeFreshMs != null ? tradeFreshMs <= rt.wsFreshMs : false;
+
     const ws = cacheImpl.get(`birdeye:ws:price:${mint}`) || null;
     wsReads += 1;
     const wsPrice = toNum(ws?.priceUsd ?? ws?.price, 0);
     const wsTsMs = toNum(ws?.tsMs, 0);
     const wsFreshMs = wsTsMs > 0 ? (nowMs - wsTsMs) : null;
     const wsFreshEnough = wsFreshMs != null ? wsFreshMs <= rt.wsFreshMs : false;
+
+    if (tradeFreshEnough && Number.isFinite(tradePrice) && tradePrice > 0) {
+      wsFreshReads += 1;
+      selectedTradeReads += 1;
+      return { price: tradePrice, source: 'ws_trade', wsFreshMs: tradeFreshMs, wsTsMs: tradeTsMs, tradeTsMs };
+    }
     if (Number.isFinite(wsPrice) && wsPrice > 0 && wsFreshEnough) {
       wsFreshReads += 1;
-      return { price: wsPrice, source: 'ws', wsFreshMs, wsTsMs };
+      selectedOhlcvReads += 1;
+      return { price: wsPrice, source: 'ws_ohlcv', wsFreshMs, wsTsMs };
     }
 
     snapshotReads += 1;
     const p = toNum(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd, 0);
     return {
       price: Number.isFinite(p) && p > 0 ? p : null,
-      source: wsTsMs > 0 ? 'snapshot_fallback_wsStale' : 'snapshot_fallback',
+      source: (tradeTsMs > 0 || wsTsMs > 0) ? 'snapshot_fallback_wsStale' : 'snapshot_fallback',
       wsFreshMs,
+      tradeFreshMs,
     };
   };
 
@@ -130,6 +154,10 @@ export async function confirmContinuationGate({
           confirmStartedAtMs: startNow,
           wsUpdateTimestamps,
           wsUpdatePrices,
+          tradeUpdateTimestamps,
+          tradeUpdatePrices,
+          selectedTradeReads,
+          selectedOhlcvReads,
         }),
       },
     };
@@ -158,7 +186,7 @@ export async function confirmContinuationGate({
       continue;
     }
     finalPrice = p;
-    if (tick?.source === 'ws') {
+    if (tick?.source === 'ws_ohlcv') {
       const tickTs = toNum(tick?.wsTsMs, 0);
       if (tickTs > 0 && tickTs !== lastWsTsSeen) {
         lastWsTsSeen = tickTs;
@@ -167,6 +195,16 @@ export async function confirmContinuationGate({
         wsUpdatePrices.push(p);
         if (wsUpdateTimestamps.length > 24) wsUpdateTimestamps.shift();
         if (wsUpdatePrices.length > 24) wsUpdatePrices.shift();
+      }
+    }
+    if (tick?.source === 'ws_trade') {
+      const tradeTs = toNum(tick?.tradeTsMs ?? tick?.wsTsMs, 0);
+      if (tradeTs > 0 && tradeTs !== lastTradeTsSeen) {
+        lastTradeTsSeen = tradeTs;
+        tradeUpdateTimestamps.push(tradeTs);
+        tradeUpdatePrices.push(p);
+        if (tradeUpdateTimestamps.length > 24) tradeUpdateTimestamps.shift();
+        if (tradeUpdatePrices.length > 24) tradeUpdatePrices.shift();
       }
     }
     if (p > highPrice) highPrice = p;
@@ -235,6 +273,10 @@ export async function confirmContinuationGate({
           confirmStartedAtMs: startedAt,
           wsUpdateTimestamps,
           wsUpdatePrices,
+          tradeUpdateTimestamps,
+          tradeUpdatePrices,
+          selectedTradeReads,
+          selectedOhlcvReads,
         }),
       };
     }
@@ -262,6 +304,10 @@ export async function confirmContinuationGate({
           confirmStartedAtMs: startedAt,
           wsUpdateTimestamps,
           wsUpdatePrices,
+          tradeUpdateTimestamps,
+          tradeUpdatePrices,
+          selectedTradeReads,
+          selectedOhlcvReads,
         }),
       };
     }
@@ -290,6 +336,10 @@ export async function confirmContinuationGate({
           confirmStartedAtMs: startedAt,
           wsUpdateTimestamps,
           wsUpdatePrices,
+          tradeUpdateTimestamps,
+          tradeUpdatePrices,
+          selectedTradeReads,
+          selectedOhlcvReads,
         }),
       };
     }
@@ -321,6 +371,10 @@ export async function confirmContinuationGate({
       confirmStartedAtMs: startedAt,
       wsUpdateTimestamps,
       wsUpdatePrices,
+      tradeUpdateTimestamps,
+      tradeUpdatePrices,
+      selectedTradeReads,
+      selectedOhlcvReads,
     }),
   };
 }
