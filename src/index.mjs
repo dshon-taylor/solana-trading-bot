@@ -5962,13 +5962,13 @@ async function main() {
         repeatReasonCountsWin[r] = Number(repeatReasonCountsWin[r] || 0) + 1;
       }
       const repeatMintsTop = Object.entries(repeatMintCountsWin)
-        .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${String(k).slice(0,6)}:${v}`).join(', ') || 'none';
+        .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${formatDiagMintLabel(k)}:${v}`).join(', ') || 'none';
       const repeatReasonTop = Object.entries(repeatReasonCountsWin)
         .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,5).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
       const samples = inWindowObj(compactWindow.momentumInputSamples || [])
         .slice(-3)
         .map(x => {
-          const m = String(x?.mint || 'n/a').slice(0,6);
+          const m = formatDiagMintLabel(String(x?.mint || 'n/a'));
           const liq = Number(x?.liq || 0);
           const v5 = Number(x?.v5 || 0);
           const bsr = Number(x?.bsr || 0);
@@ -5981,7 +5981,7 @@ async function main() {
       const band = counters?.watchlist?.momentumLiqBand || {};
       const recentMomo = inWindowObj(compactWindow.momentumRecent || [])
         .slice(-10)
-        .map(x => `- ${String(x?.mint||'n/a').slice(0,6)} liq=${Math.round(Number(x?.liq||0))} mcap=${Math.round(Number(x?.mcap||0))} agePresent=${x?.agePresent ? 'true' : 'false'} ageMin=${Number.isFinite(x?.ageMin) ? Number(x.ageMin).toFixed(1) : 'null'} early=${x?.early ? 'true' : 'false'} branch=${String(x?.branch||'mature_3_of_4')} ${x?.final||'passed'}`);
+        .map(x => `- ${formatDiagMintLabel(String(x?.mint||'n/a'))} liq=${Math.round(Number(x?.liq||0))} mcap=${Math.round(Number(x?.mcap||0))} agePresent=${x?.agePresent ? 'true' : 'false'} ageMin=${Number.isFinite(x?.ageMin) ? Number(x.ageMin).toFixed(1) : 'null'} early=${x?.early ? 'true' : 'false'} branch=${String(x?.branch||'mature_3_of_4')} ${x?.final||'passed'}`);
       const recentMomentumInput5 = (counters?.watchlist?.momentumInputDebugLast || []).slice(-5);
       const cumulativeMomentumEvaluated = Number(momentumEvalWin.length) + Number(momentumPassedWin.length);
       const cumulativeMomentumPassed = Number(momentumPassedWin.length);
@@ -5997,17 +5997,31 @@ async function main() {
       const hourAttempt = Number(attemptWin.filter(t=>t>=hourCutoffMs).length);
       const hourFill = Number(fillWin.filter(t=>t>=hourCutoffMs).length);
 
-      const formatDiagMintLabel = (mint) => {
+      function formatDiagMintLabel(mint) {
         const m = String(mint || 'unknown');
         const frag = `${m.slice(0,6)}...`;
-        const rowRef = state?.watchlist?.mints?.[m] || null;
-        const name = String(rowRef?.pair?.baseToken?.name || rowRef?.latest?.tokenName || '').trim();
-        const symbol = String(rowRef?.pair?.baseToken?.symbol || rowRef?.latest?.tokenSymbol || '').trim();
+
+        const watchRow = state?.watchlist?.mints?.[m] || null;
+        const pos = state?.positions?.[m] || null;
+
+        const name = cleanTokenText(
+          pos?.tokenName
+          || watchRow?.pair?.baseToken?.name
+          || watchRow?.latest?.tokenName
+          || watchRow?.snapshot?.tokenName
+        );
+        const symbol = cleanTokenText(
+          pos?.symbol
+          || watchRow?.pair?.baseToken?.symbol
+          || watchRow?.latest?.tokenSymbol
+          || watchRow?.snapshot?.tokenSymbol
+        );
+
         if (name && symbol) return `${name} (${symbol}) ${frag}`;
         if (!name && symbol) return `${symbol} (${frag})`;
         if (name && !symbol) return `${name} (${frag})`;
         return frag;
-      };
+      }
 
       if (mode === 'execution') {
         const medianLocal = (arr) => { const a = arr.filter((v) => Number.isFinite(Number(v))).map(Number); if (!a.length) return null; const srt=a.slice().sort((x,y)=>x-y); const m=Math.floor(srt.length/2); return srt.length%2?srt[m]:(srt[m-1]+srt[m])/2; };
@@ -6520,10 +6534,10 @@ async function main() {
           const fill = flow.find(e=>e.stage==='fill' && e.outcome==='passed') ? 'passed' : 'none';
           const finalReason = flow.slice().reverse().find(e=>String(e?.reason||'none')!=='none')?.reason || (fill === 'passed' ? 'filled' : 'none');
           const freshness = flow.find(e => e.stage === 'confirm' && Number.isFinite(Number(e?.freshnessMs)))?.freshnessMs;
-          return `- ${mint.slice(0,6)} liq=${Math.round(Number(x?.liq||0))} mcap=${Math.round(Number(x?.mcap||0))} ageMin=${Number.isFinite(x?.ageMin) ? Number(x.ageMin).toFixed(1) : 'null'} freshnessMs=${Number.isFinite(Number(freshness)) ? Math.round(Number(freshness)) : 'null'} momentum=passed preConfirm=${preConfirm} confirm=${confirm} attempt=${attempt} fill=${fill} reason=${finalReason}`;
+          return `- ${formatDiagMintLabel(mint)} liq=${Math.round(Number(x?.liq||0))} mcap=${Math.round(Number(x?.mcap||0))} ageMin=${Number.isFinite(x?.ageMin) ? Number(x.ageMin).toFixed(1) : 'null'} freshnessMs=${Number.isFinite(Number(freshness)) ? Math.round(Number(freshness)) : 'null'} momentum=passed preConfirm=${preConfirm} confirm=${confirm} attempt=${attempt} fill=${fill} reason=${finalReason}`;
         });
 
-        const recentSuccess = postFlowWin.filter(e => e.stage === 'fill' && e.outcome === 'passed').slice(-5).map((e) => `- ${String(e?.mint||'n/a').slice(0,6)} liq=${Math.round(Number(e?.liq||0))} mcap=${Math.round(Number(e?.mcap||0))} ageMin=${Number.isFinite(e?.ageMin) ? Number(e.ageMin).toFixed(1) : 'null'} route=unknown attempt=passed fill=passed`);
+        const recentSuccess = postFlowWin.filter(e => e.stage === 'fill' && e.outcome === 'passed').slice(-5).map((e) => `- ${formatDiagMintLabel(String(e?.mint||'n/a'))} liq=${Math.round(Number(e?.liq||0))} mcap=${Math.round(Number(e?.mcap||0))} ageMin=${Number.isFinite(e?.ageMin) ? Number(e.ageMin).toFixed(1) : 'null'} route=unknown attempt=passed fill=passed`);
 
         const liqBandPost = { lt30: 0, b30_50: 0, b50_75: 0, gte75: 0 };
         for (const ev of momentumPassedRows) {
