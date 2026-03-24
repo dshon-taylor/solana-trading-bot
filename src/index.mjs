@@ -5390,14 +5390,25 @@ async function main() {
           }
         } catch {}
 
-        // Reconcile legacy buffered stops for non-trailing positions.
+        // Reconcile baseline stop policy for non-trailing positions.
         const e0 = Number(pos.entryPriceUsd || 0);
         const trailing0 = !!pos.trailingActive || Number.isFinite(Number(pos.activeTrailPct));
-        if (e0 > 0 && !trailing0 && (!Number.isFinite(Number(pos.stopPriceUsd)) || Number(pos.stopPriceUsd) < e0)) {
-          pos.stopPriceUsd = e0;
-          pos.lastStopUpdateAt = nowIso();
-          pos.lastStopPrice = e0;
-          saveState(cfg.STATE_PATH, state);
+        if (e0 > 0 && !trailing0) {
+          const nowMs0 = Date.now();
+          const entryAtMs0 = Date.parse(String(pos.entryAt || '')) || nowMs0;
+          const ageMs0 = Math.max(0, nowMs0 - entryAtMs0);
+          const armDelayMs0 = Math.max(0, Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0));
+          const prearmCatPct0 = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
+          const bufferPct0 = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
+          const targetStop0 = ageMs0 < armDelayMs0
+            ? (e0 * (1 - prearmCatPct0))
+            : (e0 * (1 - bufferPct0));
+          if (!Number.isFinite(Number(pos.stopPriceUsd)) || Number(pos.stopPriceUsd) < targetStop0) {
+            pos.stopPriceUsd = targetStop0;
+            pos.lastStopUpdateAt = nowIso();
+            pos.lastStopPrice = targetStop0;
+            saveState(cfg.STATE_PATH, state);
+          }
         }
 
         // Direct BirdEye reconcile pass for live positions (bypass router/LKG bias).
