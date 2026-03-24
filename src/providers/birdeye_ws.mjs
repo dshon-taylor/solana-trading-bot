@@ -84,7 +84,7 @@ class BirdEyeWS extends EventEmitter {
       type: 'SUBSCRIBE_PRICE',
       data: {
         queryType: 'simple',
-        chartType: '1m',
+        chartType: '1s',
         address: mint,
         currency: 'usd',
       },
