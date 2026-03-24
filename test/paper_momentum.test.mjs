@@ -99,12 +99,13 @@ describe('paper_momentum', () => {
     expect(pos.stopPx).toBeCloseTo(1.0 * (1 - 0.0005), 10);
   });
 
-  it('activates trailing at +12% and raises stop to breakeven on activation', () => {
+  it('activates trailing at +10% (single-source tier rules) and raises stop to breakeven on activation', () => {
     const cfg = mkCfg({
       PAPER_ENTRY_RET_15M_PCT: -1,
       PAPER_ENTRY_RET_5M_PCT: -1,
       PAPER_ENTRY_GREEN_LAST5: 0,
-      PAPER_TRAIL_ACTIVATE_PCT: 0.12,
+      // Intentionally set a conflicting legacy value; single-source tier logic should still activate at +10%.
+      PAPER_TRAIL_ACTIVATE_PCT: 0.30,
       PAPER_TRAIL_DISTANCE_PCT: 0.12,
       PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE: true,
       PAPER_STOP_AT_ENTRY_BUFFER_PCT: 0.0005,
@@ -123,7 +124,7 @@ describe('paper_momentum', () => {
       prices: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
     });
 
-    // Pump to 1.12 to activate trailing
+    // Pump to +10% to activate trailing under unified tier rules.
     feedSeries({
       cfg,
       state,
@@ -131,7 +132,7 @@ describe('paper_momentum', () => {
       symbol: 'TKN',
       startMs: startMs + 6 * 60_000,
       stepMs: 60_000,
-      prices: [1.05, 1.08, 1.12],
+      prices: [1.05, 1.10],
     });
 
     const pos = state.paper.positions['MINT3'];
