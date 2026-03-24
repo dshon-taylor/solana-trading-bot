@@ -2817,9 +2817,16 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     try {
       state.runtime ||= {};
       state.runtime.requalifyAfterStopByMint ||= {};
-      if (state.runtime.requalifyAfterStopByMint[mint]) {
-        delete state.runtime.requalifyAfterStopByMint[mint];
-        counters.watchlist.requalifyClearedOnMomentumPass = Number(counters.watchlist.requalifyClearedOnMomentumPass || 0) + 1;
+      const requalifyBlock = state.runtime.requalifyAfterStopByMint[mint] || null;
+      if (requalifyBlock) {
+        const nowMsLocal = Date.now();
+        const fastStopActive = !!requalifyBlock.fastStopActive;
+        const holdUntilMs = Number(requalifyBlock.holdUntilMs || 0);
+        const holdExpired = !fastStopActive || !Number.isFinite(holdUntilMs) || holdUntilMs <= 0 || nowMsLocal >= holdUntilMs;
+        if (holdExpired) {
+          delete state.runtime.requalifyAfterStopByMint[mint];
+          counters.watchlist.requalifyClearedOnMomentumPass = Number(counters.watchlist.requalifyClearedOnMomentumPass || 0) + 1;
+        }
       }
     } catch {}
     pushCompactWindowEvent('momentumAgeSample', null, {
@@ -3567,10 +3574,49 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
     // After stop-outs, mint must re-qualify via fresh momentum pass before attempt path can run.
     state.runtime ||= {};
     state.runtime.requalifyAfterStopByMint ||= {};
-    if (state.runtime.requalifyAfterStopByMint[mint]) {
-      counters.watchlist.requalifyBlockedAttempts = Number(counters.watchlist.requalifyBlockedAttempts || 0) + 1;
-      if (fail('attemptNeedsRequalify', { stage: 'attempt', meta: { blockedAtMs: Number(state.runtime.requalifyAfterStopByMint[mint]?.blockedAtMs || 0), trigger: String(state.runtime.requalifyAfterStopByMint[mint]?.trigger || 'stop') } }) === 'break') break;
-      continue;
+    const requalifyBlock = state.runtime.requalifyAfterStopByMint[mint] || null;
+    if (requalifyBlock) {
+      let allowAttemptAfterFastStop = false;
+      try {
+        if (requalifyBlock.fastStopActive) {
+          const nowMsLocal = Date.now();
+          const holdUntilMs = Number(requalifyBlock.holdUntilMs || 0);
+          if (Number.isFinite(holdUntilMs) && holdUntilMs > 0 && nowMsLocal >= holdUntilMs) {
+            allowAttemptAfterFastStop = true;
+          } else {
+            const requireNewHigh = (requalifyBlock.requireNewHigh ?? cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH) === true;
+            const requireTradeUpticks = (requalifyBlock.requireTradeUpticks ?? cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS) === true;
+            const minConsecutiveTradeUpticks = Math.max(1, Number(requalifyBlock.minConsecutiveTradeUpticks || cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS || 2));
+            const breakoutAboveUsd = Number(requalifyBlock.breakoutAboveUsd || 0);
+            const currentPx = Number(snapshot?.priceUsd ?? row?.latest?.priceUsd ?? pair?.priceUsd ?? 0);
+            const maxConsecutiveTradeUpticks = Number(confirmGate?.diag?.maxConsecutiveTradeUpticks || 0);
+            const newHighOk = !requireNewHigh || (currentPx > 0 && breakoutAboveUsd > 0 && currentPx > breakoutAboveUsd);
+            const upticksOk = !requireTradeUpticks || maxConsecutiveTradeUpticks >= minConsecutiveTradeUpticks;
+            allowAttemptAfterFastStop = newHighOk && upticksOk;
+          }
+        }
+      } catch {
+        allowAttemptAfterFastStop = false;
+      }
+
+      if (allowAttemptAfterFastStop) {
+        delete state.runtime.requalifyAfterStopByMint[mint];
+        counters.watchlist.requalifyClearedOnFastStopBreakout = Number(counters.watchlist.requalifyClearedOnFastStopBreakout || 0) + 1;
+      } else {
+        counters.watchlist.requalifyBlockedAttempts = Number(counters.watchlist.requalifyBlockedAttempts || 0) + 1;
+        if (fail('attemptNeedsRequalify', { stage: 'attempt', meta: {
+          blockedAtMs: Number(requalifyBlock?.blockedAtMs || 0),
+          trigger: String(requalifyBlock?.trigger || 'stop'),
+          fastStopActive: !!requalifyBlock?.fastStopActive,
+          holdUntilMs: Number(requalifyBlock?.holdUntilMs || 0),
+          breakoutAboveUsd: Number(requalifyBlock?.breakoutAboveUsd || 0),
+          requireNewHigh: (requalifyBlock?.requireNewHigh ?? cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH) === true,
+          requireTradeUpticks: (requalifyBlock?.requireTradeUpticks ?? cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS) === true,
+          minConsecutiveTradeUpticks: Math.max(1, Number(requalifyBlock?.minConsecutiveTradeUpticks || cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS || 2)),
+          maxConsecutiveTradeUpticks: Number(confirmGate?.diag?.maxConsecutiveTradeUpticks || 0),
+        } }) === 'break') break;
+        continue;
+      }
     }
 
     const forceAttemptActive = cfg.FORCE_ATTEMPT_POLICY_ACTIVE === true;
@@ -3827,7 +3873,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       try{ wsmgr.onFill(mint, {
         entryPrice: state.positions?.[mint]?.entryPriceUsd,
         stopPrice: state.positions?.[mint]?.stopPriceUsd,
-        stopPct: state.positions?.[mint]?.stopAtEntry ? 0 : 0.01,
+        stopPct: null,
         trailingPct: state.positions?.[mint]?.trailDistancePct,
       }); }catch(e){}
       saveState(cfg.STATE_PATH, state);
@@ -4205,12 +4251,23 @@ function applyMomentumDefaultsToPosition(cfg, pos) {
   if (!entry) return;
 
   // Ensure momentum rules are present.
-  pos.stopAtEntry = true;
+  pos.stopAtEntry = cfg.LIVE_MOMO_STOP_AT_ENTRY === true;
   pos.trailActivatePct = cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT;
   pos.trailDistancePct = cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT;
 
-  // Adaptive baseline: before trailing, keep hard stop at entry (no negative buffer).
-  pos.stopPriceUsd = Math.max(Number(pos.stopPriceUsd || 0), entry);
+  const nowMs = Date.now();
+  const entryAtMs = Date.parse(String(pos.entryAt || '')) || nowMs;
+  const baseline = computePreTrailStopPrice({
+    entryPriceUsd: entry,
+    entryAtMs,
+    nowMs,
+    armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+    prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+    stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+  });
+  if (Number.isFinite(Number(baseline)) && baseline > 0) {
+    pos.stopPriceUsd = Math.max(Number(pos.stopPriceUsd || 0), Number(baseline));
+  }
 }
 
 async function reconcilePositions({ cfg, conn, ownerPubkey, state }) {
@@ -4313,16 +4370,10 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
     };
   }
 
-  const stopAtEntry = (tradeCfg?.stopAtEntry ?? cfg.LIVE_MOMO_STOP_AT_ENTRY) === true;
-  const stopAtEntryBufferPct = Number.isFinite(Number(tradeCfg?.stopAtEntryBufferPct))
-    ? Number(tradeCfg.stopAtEntryBufferPct)
-    : cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT;
-  const trailActivatePct = Number.isFinite(Number(tradeCfg?.trailActivatePct))
-    ? Number(tradeCfg.trailActivatePct)
-    : cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT;
-  const trailDistancePct = Number.isFinite(Number(tradeCfg?.trailDistancePct))
-    ? Number(tradeCfg.trailDistancePct)
-    : cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT;
+  const stopAtEntry = cfg.LIVE_MOMO_STOP_AT_ENTRY === true;
+  const stopAtEntryBufferPct = cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT;
+  const trailActivatePct = cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT;
+  const trailDistancePct = cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT;
 
   // Hard guard: never execute a swap unless we can reliably persist entry + stop.
   const resolved = await resolveEntryAndStopForOpenPosition({
@@ -4330,9 +4381,7 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
     pair,
     snapshot: tradeCfg?.entrySnapshot || null,
     decimalsHint: decimals,
-    stopAtEntry,
     stopAtEntryBufferPct,
-    stopLossPct: cfg.STOP_LOSS_PCT,
     birdeyeEnabled: !!tradeCfg?.birdeyeEnabled,
     getBirdseyeSnapshot: tradeCfg?.getBirdseyeSnapshot || null,
     birdeyeFetchTimeoutMs: cfg.BIRDEYE_ENTRY_FETCH_TIMEOUT_MS,
@@ -4361,11 +4410,15 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
 
   let entryPriceUsd = Number(resolved.entryPriceUsd);
   let stopPriceUsd = Number(resolved.stopPriceUsd);
-  // Baseline stop: pre-arm catastrophic stop when enabled, otherwise stop-at-entry buffer.
-  const prearmCatPct = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
-  const baselineStopAtEntryBufferPct = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
-  const hasStopArmDelay = Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0) > 0;
-  stopPriceUsd = entryPriceUsd * (1 - (hasStopArmDelay ? prearmCatPct : baselineStopAtEntryBufferPct));
+  // Baseline stop: pre-arm catastrophic stop, then post-arm buffer below entry.
+  stopPriceUsd = Number(computePreTrailStopPrice({
+    entryPriceUsd,
+    entryAtMs: Date.now(),
+    nowMs: Date.now(),
+    armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+    prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+    stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+  }) || stopPriceUsd);
   const decimalsResolved = resolved.decimals;
 
   // Convert USD target into SOL at current SOLUSD.
@@ -4400,7 +4453,14 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
   if (Number.isFinite(Number(liveEntryPriceUsd)) && Number(liveEntryPriceUsd) > 0) {
     entryPriceUsd = Number(liveEntryPriceUsd);
     // Recompute baseline stop from the same policy after finalized entry price.
-    stopPriceUsd = entryPriceUsd * (1 - (hasStopArmDelay ? prearmCatPct : baselineStopAtEntryBufferPct));
+    stopPriceUsd = Number(computePreTrailStopPrice({
+      entryPriceUsd,
+      entryAtMs: Date.now(),
+      nowMs: Date.now(),
+      armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+      prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+      stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+    }) || stopPriceUsd);
   }
 
   const now = Date.now();
@@ -4702,13 +4762,26 @@ async function closePosition(cfg, conn, wallet, state, mint, pair, reason) {
     const why = String(reason || '').toLowerCase();
     const isStopExit = why.includes('stop hit') || why.includes('stop loss hit') || why.includes('trailing stop hit');
     if (isStopExit) {
+      const nowMsLocal = Date.now();
+      const entryAtMs = Date.parse(String(pos.entryAt || '')) || nowMsLocal;
+      const heldMs = Math.max(0, nowMsLocal - entryAtMs);
+      const fastStopMaxAgeMs = Math.max(0, Number(cfg.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS || 45_000));
+      const fastStopWindowMs = Math.max(0, Number(cfg.LIVE_FAST_STOP_REENTRY_WINDOW_MS || 180_000));
+      const isFastStop = heldMs <= fastStopMaxAgeMs;
       state.runtime ||= {};
       state.runtime.requalifyAfterStopByMint ||= {};
       state.runtime.requalifyAfterStopByMint[mint] = {
-        blockedAtMs: Date.now(),
+        blockedAtMs: nowMsLocal,
         trigger: 'stop',
         entryPriceUsd: Number(pos.entryPriceUsd || 0) || null,
         exitPriceUsd: Number(exitPriceUsd || 0) || null,
+        fastStopActive: isFastStop,
+        holdUntilMs: isFastStop ? (nowMsLocal + fastStopWindowMs) : null,
+        holdMs: heldMs,
+        breakoutAboveUsd: Number(pos.lastPeakPrice || pos.peakPriceUsd || pos.entryPriceUsd || 0) || null,
+        requireNewHigh: cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH === true,
+        requireTradeUpticks: cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS === true,
+        minConsecutiveTradeUpticks: Math.max(1, Number(cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS || 2)),
       };
     }
   } catch {}
@@ -4910,6 +4983,7 @@ async function closePosition(cfg, conn, wallet, state, mint, pair, reason) {
 }
 
 import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from './lib/trailing.mjs';
+import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
 
 async function updateStops(cfg, state, mint, priceUsd) {
   const pos = state.positions[mint];
@@ -4931,14 +5005,17 @@ async function updateStops(cfg, state, mint, priceUsd) {
 
   const entry = Number(pos.entryPriceUsd);
   const profitPct = (priceUsd - entry) / entry;
+  const trailActivatePct = Number.isFinite(Number(pos.trailActivatePct))
+    ? Number(pos.trailActivatePct)
+    : Number(cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT || 0.10);
 
   let changed = false;
 
   // Determine desired trail pct based on PnL tiers
   const desiredTrailPct = computeTrailPct(profitPct);
 
-  // Rule: pnl < 30% => pre-trailing risk regime.
-  if (profitPct < 0.30) {
+  // Before trail activation tier, enforce pre-arm catastrophic / post-arm baseline stop.
+  if (desiredTrailPct == null || profitPct < trailActivatePct) {
     // If trailing had already activated, do not lower/reset stop.
     if (pos.trailingActive || Number.isFinite(Number(pos.activeTrailPct))) {
       return { changed, stopPriceUsd: pos.stopPriceUsd };
@@ -4946,13 +5023,14 @@ async function updateStops(cfg, state, mint, priceUsd) {
 
     const nowMs = Date.now();
     const entryAtMs = Date.parse(String(pos.entryAt || '')) || nowMs;
-    const ageMs = Math.max(0, nowMs - entryAtMs);
-    const armDelayMs = Math.max(0, Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0));
-    const prearmCatPct = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
-    const stopAtEntryBufferPct = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
-    const stopPrice = ageMs < armDelayMs
-      ? (entry * (1 - prearmCatPct))
-      : (entry * (1 - stopAtEntryBufferPct));
+    const stopPrice = computePreTrailStopPrice({
+      entryPriceUsd: entry,
+      entryAtMs,
+      nowMs,
+      armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+      prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+      stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+    });
 
     if (!Number.isFinite(Number(pos.stopPriceUsd)) || pos.stopPriceUsd < stopPrice) {
       pos.stopPriceUsd = stopPrice;
@@ -5162,7 +5240,7 @@ async function main() {
         wsmgr.onFill(mint, {
           entryPrice: Number(pos.entryPriceUsd || 0) || null,
           stopPrice: Number(pos.stopPriceUsd || 0) || null,
-          stopPct: pos?.stopAtEntry ? 0 : 0.01,
+          stopPct: null,
           trailingPct: Number(pos?.trailDistancePct || 0) || null,
         });
       } catch {}
@@ -5396,13 +5474,14 @@ async function main() {
         if (e0 > 0 && !trailing0) {
           const nowMs0 = Date.now();
           const entryAtMs0 = Date.parse(String(pos.entryAt || '')) || nowMs0;
-          const ageMs0 = Math.max(0, nowMs0 - entryAtMs0);
-          const armDelayMs0 = Math.max(0, Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0));
-          const prearmCatPct0 = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
-          const bufferPct0 = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
-          const targetStop0 = ageMs0 < armDelayMs0
-            ? (e0 * (1 - prearmCatPct0))
-            : (e0 * (1 - bufferPct0));
+          const targetStop0 = computePreTrailStopPrice({
+            entryPriceUsd: e0,
+            entryAtMs: entryAtMs0,
+            nowMs: nowMs0,
+            armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+            prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+            stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+          });
           if (!Number.isFinite(Number(pos.stopPriceUsd)) || Number(pos.stopPriceUsd) < targetStop0) {
             pos.stopPriceUsd = targetStop0;
             pos.lastStopUpdateAt = nowIso();

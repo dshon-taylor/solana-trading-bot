@@ -39,6 +39,11 @@ const ENV_KEYS = [
   'DEBUG_CANARY_ENABLED',
   'DEBUG_CANARY_VERBOSE',
   'DEBUG_CANARY_COOLDOWN_MS',
+  'LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS',
+  'LIVE_FAST_STOP_REENTRY_WINDOW_MS',
+  'LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH',
+  'LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS',
+  'LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS',
 ];
 
 let snapshot = {};
@@ -96,6 +101,11 @@ describe('pass1 config flags', () => {
     expect(cfg.DEBUG_CANARY_ENABLED).toBe(false);
     expect(cfg.DEBUG_CANARY_VERBOSE).toBe(true);
     expect(cfg.DEBUG_CANARY_COOLDOWN_MS).toBe(60_000);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS).toBe(45_000);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_WINDOW_MS).toBe(180_000);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH).toBe(true);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS).toBe(true);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS).toBe(2);
   });
 
   it('aggressive mode applies high-throughput overrides with single-toggle rollback', () => {
@@ -136,6 +146,20 @@ describe('pass1 config flags', () => {
     expect(cfg.DEBUG_CANARY_ENABLED).toBe(true);
     expect(cfg.DEBUG_CANARY_VERBOSE).toBe(false);
     expect(cfg.DEBUG_CANARY_COOLDOWN_MS).toBe(9000);
+  });
+
+  it('supports fast-stop reentry flags', () => {
+    process.env.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS = '60000';
+    process.env.LIVE_FAST_STOP_REENTRY_WINDOW_MS = '240000';
+    process.env.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH = 'false';
+    process.env.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS = 'false';
+    process.env.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS = '4';
+    const cfg = getConfig();
+    expect(cfg.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS).toBe(60_000);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_WINDOW_MS).toBe(240_000);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH).toBe(false);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS).toBe(false);
+    expect(cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS).toBe(4);
   });
 
   it('validates SOURCE_MODE values', () => {

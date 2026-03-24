@@ -22,9 +22,7 @@ export async function resolveEntryAndStopForOpenPosition({
   pair = null,
   snapshot = null,
   decimalsHint = null,
-  stopAtEntry = true,
   stopAtEntryBufferPct = 0,
-  stopLossPct = 0,
   birdeyeEnabled = false,
   getBirdseyeSnapshot = null,
   birdeyeFetchTimeoutMs = 2500,
@@ -130,9 +128,7 @@ export async function resolveEntryAndStopForOpenPosition({
   }
 
   // 3) Compute stop.
-  const stopPriceUsd = stopAtEntry
-    ? (entryPriceUsd * (1 - Number(stopAtEntryBufferPct || 0)))
-    : (entryPriceUsd * (1 - Number(stopLossPct || 0)));
+  const stopPriceUsd = entryPriceUsd * (1 - Number(stopAtEntryBufferPct || 0));
 
   if (!isFinitePositive(stopPriceUsd)) {
     out.reason = 'invalidStopPriceUsd';

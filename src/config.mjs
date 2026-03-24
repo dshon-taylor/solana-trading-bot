@@ -139,7 +139,7 @@ export function summarizeConfigForBoot(cfg) {
   lines.push(`  streaming: provider=${cfg.STREAMING_PROVIDER_MODE} laserEnabled=${cfg.LASERSTREAM_ENABLED} staging=${cfg.LASERSTREAM_STAGING_MODE} rollback=LASERSTREAM_ENABLED=false STREAMING_PROVIDER_MODE=existing`);
   lines.push(`  jup: tokenlist=${cfg.JUP_TOKENLIST_ENABLED} prefilter=${cfg.JUP_PREFILTER_ENABLED} amountUsd=${cfg.JUP_PREFILTER_AMOUNT_USD}`);
   lines.push(`  circuit: enabled=${cfg.CIRCUIT_BREAKER_ENABLED} cooldownMs=${cfg.CIRCUIT_COOLDOWN_MS} fails(dex=${cfg.CIRCUIT_FAILS_DEX}, rpc=${cfg.CIRCUIT_FAILS_RPC}, jup=${cfg.CIRCUIT_FAILS_JUP})`);
-  lines.push(`  risk: stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} stopArmDelayMs=${cfg.LIVE_STOP_ARM_DELAY_MS} prearmCatStopPct=${cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT} trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`);
+  lines.push(`  risk: stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} stopArmDelayMs=${cfg.LIVE_STOP_ARM_DELAY_MS} prearmCatStopPct=${cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT} trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT} fastStop(maxAgeMs=${cfg.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS}, blockMs=${cfg.LIVE_FAST_STOP_REENTRY_WINDOW_MS}, requireNewHigh=${cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH}, requireTradeUpticks=${cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS}, minUpticks=${cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS})`);
   lines.push(`  feeReserveSol=${cfg.MIN_SOL_FOR_FEES} softReserveSol=${cfg.CAPITAL_SOFT_RESERVE_SOL} retryBufferPct=${cfg.CAPITAL_RETRY_BUFFER_PCT} maxNewEntriesPerHour=${cfg.MAX_NEW_ENTRIES_PER_HOUR}`);
   lines.push(`  playbook: enabled=${cfg.PLAYBOOK_ENABLED} restart(threshold=${cfg.PLAYBOOK_RESTART_THRESHOLD},windowMs=${cfg.PLAYBOOK_RESTART_WINDOW_MS}) error(threshold=${cfg.PLAYBOOK_ERROR_THRESHOLD},windowMs=${cfg.PLAYBOOK_ERROR_WINDOW_MS}) stableRecoveryMs=${cfg.PLAYBOOK_STABLE_RECOVERY_MS}`);
   lines.push(`  slippageBps=${cfg.DEFAULT_SLIPPAGE_BPS} maxPriceImpactPct=${cfg.MAX_PRICE_IMPACT_PCT}`);
@@ -183,10 +183,6 @@ export function getConfig() {
   const CAPITAL_SOFT_RESERVE_SOL = Number(process.env.CAPITAL_SOFT_RESERVE_SOL ?? 0.01);
   const CAPITAL_RETRY_BUFFER_PCT = Number(process.env.CAPITAL_RETRY_BUFFER_PCT ?? 0.10);
   const MAX_NEW_ENTRIES_PER_HOUR = Number(process.env.MAX_NEW_ENTRIES_PER_HOUR ?? 0);
-
-  const STOP_LOSS_PCT = 0.18;
-  const TRAIL_ACTIVATE_PCT = 0.10;
-  const TRAIL_DISTANCE_PCT = 0.12;
 
   const DEFAULT_SLIPPAGE_BPS = 250; // 2.5%
 
@@ -446,6 +442,11 @@ export function getConfig() {
   const LIVE_PREARM_CATASTROPHIC_STOP_PCT = Math.max(0, Number(process.env.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0.07));
   const LIVE_MOMO_TRAIL_ACTIVATE_PCT = Number(process.env.LIVE_MOMO_TRAIL_ACTIVATE_PCT || 0.10);
   const LIVE_MOMO_TRAIL_DISTANCE_PCT = Number(process.env.LIVE_MOMO_TRAIL_DISTANCE_PCT || 0.12);
+  const LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS = Math.max(0, Number(process.env.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS || 45_000));
+  const LIVE_FAST_STOP_REENTRY_WINDOW_MS = Math.max(0, Number(process.env.LIVE_FAST_STOP_REENTRY_WINDOW_MS || 180_000));
+  const LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH = (process.env.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH ?? 'true') === 'true';
+  const LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS = (process.env.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS ?? 'true') === 'true';
+  const LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS = Math.max(1, Number(process.env.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS || 2));
 
   const CONFIRM_REQUIRE_TX_ACCEL_AND_BUY_DOM = (process.env.CONFIRM_REQUIRE_TX_ACCEL_AND_BUY_DOM ?? 'true') === 'true';
   const CONFIRM_TX_ACCEL_MIN = Math.max(0, Number(process.env.CONFIRM_TX_ACCEL_MIN || 1.0));
@@ -508,7 +509,6 @@ export function getConfig() {
 
   // Paper risk follows LIVE momentum risk as the single source of truth.
   // (Legacy PAPER_* env overrides are intentionally ignored to prevent divergence.)
-  const PAPER_STOP_LOSS_PCT = Number(process.env.PAPER_STOP_LOSS_PCT || 0.18);
   const PAPER_STOP_AT_ENTRY = derivedPaper.PAPER_STOP_AT_ENTRY;
   const PAPER_STOP_AT_ENTRY_BUFFER_PCT = Number(derivedPaper.PAPER_STOP_AT_ENTRY_BUFFER_PCT);
 
@@ -558,10 +558,6 @@ export function getConfig() {
     CAPITAL_SOFT_RESERVE_SOL,
     CAPITAL_RETRY_BUFFER_PCT,
     MAX_NEW_ENTRIES_PER_HOUR,
-
-    STOP_LOSS_PCT,
-    TRAIL_ACTIVATE_PCT,
-    TRAIL_DISTANCE_PCT,
 
     DEFAULT_SLIPPAGE_BPS,
 
@@ -772,7 +768,6 @@ export function getConfig() {
     MOMENTUM_FALLBACK_TOLERANCE,
     MOMENTUM_FALLBACK_MIN_LIQ_USD,
     MOMENTUM_FALLBACK_MIN_TX1H,
-    PAPER_STOP_LOSS_PCT,
     PAPER_STOP_AT_ENTRY,
     PAPER_STOP_AT_ENTRY_BUFFER_PCT,
     PAPER_TRAIL_ACTIVATE_PCT,
@@ -792,6 +787,11 @@ export function getConfig() {
     LIVE_PREARM_CATASTROPHIC_STOP_PCT,
     LIVE_MOMO_TRAIL_ACTIVATE_PCT,
     LIVE_MOMO_TRAIL_DISTANCE_PCT,
+    LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS,
+    LIVE_FAST_STOP_REENTRY_WINDOW_MS,
+    LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH,
+    LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS,
+    LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS,
 
     CONFIRM_REQUIRE_TX_ACCEL_AND_BUY_DOM,
     CONFIRM_TX_ACCEL_MIN,

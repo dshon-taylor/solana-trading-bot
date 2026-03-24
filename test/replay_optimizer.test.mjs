@@ -22,7 +22,7 @@ describe('replay_optimizer', () => {
         { t: 't1', tMs: 1, price: 1 },
         { t: 't2', tMs: 2, price: 1.12 },
         { t: 't3', tMs: 3, price: 1.2 },
-        { t: 't4', tMs: 4, price: 1.13 },
+        { t: 't4', tMs: 4, price: 1.05 },
       ],
     });
 

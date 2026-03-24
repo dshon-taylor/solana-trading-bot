@@ -545,8 +545,10 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
               trailingActive: false,
               stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
               stopEvalMode: 'conservative_exec_mark',
-              // Adaptive trailing baseline rule: pnl <30% => hard stop at entry.
-              stopPriceUsd: job.entryPrice,
+              // Pre-trail baseline rule: pre-arm catastrophic, then entry-buffer stop.
+              stopPriceUsd: job.entryPrice * (1 - ((Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0) > 0)
+                ? Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0)
+                : Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0))),
               mcapUsdAtEntry: null,
               liquidityUsdAtEntry: null,
               trailActivatePct: cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT,
@@ -570,7 +572,9 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
 
             state.positions[mint].entryPriceUsd = liveEntryPriceUsd;
             state.positions[mint].peakPriceUsd = liveEntryPriceUsd;
-            state.positions[mint].stopPriceUsd = liveEntryPriceUsd;
+            state.positions[mint].stopPriceUsd = liveEntryPriceUsd * (1 - ((Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0) > 0)
+              ? Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0)
+              : Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0)));
             state.positions[mint].lastSeenPriceUsd = liveEntryPriceUsd;
             state.positions[mint].entryPriceSource = (fillOutTokens && fillOutTokens > 0) ? 'jupiter_fill' : 'snapshot';
             state.positions[mint].spentSolApprox = fillInSol;
@@ -582,7 +586,7 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
               `🟢 *LIVE ENTRY (momo)* — ${tokenLabel({ name: evt?.name, fallbackName: job?.name, symbol: evt.symbol, fallbackSymbol: job?.symbol, mint })}`, 
               sizeLine,
               `• entry price (per token): $${Number(liveEntryPriceUsd || 0).toFixed(10)} (${state.positions[mint].entryPriceSource})`,
-              `• stop: ${cfg.LIVE_MOMO_STOP_AT_ENTRY ? 'entry (scratch)' : `-${(cfg.STOP_LOSS_PCT*100).toFixed(1)}%`}`,
+              `• stop: pre-arm ${(Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0) * 100).toFixed(1)}% DD for ${(Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0) / 1000).toFixed(0)}s, then ${(Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0) * 100).toFixed(2)}% below entry`,
               `• trail: adaptive tiers (<10%=no trail, ≥10%=12%, ≥25%=18%, ≥60%=22%, ≥120%=18%)`,
               `• tx: https://solscan.io/tx/${res.signature}`,
             ].join('\n'));
@@ -625,9 +629,9 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
       const sim = simulateStops({
         entryPrice: job.entryPrice,
         series,
-        stopLossPct: cfg.STOP_LOSS_PCT,
-        trailActivatePct: cfg.TRAIL_ACTIVATE_PCT,
-        trailDistancePct: cfg.TRAIL_DISTANCE_PCT,
+        stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+        stopArmDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+        prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
       });
 
       const resultPath = path.join(cfg.TRACK_DIR, 'results.jsonl');
