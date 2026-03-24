@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { computeTrailPct } from './lib/trailing.mjs';
+import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -93,6 +94,22 @@ export function paperOnSample({ cfg, state, mint, symbol, entryAnchorPrice, tIso
   // Update open paper position if exists
   const pos = state.paper.positions[mint];
   if (pos && pos.status === 'open') {
+    const entryAtMs = Date.parse(String(pos.entryT || '')) || tMs;
+
+    if (!pos.trailActivated) {
+      const preTrailStop = computePreTrailStopPrice({
+        entryPriceUsd: pos.entryPrice,
+        entryAtMs,
+        nowMs: tMs,
+        armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+        prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+        stopAtEntryBufferPct: cfg.PAPER_STOP_AT_ENTRY_BUFFER_PCT,
+      });
+      if (Number.isFinite(Number(preTrailStop)) && preTrailStop > 0) {
+        pos.stopPx = Math.max(Number(pos.stopPx || 0), Number(preTrailStop));
+      }
+    }
+
     // hard stop
     if (priceUsd <= pos.stopPx) {
       pos.status = 'closed';
@@ -182,9 +199,14 @@ export function paperOnSample({ cfg, state, mint, symbol, entryAnchorPrice, tIso
       symbol,
       entryT: tIso,
       entryPrice,
-      stopPx: (cfg.PAPER_STOP_AT_ENTRY
-        ? entryPrice * (1 - cfg.PAPER_STOP_AT_ENTRY_BUFFER_PCT)
-        : entryPrice * (1 - cfg.PAPER_STOP_LOSS_PCT)),
+      stopPx: Number(computePreTrailStopPrice({
+        entryPriceUsd: entryPrice,
+        entryAtMs: tMs,
+        nowMs: tMs,
+        armDelayMs: cfg.LIVE_STOP_ARM_DELAY_MS,
+        prearmCatastrophicStopPct: cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT,
+        stopAtEntryBufferPct: cfg.PAPER_STOP_AT_ENTRY_BUFFER_PCT,
+      }) || (entryPrice * (1 - cfg.PAPER_STOP_AT_ENTRY_BUFFER_PCT))),
       trailActivated: false,
       trailHigh: null,
       trailStop: null,

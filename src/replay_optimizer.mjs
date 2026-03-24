@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { computeTrailPct } from './lib/trailing.mjs';
+import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
 
 function toNum(v) {
   const n = Number(v);
@@ -140,14 +142,23 @@ export function simulateReplayPosition({ entryPrice, series, rules, windowHours 
   if (!points.length) return out;
 
   const stopEntryBufferPct = Number(rules?.stopEntryBufferPct ?? 0.0005);
-  const trailActivatePct = Number(rules?.trailActivatePct ?? 0.1);
-  const trailDistancePct = Number(rules?.trailDistancePct ?? 0.12);
+  const stopArmDelayMs = Math.max(0, Number(rules?.stopArmDelayMs ?? 75_000));
+  const prearmCatastrophicStopPct = Math.max(0, Number(rules?.prearmCatastrophicStopPct ?? 0.07));
   const breakevenOnTrailActivate = rules?.breakevenOnTrailActivate !== false;
 
-  let stopPx = entryPrice * (1 - stopEntryBufferPct);
+  const entryAtMs = Number(points?.[0]?.tMs || series?.[0]?.tMs || Date.now());
+  let stopPx = Number(computePreTrailStopPrice({
+    entryPriceUsd: entryPrice,
+    entryAtMs,
+    nowMs: entryAtMs,
+    armDelayMs: stopArmDelayMs,
+    prearmCatastrophicStopPct,
+    stopAtEntryBufferPct: stopEntryBufferPct,
+  }) || (entryPrice * (1 - stopEntryBufferPct)));
   let trailActivated = false;
   let trailHigh = null;
   let trailStop = null;
+  let activeTrailPct = null;
 
   let maxP = entryPrice;
   let minP = entryPrice;
@@ -159,6 +170,24 @@ export function simulateReplayPosition({ entryPrice, series, rules, windowHours 
     if (p > maxP) maxP = p;
     if (p < minP) minP = p;
 
+    const ptMs = Number.isFinite(Number(pt?.tMs)) ? Number(pt.tMs) : entryAtMs;
+    const profitPct = (p - entryPrice) / entryPrice;
+    const desiredTrailPct = computeTrailPct(profitPct);
+
+    if (!trailActivated && desiredTrailPct == null) {
+      const preTrailStop = computePreTrailStopPrice({
+        entryPriceUsd: entryPrice,
+        entryAtMs,
+        nowMs: ptMs,
+        armDelayMs: stopArmDelayMs,
+        prearmCatastrophicStopPct,
+        stopAtEntryBufferPct: stopEntryBufferPct,
+      });
+      if (Number.isFinite(Number(preTrailStop)) && preTrailStop > 0) {
+        stopPx = Math.max(stopPx, Number(preTrailStop));
+      }
+    }
+
     if (p <= stopPx) {
       out.exitPrice = stopPx;
       out.exitT = pt?.t || null;
@@ -167,16 +196,20 @@ export function simulateReplayPosition({ entryPrice, series, rules, windowHours 
     }
 
     if (!trailActivated) {
-      if (p >= entryPrice * (1 + trailActivatePct)) {
+      if (desiredTrailPct != null) {
         trailActivated = true;
+        activeTrailPct = desiredTrailPct;
         trailHigh = p;
-        trailStop = trailHigh * (1 - trailDistancePct);
+        trailStop = trailHigh * (1 - activeTrailPct);
         if (breakevenOnTrailActivate) stopPx = Math.max(stopPx, entryPrice);
       }
     } else {
+      if (desiredTrailPct != null && Number.isFinite(Number(activeTrailPct))) {
+        activeTrailPct = Math.min(Number(activeTrailPct), Number(desiredTrailPct));
+      }
       if (p > trailHigh) {
         trailHigh = p;
-        trailStop = trailHigh * (1 - trailDistancePct);
+        trailStop = trailHigh * (1 - Number(activeTrailPct || 0));
       }
       if (p <= trailStop) {
         out.exitPrice = trailStop;
