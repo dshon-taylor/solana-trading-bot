@@ -4292,22 +4292,24 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
   const usdTarget = usdTargetBase * sizeCutForTop10;
   const slippageBps = tradeCfg?.slippageBps ?? cfg.DEFAULT_SLIPPAGE_BPS;
 
-  if (!(mcapUsdAtEntry >= Number(cfg.ENTRY_MIN_MCAP_USD || 120000))) {
+  const entryMinMcapUsd = Number(cfg.ENTRY_MIN_MCAP_USD ?? 120000);
+  if (!(mcapUsdAtEntry >= entryMinMcapUsd)) {
     return {
       blocked: true,
       reason: 'entryMcapTooLow',
       mint,
       symbol,
-      meta: { mcapUsdAtEntry, required: Number(cfg.ENTRY_MIN_MCAP_USD || 120000) },
+      meta: { mcapUsdAtEntry, required: entryMinMcapUsd },
     };
   }
-  if (!(liqUsdAtEntry >= Number(cfg.ENTRY_MIN_LIQUIDITY_USD || 30000))) {
+  const entryMinLiquidityUsd = Number(cfg.ENTRY_MIN_LIQUIDITY_USD ?? 30000);
+  if (!(liqUsdAtEntry >= entryMinLiquidityUsd)) {
     return {
       blocked: true,
       reason: 'entryLiquidityMissingOrLow',
       mint,
       symbol,
-      meta: { liqUsdAtEntry, required: Number(cfg.ENTRY_MIN_LIQUIDITY_USD || 30000) },
+      meta: { liqUsdAtEntry, required: entryMinLiquidityUsd },
     };
   }
 
