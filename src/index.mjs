@@ -4359,8 +4359,11 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
 
   let entryPriceUsd = Number(resolved.entryPriceUsd);
   let stopPriceUsd = Number(resolved.stopPriceUsd);
-  // Adaptive trailing system baseline: pnl < 30% => hard stop at entry (no buffer).
-  stopPriceUsd = entryPriceUsd;
+  // Baseline stop: pre-arm catastrophic stop when enabled, otherwise stop-at-entry buffer.
+  const prearmCatPct = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
+  const baselineStopAtEntryBufferPct = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
+  const hasStopArmDelay = Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0) > 0;
+  stopPriceUsd = entryPriceUsd * (1 - (hasStopArmDelay ? prearmCatPct : baselineStopAtEntryBufferPct));
   const decimalsResolved = resolved.decimals;
 
   // Convert USD target into SOL at current SOLUSD.
@@ -4394,8 +4397,8 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
 
   if (Number.isFinite(Number(liveEntryPriceUsd)) && Number(liveEntryPriceUsd) > 0) {
     entryPriceUsd = Number(liveEntryPriceUsd);
-    // Adaptive baseline: hard stop at entry before trailing activation.
-    stopPriceUsd = entryPriceUsd;
+    // Recompute baseline stop from the same policy after finalized entry price.
+    stopPriceUsd = entryPriceUsd * (1 - (hasStopArmDelay ? prearmCatPct : baselineStopAtEntryBufferPct));
   }
 
   const now = Date.now();
@@ -4560,7 +4563,7 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
     `🛣️ Route: ${executionRoute}`,
     `🪙 Tokens received: ${tokensReceivedLine}`,
     `🟠 Stop: $${state.positions[mint].stopPriceUsd.toFixed(6)}  (entry hard stop)`,
-    `🟣 Trail: adaptive tiers (0-30%=stop@entry, 30-80%=30%, ≥80%=22%, ≥150%=18%)`,
+    `🟣 Trail: adaptive tiers (<10%=no trail, 10-30%=12%, 30-80%=30%, ≥80%=22%, ≥150%=18%)`,
     '',
     `💧 Liq: ${fmtUsd(liqUsdAtEntry)}   🧢 Mcap: ${fmtUsd(mcapUsdAtEntry)}`,
     `🌞 SOLUSD: $${solUsd.toFixed(2)}`,
@@ -4932,14 +4935,23 @@ async function updateStops(cfg, state, mint, priceUsd) {
   // Determine desired trail pct based on PnL tiers
   const desiredTrailPct = computeTrailPct(profitPct);
 
-  // Rule: pnl < 30% => stop at entry (no buffer), but NEVER widen once tightened.
+  // Rule: pnl < 30% => pre-trailing risk regime.
   if (profitPct < 0.30) {
     // If trailing had already activated, do not lower/reset stop.
     if (pos.trailingActive || Number.isFinite(Number(pos.activeTrailPct))) {
       return { changed, stopPriceUsd: pos.stopPriceUsd };
     }
 
-    const stopPrice = entry * (1 - Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
+    const nowMs = Date.now();
+    const entryAtMs = Date.parse(String(pos.entryAt || '')) || nowMs;
+    const ageMs = Math.max(0, nowMs - entryAtMs);
+    const armDelayMs = Math.max(0, Number(cfg.LIVE_STOP_ARM_DELAY_MS || 0));
+    const prearmCatPct = Math.max(0, Number(cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0));
+    const stopAtEntryBufferPct = Math.max(0, Number(cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0));
+    const stopPrice = ageMs < armDelayMs
+      ? (entry * (1 - prearmCatPct))
+      : (entry * (1 - stopAtEntryBufferPct));
+
     if (!Number.isFinite(Number(pos.stopPriceUsd)) || pos.stopPriceUsd < stopPrice) {
       pos.stopPriceUsd = stopPrice;
       pos.lastStopUpdateAt = nowIso();

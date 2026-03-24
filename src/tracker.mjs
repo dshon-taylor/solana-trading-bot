@@ -583,7 +583,7 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
               sizeLine,
               `• entry price (per token): $${Number(liveEntryPriceUsd || 0).toFixed(10)} (${state.positions[mint].entryPriceSource})`,
               `• stop: ${cfg.LIVE_MOMO_STOP_AT_ENTRY ? 'entry (scratch)' : `-${(cfg.STOP_LOSS_PCT*100).toFixed(1)}%`}`,
-              `• trail: adaptive tiers (0-30%=stop@entry, 30-80%=30%, ≥80%=22%, ≥150%=18%)`,
+              `• trail: adaptive tiers (<10%=no trail, 10-30%=12%, 30-80%=30%, ≥80%=22%, ≥150%=18%)`,
               `• tx: https://solscan.io/tx/${res.signature}`,
             ].join('\n'));
           }

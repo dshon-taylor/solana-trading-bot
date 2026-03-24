@@ -139,7 +139,7 @@ export function summarizeConfigForBoot(cfg) {
   lines.push(`  streaming: provider=${cfg.STREAMING_PROVIDER_MODE} laserEnabled=${cfg.LASERSTREAM_ENABLED} staging=${cfg.LASERSTREAM_STAGING_MODE} rollback=LASERSTREAM_ENABLED=false STREAMING_PROVIDER_MODE=existing`);
   lines.push(`  jup: tokenlist=${cfg.JUP_TOKENLIST_ENABLED} prefilter=${cfg.JUP_PREFILTER_ENABLED} amountUsd=${cfg.JUP_PREFILTER_AMOUNT_USD}`);
   lines.push(`  circuit: enabled=${cfg.CIRCUIT_BREAKER_ENABLED} cooldownMs=${cfg.CIRCUIT_COOLDOWN_MS} fails(dex=${cfg.CIRCUIT_FAILS_DEX}, rpc=${cfg.CIRCUIT_FAILS_RPC}, jup=${cfg.CIRCUIT_FAILS_JUP})`);
-  lines.push(`  risk: stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`);
+  lines.push(`  risk: stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} stopArmDelayMs=${cfg.LIVE_STOP_ARM_DELAY_MS} prearmCatStopPct=${cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT} trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`);
   lines.push(`  feeReserveSol=${cfg.MIN_SOL_FOR_FEES} softReserveSol=${cfg.CAPITAL_SOFT_RESERVE_SOL} retryBufferPct=${cfg.CAPITAL_RETRY_BUFFER_PCT} maxNewEntriesPerHour=${cfg.MAX_NEW_ENTRIES_PER_HOUR}`);
   lines.push(`  playbook: enabled=${cfg.PLAYBOOK_ENABLED} restart(threshold=${cfg.PLAYBOOK_RESTART_THRESHOLD},windowMs=${cfg.PLAYBOOK_RESTART_WINDOW_MS}) error(threshold=${cfg.PLAYBOOK_ERROR_THRESHOLD},windowMs=${cfg.PLAYBOOK_ERROR_WINDOW_MS}) stableRecoveryMs=${cfg.PLAYBOOK_STABLE_RECOVERY_MS}`);
   lines.push(`  slippageBps=${cfg.DEFAULT_SLIPPAGE_BPS} maxPriceImpactPct=${cfg.MAX_PRICE_IMPACT_PCT}`);
@@ -442,6 +442,8 @@ export function getConfig() {
   const LIVE_MOMO_MAX_SOL_PER_TRADE = Number(process.env.LIVE_MOMO_MAX_SOL_PER_TRADE || 1.0);
   const LIVE_MOMO_STOP_AT_ENTRY = (process.env.LIVE_MOMO_STOP_AT_ENTRY ?? 'true') === 'true';
   const LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT = Number(process.env.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT || 0.0005); // 0.05%
+  const LIVE_STOP_ARM_DELAY_MS = Math.max(0, Number(process.env.LIVE_STOP_ARM_DELAY_MS || 0));
+  const LIVE_PREARM_CATASTROPHIC_STOP_PCT = Math.max(0, Number(process.env.LIVE_PREARM_CATASTROPHIC_STOP_PCT || 0.07));
   const LIVE_MOMO_TRAIL_ACTIVATE_PCT = Number(process.env.LIVE_MOMO_TRAIL_ACTIVATE_PCT || 0.10);
   const LIVE_MOMO_TRAIL_DISTANCE_PCT = Number(process.env.LIVE_MOMO_TRAIL_DISTANCE_PCT || 0.12);
 
@@ -786,6 +788,8 @@ export function getConfig() {
     LIVE_MOMO_MAX_SOL_PER_TRADE,
     LIVE_MOMO_STOP_AT_ENTRY,
     LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
+    LIVE_STOP_ARM_DELAY_MS,
+    LIVE_PREARM_CATASTROPHIC_STOP_PCT,
     LIVE_MOMO_TRAIL_ACTIVATE_PCT,
     LIVE_MOMO_TRAIL_DISTANCE_PCT,
 
