@@ -4563,7 +4563,7 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
     `🛣️ Route: ${executionRoute}`,
     `🪙 Tokens received: ${tokensReceivedLine}`,
     `🟠 Stop: $${state.positions[mint].stopPriceUsd.toFixed(6)}  (entry hard stop)`,
-    `🟣 Trail: adaptive tiers (<10%=no trail, 10-30%=12%, 30-80%=30%, ≥80%=22%, ≥150%=18%)`,
+    `🟣 Trail: adaptive tiers (<10%=no trail, ≥10%=12%, ≥25%=18%, ≥60%=22%, ≥120%=18%)`,
     '',
     `💧 Liq: ${fmtUsd(liqUsdAtEntry)}   🧢 Mcap: ${fmtUsd(mcapUsdAtEntry)}`,
     `🌞 SOLUSD: $${solUsd.toFixed(2)}`,

@@ -40,7 +40,7 @@ export function buildHelpText() {
     '• Momentum (BirdEye-native): any 2 signals + hard guards (liq≥120k, v5m≥20k, tx1h≥80, spread≤3%, age≥180s, mcap/liq≤4.5, no >10% liq drop in 60s)',
     '• Snapshot safe requires: price + liquidity + fresh(<20s); stale retries once then skip 5m',
     '• HOT queue: cold 15–30s, hot 500–1000ms, confirm 200–400ms, HOT TTL up to 10m',
-    '• Trailing tiers (single-source live+paper): <10%=no trail, 10–30%=12%, 30–80%=30%, ≥80%=22%, ≥150%=18% (never widens)',
+    '• Trailing tiers (single-source live+paper): <10%=no trail, ≥10%=12%, ≥25%=18%, ≥60%=22%, ≥120%=18% (never widens)',
     '',
     '🚀 *Start here*',
     '• /status — wallet + equity + open count + gate',
