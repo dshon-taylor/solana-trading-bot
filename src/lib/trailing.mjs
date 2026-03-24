@@ -1,10 +1,14 @@
 export function computeTrailPct(pnl) {
-  if (pnl < 0.10) return null;
-  if (pnl >= 1.20) return 0.18;
-  if (pnl >= 0.60) return 0.22;
-  if (pnl >= 0.25) return 0.18;
-  if (pnl >= 0.10) return 0.12;
-  return null;
+  // Single source of truth for live + paper trailing tiers.
+  // <30%: no trailing (stop-at-entry regime)
+  // 30-80%: 30% trail
+  // 80-150%: 22% trail
+  // >=150%: 18% trail
+  if (!Number.isFinite(Number(pnl))) return null;
+  if (pnl < 0.30) return null;
+  if (pnl >= 1.50) return 0.18;
+  if (pnl >= 0.80) return 0.22;
+  return 0.30;
 }
 
 export function computeStopFromAnchor(anchorPrice, trailPct, slippagePct = 0) {

@@ -504,14 +504,15 @@ export function getConfig() {
     LIVE_MOMO_TRAIL_DISTANCE_PCT,
   });
 
-  // Paper-only risk rules (allow explicit override)
+  // Paper risk follows LIVE momentum risk as the single source of truth.
+  // (Legacy PAPER_* env overrides are intentionally ignored to prevent divergence.)
   const PAPER_STOP_LOSS_PCT = Number(process.env.PAPER_STOP_LOSS_PCT || 0.18);
-  const PAPER_STOP_AT_ENTRY = (process.env.PAPER_STOP_AT_ENTRY ?? String(derivedPaper.PAPER_STOP_AT_ENTRY)) === 'true';
-  const PAPER_STOP_AT_ENTRY_BUFFER_PCT = Number(process.env.PAPER_STOP_AT_ENTRY_BUFFER_PCT || derivedPaper.PAPER_STOP_AT_ENTRY_BUFFER_PCT);
+  const PAPER_STOP_AT_ENTRY = derivedPaper.PAPER_STOP_AT_ENTRY;
+  const PAPER_STOP_AT_ENTRY_BUFFER_PCT = Number(derivedPaper.PAPER_STOP_AT_ENTRY_BUFFER_PCT);
 
-  const PAPER_TRAIL_ACTIVATE_PCT = Number(process.env.PAPER_TRAIL_ACTIVATE_PCT || derivedPaper.PAPER_TRAIL_ACTIVATE_PCT);
-  const PAPER_TRAIL_DISTANCE_PCT = Number(process.env.PAPER_TRAIL_DISTANCE_PCT || derivedPaper.PAPER_TRAIL_DISTANCE_PCT);
-  const PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE = (process.env.PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE ?? String(derivedPaper.PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE)) === 'true';
+  const PAPER_TRAIL_ACTIVATE_PCT = Number(derivedPaper.PAPER_TRAIL_ACTIVATE_PCT);
+  const PAPER_TRAIL_DISTANCE_PCT = Number(derivedPaper.PAPER_TRAIL_DISTANCE_PCT);
+  const PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE = derivedPaper.PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE;
 
   // Forward outcome tracking ("what would have happened")
   // TRACK_ENABLED kept as backward-compatible alias for SIM_TRACKING_ENABLED.

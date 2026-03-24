@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { computeTrailPct } from './lib/trailing.mjs';
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -100,13 +101,17 @@ export function paperOnSample({ cfg, state, mint, symbol, entryAnchorPrice, tIso
       pos.exitPrice = pos.stopPx;
     }
 
-    // trailing
+    // trailing (single-source tier logic via computeTrailPct, same as live)
     if (pos.status === 'open') {
+      const profitPct = pct(pos.entryPrice, priceUsd);
+      const desiredTrailPct = computeTrailPct(profitPct);
+
       if (!pos.trailActivated) {
-        if (priceUsd >= pos.entryPrice * (1 + cfg.PAPER_TRAIL_ACTIVATE_PCT)) {
+        if (desiredTrailPct != null) {
           pos.trailActivated = true;
+          pos.activeTrailPct = desiredTrailPct;
           pos.trailHigh = priceUsd;
-          pos.trailStop = pos.trailHigh * (1 - cfg.PAPER_TRAIL_DISTANCE_PCT);
+          pos.trailStop = pos.trailHigh * (1 - desiredTrailPct);
 
           // Raise stop to breakeven once trailing activates ("stop loss to our entry")
           if (cfg.PAPER_BREAKEVEN_ON_TRAIL_ACTIVATE) {
@@ -114,9 +119,14 @@ export function paperOnSample({ cfg, state, mint, symbol, entryAnchorPrice, tIso
           }
         }
       } else {
+        // Never widen trail: if tier changes, only allow tighter (smaller pct) values.
+        if (desiredTrailPct != null && Number.isFinite(Number(pos.activeTrailPct))) {
+          pos.activeTrailPct = Math.min(Number(pos.activeTrailPct), Number(desiredTrailPct));
+        }
         if (priceUsd > pos.trailHigh) {
           pos.trailHigh = priceUsd;
-          pos.trailStop = pos.trailHigh * (1 - cfg.PAPER_TRAIL_DISTANCE_PCT);
+          const activeTrail = Number.isFinite(Number(pos.activeTrailPct)) ? Number(pos.activeTrailPct) : Number(cfg.PAPER_TRAIL_DISTANCE_PCT || 0.30);
+          pos.trailStop = pos.trailHigh * (1 - activeTrail);
         }
         if (priceUsd <= pos.trailStop) {
           pos.status = 'closed';
