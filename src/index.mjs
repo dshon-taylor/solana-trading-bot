@@ -1817,6 +1817,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationCurrentLiqUsd: Number.isFinite(Number(extra?.continuationCurrentLiqUsd)) ? Number(extra.continuationCurrentLiqUsd) : null,
         continuationLiqChangePct: Number.isFinite(Number(extra?.continuationLiqChangePct)) ? Number(extra.continuationLiqChangePct) : null,
         continuationPriceSource: String(extra?.continuationPriceSource || 'unknown'),
+        continuationInitialSourceUsed: String(extra?.continuationInitialSourceUsed || 'unknown'),
+        continuationDominantSourceUsed: String(extra?.continuationDominantSourceUsed || 'unknown'),
         continuationConfirmStartedAtMs: Number.isFinite(Number(extra?.continuationConfirmStartedAtMs)) ? Number(extra.continuationConfirmStartedAtMs) : null,
         continuationWsUpdateCountWithinWindow: Number(extra?.continuationWsUpdateCountWithinWindow || 0) || 0,
         continuationUniqueOhlcvTicksWithinWindow: Number(extra?.continuationUniqueOhlcvTicksWithinWindow || 0) || 0,
@@ -3464,6 +3466,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
         continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
         continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
+        continuationInitialSourceUsed: String(confirmGate?.diag?.initialSourceUsed || 'unknown'),
+        continuationDominantSourceUsed: String(confirmGate?.diag?.dominantSourceUsed || 'unknown'),
         continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
         continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
         continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
@@ -3559,6 +3563,8 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationCurrentLiqUsd: Number.isFinite(Number(confirmGate?.diag?.currentLiqUsd)) ? Number(confirmGate.diag.currentLiqUsd) : null,
       continuationLiqChangePct: Number.isFinite(Number(confirmGate?.diag?.liqChangePct)) ? Number(confirmGate.diag.liqChangePct) : null,
       continuationPriceSource: String(confirmGate?.diag?.priceSource || 'unknown'),
+      continuationInitialSourceUsed: String(confirmGate?.diag?.initialSourceUsed || 'unknown'),
+      continuationDominantSourceUsed: String(confirmGate?.diag?.dominantSourceUsed || 'unknown'),
       continuationConfirmStartedAtMs: Number.isFinite(Number(confirmGate?.diag?.confirmStartedAtMs)) ? Number(confirmGate.diag.confirmStartedAtMs) : null,
       continuationWsUpdateCountWithinWindow: Number(confirmGate?.diag?.wsUpdateCountWithinWindow || 0) || 0,
       continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
@@ -6460,6 +6466,8 @@ async function main() {
             continuationCurrentLiqUsd: Number(withContinuation?.continuationCurrentLiqUsd ?? withTx?.continuationCurrentLiqUsd ?? ev?.continuationCurrentLiqUsd ?? NaN),
             continuationLiqChangePct: Number(withContinuation?.continuationLiqChangePct ?? withTx?.continuationLiqChangePct ?? ev?.continuationLiqChangePct ?? NaN),
             continuationPriceSource: String(withContinuation?.continuationPriceSource ?? withTx?.continuationPriceSource ?? ev?.continuationPriceSource ?? 'unknown'),
+            continuationInitialSourceUsed: String(withContinuation?.continuationInitialSourceUsed ?? withTx?.continuationInitialSourceUsed ?? ev?.continuationInitialSourceUsed ?? 'unknown'),
+            continuationDominantSourceUsed: String(withContinuation?.continuationDominantSourceUsed ?? withTx?.continuationDominantSourceUsed ?? ev?.continuationDominantSourceUsed ?? 'unknown'),
             continuationConfirmStartedAtMs: Number(withContinuation?.continuationConfirmStartedAtMs ?? withTx?.continuationConfirmStartedAtMs ?? ev?.continuationConfirmStartedAtMs ?? NaN),
             continuationWsUpdateCountWithinWindow: Number(withContinuation?.continuationWsUpdateCountWithinWindow ?? withTx?.continuationWsUpdateCountWithinWindow ?? ev?.continuationWsUpdateCountWithinWindow ?? 0),
             continuationUniqueOhlcvTicksWithinWindow: Number(withContinuation?.continuationUniqueOhlcvTicksWithinWindow ?? withTx?.continuationUniqueOhlcvTicksWithinWindow ?? ev?.continuationUniqueOhlcvTicksWithinWindow ?? 0),
@@ -6759,12 +6767,14 @@ async function main() {
           .map((r) => {
             const label = formatDiagMintLabel(r.mint);
             const source = String(r?.continuationPriceSource || 'unknown');
+            const initialSource = String(r?.continuationInitialSourceUsed || 'unknown');
+            const dominantSource = String(r?.continuationDominantSourceUsed || 'unknown');
             const wsTs = Array.isArray(r?.continuationWsUpdateTimestamps) ? r.continuationWsUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const wsPx = Array.isArray(r?.continuationWsUpdatePrices) ? r.continuationWsUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
             const trTs = Array.isArray(r?.continuationTradeUpdateTimestamps) ? r.continuationTradeUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const trPx = Array.isArray(r?.continuationTradeUpdatePrices) ? r.continuationTradeUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
             const readsPart = `selectedTradeReads=${Number(r?.continuationSelectedTradeReads || 0)} selectedOhlcvReads=${Number(r?.continuationSelectedOhlcvReads || 0)} uniqueTradeTicks=${Number(r?.continuationUniqueTradeTicksWithinWindow || 0)} uniqueOhlcvTicks=${Number(r?.continuationUniqueOhlcvTicksWithinWindow || 0)}`;
-            const sourceMismatchPart = `runupSourceUsed=${String(r?.continuationRunupSourceUsed || 'none')} tradeSequenceSourceUsed=${String(r?.continuationTradeSequenceSourceUsed || 'ws_trade')} tradeTickCountAtRunupMoment=${Number(r?.continuationTradeTickCountAtRunupMoment || 0)} tradeSequenceEligibleAtRunup=${r?.continuationTradeSequenceEligibleAtRunup ? 'true' : 'false'}`;
+            const sourceMismatchPart = `initialSourceUsed=${initialSource} dominantSourceUsed=${dominantSource} runupSourceUsed=${String(r?.continuationRunupSourceUsed || 'none')} tradeSequenceSourceUsed=${String(r?.continuationTradeSequenceSourceUsed || 'ws_trade')} tradeTickCountAtRunupMoment=${Number(r?.continuationTradeTickCountAtRunupMoment || 0)} tradeSequenceEligibleAtRunup=${r?.continuationTradeSequenceEligibleAtRunup ? 'true' : 'false'}`;
             const runupSatisfiedOnPart = `runupSatisfiedOn=${(Number(r?.continuationMaxRunupPct || 0) >= 0.015) ? String(r?.continuationRunupSourceUsed || 'unknown') : 'none'}`;
             const sourcePart = source === 'ws_trade'
               ? `tradeTs=[${trTs}] tradePx=[${trPx}]`

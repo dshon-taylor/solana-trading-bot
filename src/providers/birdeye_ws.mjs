@@ -149,15 +149,33 @@ class BirdEyeWS extends EventEmitter {
       const arr = cache.get(k) || [];
       const tsMs = Number(d?.blockUnixTime || 0) > 0 ? (Number(d.blockUnixTime) * 1000) : Date.now();
       const side = String(d?.side || '').toLowerCase();
-      const priceUsdCandidates = [
-        Number(d?.tokenPrice),
-        Number(d?.pricePair),
-        Number(d?.to?.price),
-        Number(d?.from?.price),
-        Number(d?.to?.nearestPrice),
-        Number(d?.from?.nearestPrice),
-      ].filter((x) => Number.isFinite(x) && x > 0);
-      const priceUsd = priceUsdCandidates.length ? priceUsdCandidates[0] : null;
+
+      // Normalize trade-derived price into token USD semantics.
+      // Prefer tokenPrice for simple token subscriptions; avoid pricePair (can represent pair ratio semantics).
+      const tokenAddress = String(d?.tokenAddress || '').trim();
+      const fromAddress = String(d?.from?.address || '').trim();
+      const toAddress = String(d?.to?.address || '').trim();
+      const tokenPrice = Number(d?.tokenPrice);
+      const fromPrice = Number(d?.from?.price);
+      const toPrice = Number(d?.to?.price);
+      const fromNearest = Number(d?.from?.nearestPrice);
+      const toNearest = Number(d?.to?.nearestPrice);
+
+      let priceUsd = null;
+      if (Number.isFinite(tokenPrice) && tokenPrice > 0) {
+        priceUsd = tokenPrice;
+      } else if (tokenAddress && fromAddress && tokenAddress === fromAddress) {
+        if (Number.isFinite(fromPrice) && fromPrice > 0) priceUsd = fromPrice;
+        else if (Number.isFinite(fromNearest) && fromNearest > 0) priceUsd = fromNearest;
+      } else if (tokenAddress && toAddress && tokenAddress === toAddress) {
+        if (Number.isFinite(toPrice) && toPrice > 0) priceUsd = toPrice;
+        else if (Number.isFinite(toNearest) && toNearest > 0) priceUsd = toNearest;
+      } else {
+        // Last-resort fallback when tokenAddress missing/ambiguous.
+        const generic = [fromPrice, toPrice, fromNearest, toNearest].find((x) => Number.isFinite(x) && x > 0);
+        priceUsd = Number.isFinite(generic) ? generic : null;
+      }
+
       arr.push({
         t: tsMs,
         side,

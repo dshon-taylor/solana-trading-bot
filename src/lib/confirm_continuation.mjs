@@ -23,7 +23,7 @@ function readRuntimeTuning() {
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
   return {
     startPrice,
     highPrice,
@@ -34,6 +34,8 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, f
     passReason,
     failReason,
     priceSource,
+    initialSourceUsed: String(initialSourceUsed || 'unknown'),
+    dominantSourceUsed: String(dominantSourceUsed || 'unknown'),
     timeToRunupPassMs,
     timeoutWasFlatOrNegative,
     wsReads,
@@ -112,6 +114,16 @@ export async function confirmContinuationGate({
   let tradeTickCountAtRunupMoment = 0;
   let tradeSequenceEligibleAtRunup = false;
 
+  const getDominantSourceUsed = () => {
+    const trade = Number(selectedTradeReads || 0);
+    const ohlcv = Number(selectedOhlcvReads || 0);
+    const fallback = Number(snapshotReads || 0);
+    if (trade >= ohlcv && trade >= fallback && trade > 0) return 'ws_trade';
+    if (ohlcv >= trade && ohlcv >= fallback && ohlcv > 0) return 'ws_ohlcv';
+    if (fallback > 0) return 'snapshot_fallback';
+    return 'unknown';
+  };
+
   const readWsOrFallbackPrice = (nowMs) => {
     const txArr = cacheImpl.get(`birdeye:ws:tx:${mint}`) || [];
     const latestTrade = Array.isArray(txArr) ? [...txArr].reverse().find((x) => Number.isFinite(Number(x?.priceUsd)) && Number(x?.priceUsd) > 0) : null;
@@ -166,6 +178,8 @@ export async function confirmContinuationGate({
           passReason: 'none',
           failReason,
           priceSource: start?.source || 'unknown',
+          initialSourceUsed: start?.source || 'unknown',
+          dominantSourceUsed: getDominantSourceUsed(),
           timeToRunupPassMs: null,
           timeoutWasFlatOrNegative: null,
           wsReads,
@@ -267,6 +281,8 @@ export async function confirmContinuationGate({
             passReason,
             failReason,
             priceSource: tick?.source || 'unknown',
+            initialSourceUsed: start?.source || 'unknown',
+            dominantSourceUsed: getDominantSourceUsed(),
             timeToRunupPassMs,
             timeoutWasFlatOrNegative: null,
             wsReads,
@@ -312,6 +328,8 @@ export async function confirmContinuationGate({
           passReason,
           failReason,
           priceSource: tick?.source || 'unknown',
+          initialSourceUsed: start?.source || 'unknown',
+          dominantSourceUsed: getDominantSourceUsed(),
           timeToRunupPassMs,
           timeoutWasFlatOrNegative: null,
           wsReads,
@@ -351,6 +369,8 @@ export async function confirmContinuationGate({
           passReason,
           failReason,
           priceSource: tick?.source || 'unknown',
+          initialSourceUsed: start?.source || 'unknown',
+          dominantSourceUsed: getDominantSourceUsed(),
           timeToRunupPassMs,
           timeoutWasFlatOrNegative: null,
           wsReads,
@@ -400,6 +420,8 @@ export async function confirmContinuationGate({
           passReason,
           failReason,
           priceSource: tick?.source || 'unknown',
+          initialSourceUsed: start?.source || 'unknown',
+          dominantSourceUsed: getDominantSourceUsed(),
           timeToRunupPassMs,
           timeoutWasFlatOrNegative: false,
           wsReads,
@@ -444,6 +466,8 @@ export async function confirmContinuationGate({
       passReason,
       failReason,
       priceSource: start?.source || 'unknown',
+      initialSourceUsed: start?.source || 'unknown',
+      dominantSourceUsed: getDominantSourceUsed(),
       timeToRunupPassMs,
       timeoutWasFlatOrNegative,
       wsReads,
