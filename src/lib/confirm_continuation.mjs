@@ -23,7 +23,7 @@ function readRuntimeTuning() {
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, failReason, priceSource, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
   return {
     startPrice,
     highPrice,
@@ -55,6 +55,10 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, passReason, f
     maxConsecutiveTradeUpticks: Number(maxConsecutiveTradeUpticks || 0),
     requireTradeUpticks: !!requireTradeUpticks,
     minConsecutiveTradeUpticks: Number(minConsecutiveTradeUpticks || 0),
+    runupSourceUsed: String(runupSourceUsed || 'none'),
+    tradeSequenceSourceUsed: String(tradeSequenceSourceUsed || 'ws_trade'),
+    tradeTickCountAtRunupMoment: Number(tradeTickCountAtRunupMoment || 0),
+    tradeSequenceEligibleAtRunup: !!tradeSequenceEligibleAtRunup,
   };
 }
 
@@ -103,6 +107,10 @@ export async function confirmContinuationGate({
   let maxConsecutiveTradeUpticks = 0;
   let prevTradePriceForTrend = null;
   let runupSeenInWindow = false;
+  let runupSourceUsed = 'none';
+  const tradeSequenceSourceUsed = 'ws_trade';
+  let tradeTickCountAtRunupMoment = 0;
+  let tradeSequenceEligibleAtRunup = false;
 
   const readWsOrFallbackPrice = (nowMs) => {
     const txArr = cacheImpl.get(`birdeye:ws:tx:${mint}`) || [];
@@ -175,6 +183,10 @@ export async function confirmContinuationGate({
           maxConsecutiveTradeUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
+          runupSourceUsed,
+          tradeSequenceSourceUsed,
+          tradeTickCountAtRunupMoment,
+          tradeSequenceEligibleAtRunup,
         }),
       },
     };
@@ -272,7 +284,11 @@ export async function confirmContinuationGate({
             maxConsecutiveTradeUpticks,
             requireTradeUpticks: rt.requireTradeUpticks,
             minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
-          }),
+          runupSourceUsed,
+          tradeSequenceSourceUsed,
+          tradeTickCountAtRunupMoment,
+          tradeSequenceEligibleAtRunup,
+        }),
           confirmStartLiqUsd: startLiq,
           currentLiqUsd: liqNow,
           liqChangePct,
@@ -313,6 +329,10 @@ export async function confirmContinuationGate({
           maxConsecutiveTradeUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
+          runupSourceUsed,
+          tradeSequenceSourceUsed,
+          tradeTickCountAtRunupMoment,
+          tradeSequenceEligibleAtRunup,
         }),
       };
     }
@@ -348,12 +368,19 @@ export async function confirmContinuationGate({
           maxConsecutiveTradeUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
+          runupSourceUsed,
+          tradeSequenceSourceUsed,
+          tradeTickCountAtRunupMoment,
+          tradeSequenceEligibleAtRunup,
         }),
       };
     }
 
     if (runupPct >= rt.passPct || p >= (startPrice * (1 + rt.passPct))) {
       runupSeenInWindow = true;
+      runupSourceUsed = String(tick?.source || 'unknown');
+      tradeTickCountAtRunupMoment = Array.isArray(tradeUpdateTimestamps) ? tradeUpdateTimestamps.length : 0;
+      tradeSequenceEligibleAtRunup = tradeTickCountAtRunupMoment >= (rt.minConsecutiveTradeUpticks + 1);
       const tradeTrendOk = !rt.requireTradeUpticks || maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
       if (!tradeTrendOk) {
         await sleepFn(rt.sleepMs);
@@ -390,6 +417,10 @@ export async function confirmContinuationGate({
           maxConsecutiveTradeUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
+          runupSourceUsed,
+          tradeSequenceSourceUsed,
+          tradeTickCountAtRunupMoment,
+          tradeSequenceEligibleAtRunup,
         }),
       };
     }
