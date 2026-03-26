@@ -1824,7 +1824,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationUniqueOhlcvTicksWithinWindow: Number(extra?.continuationUniqueOhlcvTicksWithinWindow || 0) || 0,
         continuationTradeUpdateCountWithinWindow: Number(extra?.continuationTradeUpdateCountWithinWindow || 0) || 0,
         continuationUniqueTradeTicksWithinWindow: Number(extra?.continuationUniqueTradeTicksWithinWindow || 0) || 0,
-        continuationRunupSourceUsed: String(extra?.continuationRunupSourceUsed || 'none'),
+        continuationRunupSourceUsed: String(extra?.continuationRunupSourceUsed || 'no_runup'),
         continuationTradeSequenceSourceUsed: String(extra?.continuationTradeSequenceSourceUsed || 'ws_trade'),
         continuationTradeTickCountAtRunupMoment: Number(extra?.continuationTradeTickCountAtRunupMoment || 0) || 0,
         continuationTradeSequenceEligibleAtRunup: !!extra?.continuationTradeSequenceEligibleAtRunup,
@@ -3473,7 +3473,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
         continuationTradeUpdateCountWithinWindow: Number(confirmGate?.diag?.tradeUpdateCountWithinWindow || 0) || 0,
         continuationUniqueTradeTicksWithinWindow: Number(confirmGate?.diag?.uniqueTradeTicksWithinWindow || 0) || 0,
-        continuationRunupSourceUsed: String(confirmGate?.diag?.runupSourceUsed || 'none'),
+        continuationRunupSourceUsed: String(confirmGate?.diag?.runupSourceUsed || 'no_runup'),
         continuationTradeSequenceSourceUsed: String(confirmGate?.diag?.tradeSequenceSourceUsed || 'ws_trade'),
         continuationTradeTickCountAtRunupMoment: Number(confirmGate?.diag?.tradeTickCountAtRunupMoment || 0) || 0,
         continuationTradeSequenceEligibleAtRunup: !!confirmGate?.diag?.tradeSequenceEligibleAtRunup,
@@ -3487,6 +3487,10 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         continuationTradeUpdateTimestamps: Array.isArray(confirmGate?.diag?.tradeUpdateTimestamps) ? confirmGate.diag.tradeUpdateTimestamps.slice(0, 24) : [],
         continuationTradeUpdatePrices: Array.isArray(confirmGate?.diag?.tradeUpdatePrices) ? confirmGate.diag.tradeUpdatePrices.slice(0, 24) : [],
       });
+      if (continuationActive && String(confirmGate?.failReason || '') === 'dataUnavailable') {
+        // Infra/data starvation: do not mark as strategy failure; allow natural re-check next cycle.
+        continue;
+      }
       if (continuationActive && ['windowExpiredStall', 'windowExpired'].includes(String(confirmGate?.failReason || ''))) {
         state.runtime ||= {};
         state.runtime.confirmRetryGateByMint ||= {};
@@ -3570,7 +3574,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       continuationUniqueOhlcvTicksWithinWindow: Number(confirmGate?.diag?.uniqueOhlcvTicksWithinWindow || 0) || 0,
       continuationTradeUpdateCountWithinWindow: Number(confirmGate?.diag?.tradeUpdateCountWithinWindow || 0) || 0,
       continuationUniqueTradeTicksWithinWindow: Number(confirmGate?.diag?.uniqueTradeTicksWithinWindow || 0) || 0,
-      continuationRunupSourceUsed: String(confirmGate?.diag?.runupSourceUsed || 'none'),
+      continuationRunupSourceUsed: String(confirmGate?.diag?.runupSourceUsed || 'no_runup'),
       continuationTradeSequenceSourceUsed: String(confirmGate?.diag?.tradeSequenceSourceUsed || 'ws_trade'),
       continuationTradeTickCountAtRunupMoment: Number(confirmGate?.diag?.tradeTickCountAtRunupMoment || 0) || 0,
       continuationTradeSequenceEligibleAtRunup: !!confirmGate?.diag?.tradeSequenceEligibleAtRunup,
@@ -6473,7 +6477,7 @@ async function main() {
             continuationUniqueOhlcvTicksWithinWindow: Number(withContinuation?.continuationUniqueOhlcvTicksWithinWindow ?? withTx?.continuationUniqueOhlcvTicksWithinWindow ?? ev?.continuationUniqueOhlcvTicksWithinWindow ?? 0),
             continuationTradeUpdateCountWithinWindow: Number(withContinuation?.continuationTradeUpdateCountWithinWindow ?? withTx?.continuationTradeUpdateCountWithinWindow ?? ev?.continuationTradeUpdateCountWithinWindow ?? 0),
             continuationUniqueTradeTicksWithinWindow: Number(withContinuation?.continuationUniqueTradeTicksWithinWindow ?? withTx?.continuationUniqueTradeTicksWithinWindow ?? ev?.continuationUniqueTradeTicksWithinWindow ?? 0),
-            continuationRunupSourceUsed: String(withContinuation?.continuationRunupSourceUsed ?? withTx?.continuationRunupSourceUsed ?? ev?.continuationRunupSourceUsed ?? 'none'),
+            continuationRunupSourceUsed: String(withContinuation?.continuationRunupSourceUsed ?? withTx?.continuationRunupSourceUsed ?? ev?.continuationRunupSourceUsed ?? 'no_runup'),
             continuationTradeSequenceSourceUsed: String(withContinuation?.continuationTradeSequenceSourceUsed ?? withTx?.continuationTradeSequenceSourceUsed ?? ev?.continuationTradeSequenceSourceUsed ?? 'ws_trade'),
             continuationTradeTickCountAtRunupMoment: Number(withContinuation?.continuationTradeTickCountAtRunupMoment ?? withTx?.continuationTradeTickCountAtRunupMoment ?? ev?.continuationTradeTickCountAtRunupMoment ?? 0),
             continuationTradeSequenceEligibleAtRunup: !!(withContinuation?.continuationTradeSequenceEligibleAtRunup ?? withTx?.continuationTradeSequenceEligibleAtRunup ?? ev?.continuationTradeSequenceEligibleAtRunup),
@@ -6719,13 +6723,13 @@ async function main() {
         const tradeSequenceSourceUsedCounts = {};
         for (const r of confirmCandidatesDecorated) {
           if (Number(r?.continuationMaxRunupPct || 0) >= 0.015) {
-            const k = String(r?.continuationRunupSourceUsed || 'none');
+            const k = String(r?.continuationRunupSourceUsed || 'no_runup');
             runupSourceUsedCounts[k] = Number(runupSourceUsedCounts[k] || 0) + 1;
           }
           const ts = String(r?.continuationTradeSequenceSourceUsed || 'ws_trade');
           tradeSequenceSourceUsedCounts[ts] = Number(tradeSequenceSourceUsedCounts[ts] || 0) + 1;
         }
-        const runupSourceUsedSummary = Object.entries(runupSourceUsedCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
+        const runupSourceUsedSummary = Object.entries(runupSourceUsedCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'no_runup';
         const tradeSequenceSourceUsedSummary = Object.entries(tradeSequenceSourceUsedCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const medianLocal = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
         const medianRunupPct = medianLocal(confirmCandidatesDecorated.map((r) => Number(r.continuationMaxRunupPct || NaN)).filter((v) => Number.isFinite(v)));
@@ -6774,8 +6778,8 @@ async function main() {
             const trTs = Array.isArray(r?.continuationTradeUpdateTimestamps) ? r.continuationTradeUpdateTimestamps.slice(0, 10).map((x)=>fmtCt(Number(x))).join(', ') : 'none';
             const trPx = Array.isArray(r?.continuationTradeUpdatePrices) ? r.continuationTradeUpdatePrices.slice(0, 10).map((x)=>Number(x).toFixed(10)).join(', ') : 'none';
             const readsPart = `selectedTradeReads=${Number(r?.continuationSelectedTradeReads || 0)} selectedOhlcvReads=${Number(r?.continuationSelectedOhlcvReads || 0)} uniqueTradeTicks=${Number(r?.continuationUniqueTradeTicksWithinWindow || 0)} uniqueOhlcvTicks=${Number(r?.continuationUniqueOhlcvTicksWithinWindow || 0)}`;
-            const sourceMismatchPart = `initialSourceUsed=${initialSource} dominantSourceUsed=${dominantSource} runupSourceUsed=${String(r?.continuationRunupSourceUsed || 'none')} tradeSequenceSourceUsed=${String(r?.continuationTradeSequenceSourceUsed || 'ws_trade')} tradeTickCountAtRunupMoment=${Number(r?.continuationTradeTickCountAtRunupMoment || 0)} tradeSequenceEligibleAtRunup=${r?.continuationTradeSequenceEligibleAtRunup ? 'true' : 'false'}`;
-            const runupSatisfiedOnPart = `runupSatisfiedOn=${(Number(r?.continuationMaxRunupPct || 0) >= 0.015) ? String(r?.continuationRunupSourceUsed || 'unknown') : 'none'}`;
+            const sourceMismatchPart = `initialSourceUsed=${initialSource} dominantSourceUsed=${dominantSource} runupSourceUsed=${String(r?.continuationRunupSourceUsed || 'no_runup')} tradeSequenceSourceUsed=${String(r?.continuationTradeSequenceSourceUsed || 'ws_trade')} tradeTickCountAtRunupMoment=${Number(r?.continuationTradeTickCountAtRunupMoment || 0)} tradeSequenceEligibleAtRunup=${r?.continuationTradeSequenceEligibleAtRunup ? 'true' : 'false'}`;
+            const runupSatisfiedOnPart = `runupSatisfiedOn=${(Number(r?.continuationMaxRunupPct || 0) >= 0.015) ? String(r?.continuationRunupSourceUsed || 'unknown') : 'no_runup'}`;
             const sourcePart = source === 'ws_trade'
               ? `tradeTs=[${trTs}] tradePx=[${trPx}]`
               : (source === 'ws_ohlcv'
@@ -6785,12 +6789,13 @@ async function main() {
                   : `fallback(no fresh ws/trade in window)`));
             return `- ${label} startedAt=${Number.isFinite(Number(r?.continuationConfirmStartedAtMs)) ? fmtCt(Number(r.continuationConfirmStartedAtMs)) : 'n/a'} startPx=${Number.isFinite(Number(r?.continuationStartPrice)) ? Number(r.continuationStartPrice).toFixed(10) : 'n/a'} source=${source} ${readsPart} ${sourceMismatchPart} ${runupSatisfiedOnPart} ${sourcePart} final=${r.final} reason=${String(r?.rejectReason || r?.continuationPassReason || 'none')}`;
           });
-        const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpiredWeak: 0, liqDegraded: 0, impact: 0, route: 0, retryCooldown: 0, retryNoImprovement: 0, other: 0 };
+        const continuationFailMix = { hardDip: 0, windowExpiredStall: 0, windowExpiredWeak: 0, dataUnavailable: 0, liqDegraded: 0, impact: 0, route: 0, retryCooldown: 0, retryNoImprovement: 0, other: 0 };
         for (const [k, v] of Object.entries(confirmRejectCounts)) {
           const n = Number(v || 0);
           if (k.includes('confirmContinuation.hardDip')) continuationFailMix.hardDip += n;
           else if (k.includes('confirmContinuation.windowExpiredStall')) continuationFailMix.windowExpiredStall += n;
           else if (k.includes('confirmContinuation.windowExpired') || k.includes('confirmContinuation.windowClose')) continuationFailMix.windowExpiredWeak += n;
+          else if (k.includes('confirmContinuation.dataUnavailable')) continuationFailMix.dataUnavailable += n;
           else if (k.includes('confirmContinuation.liqDegraded') || k.includes('confirmContinuation.liq') || k.includes('confirm.fullLiqRejected')) continuationFailMix.liqDegraded += n;
           else if (k.includes('confirmContinuation.impact') || k.includes('confirmPriceImpact')) continuationFailMix.impact += n;
           else if (k.includes('confirmNoRoute')) continuationFailMix.route += n;
@@ -6819,7 +6824,7 @@ async function main() {
           'CONTINUATION OUTCOMES',
           `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
           `- pass: runup=${Number(continuationPassReasonCounts.runup || 0)}`,
-          `- fail: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpiredWeak=${continuationFailMix.windowExpiredWeak} liqDegraded=${continuationFailMix.liqDegraded} route=${continuationFailMix.route} impact=${continuationFailMix.impact} retryCooldown=${continuationFailMix.retryCooldown} retryNoImprovement=${continuationFailMix.retryNoImprovement} other=${continuationFailMix.other}`,
+          `- fail: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpiredWeak=${continuationFailMix.windowExpiredWeak} dataUnavailable=${continuationFailMix.dataUnavailable} liqDegraded=${continuationFailMix.liqDegraded} route=${continuationFailMix.route} impact=${continuationFailMix.impact} retryCooldown=${continuationFailMix.retryCooldown} retryNoImprovement=${continuationFailMix.retryNoImprovement} other=${continuationFailMix.other}`,
           `- reached+1.5%InWindow=${confirmReachedRunup15}`,
           `- reached+1.5%And2PositiveTrades=${confirmReachedRunupAndTradeSeq}`,
           `- failedAfterRunupNoTradeSequence=${failedAfterRunupNoTradeSequence}`,

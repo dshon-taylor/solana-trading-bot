@@ -57,7 +57,7 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, 
     maxConsecutiveTradeUpticks: Number(maxConsecutiveTradeUpticks || 0),
     requireTradeUpticks: !!requireTradeUpticks,
     minConsecutiveTradeUpticks: Number(minConsecutiveTradeUpticks || 0),
-    runupSourceUsed: String(runupSourceUsed || 'none'),
+    runupSourceUsed: String(runupSourceUsed || 'no_runup'),
     tradeSequenceSourceUsed: String(tradeSequenceSourceUsed || 'ws_trade'),
     tradeTickCountAtRunupMoment: Number(tradeTickCountAtRunupMoment || 0),
     tradeSequenceEligibleAtRunup: !!tradeSequenceEligibleAtRunup,
@@ -109,7 +109,7 @@ export async function confirmContinuationGate({
   let maxConsecutiveTradeUpticks = 0;
   let prevTradePriceForTrend = null;
   let runupSeenInWindow = false;
-  let runupSourceUsed = 'none';
+  let runupSourceUsed = 'no_runup';
   const tradeSequenceSourceUsed = 'ws_trade';
   let tradeTickCountAtRunupMoment = 0;
   let tradeSequenceEligibleAtRunup = false;
@@ -164,7 +164,7 @@ export async function confirmContinuationGate({
   const start = readWsOrFallbackPrice(startNow);
   const startPrice = toNum(start?.price, 0);
   if (!(startPrice > 0)) {
-    const failReason = 'windowExpiredStall';
+    const failReason = 'dataUnavailable';
     return {
       ok: false,
       failReason,
@@ -453,7 +453,11 @@ export async function confirmContinuationGate({
   const finalRet = (finalPrice / startPrice) - 1;
   const timeoutWasFlatOrNegative = finalRet <= 0;
   const tradeTrendMissing = rt.requireTradeUpticks && runupSeenInWindow && maxConsecutiveTradeUpticks < rt.minConsecutiveTradeUpticks;
-  failReason = tradeTrendMissing ? 'runupNoTradeTrendConfirm' : (timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired');
+  const noLiveDataEvidence = Number(selectedTradeReads || 0) <= 0 && Number(selectedOhlcvReads || 0) <= 0;
+  failReason = tradeTrendMissing
+    ? 'runupNoTradeTrendConfirm'
+    : (noLiveDataEvidence ? 'dataUnavailable' : (timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired'));
+  if (!runupSeenInWindow) runupSourceUsed = 'no_runup';
   return {
     ok: false,
     failReason,

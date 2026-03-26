@@ -201,7 +201,7 @@ describe('confirmContinuationGate', () => {
     });
 
     expect(res.ok).toBe(false);
-    expect(String(res.failReason || '')).toMatch(/windowExpired/);
+    expect(String(res.failReason || '')).toMatch(/windowExpired|dataUnavailable/);
     expect(Number(res?.diag?.snapshotReads || 0)).toBeGreaterThan(0);
 
     const wsReads = cache.getCalls.filter((k) => k === 'birdeye:ws:price:MintStale').length;
