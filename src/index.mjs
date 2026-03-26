@@ -6710,6 +6710,8 @@ async function main() {
         const showPreconfirmPlumbing = preConfirmMcapMissingRejected > 0 || preConfirmMcapLowRejected > 0;
 
         const continuationModeActive = (process.env.CONFIRM_CONTINUATION_ACTIVE ?? 'false') === 'true';
+        const confirmWindowMs = Math.max(250, Number(process.env.CONFIRM_CONTINUATION_WINDOW_MS || 15000));
+        const confirmWindowSec = Math.round(confirmWindowMs / 1000);
         const confirmReachedRunup15 = confirmCandidatesDecorated.filter((r) => Number.isFinite(Number(r.continuationMaxRunupPct)) && Number(r.continuationMaxRunupPct) >= 0.015).length;
         const requireTradeSequence = (process.env.CONFIRM_CONTINUATION_REQUIRE_TRADE_UPTICKS ?? 'false') === 'true';
         const minTradeSequence = Math.max(1, Number(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS || 2));
@@ -6740,7 +6742,22 @@ async function main() {
           if (!(Number.isFinite(s) && Number.isFinite(f) && s > 0)) return NaN;
           return (f / s) - 1;
         }).filter((v) => Number.isFinite(v)));
-        const medianTimeToRunupPassMs = medianLocal(confirmCandidatesDecorated.filter((r) => r.final === 'passed').map((r) => Number(r.continuationTimeToRunupPassMs || NaN)).filter((v) => Number.isFinite(v) && v >= 0));
+        const passedRunupTimesMs = confirmCandidatesDecorated
+          .filter((r) => r.final === 'passed')
+          .map((r) => Number(r.continuationTimeToRunupPassMs || NaN))
+          .filter((v) => Number.isFinite(v) && v >= 0);
+        const medianTimeToRunupPassMs = medianLocal(passedRunupTimesMs);
+        const medianTimeToRunupWindowPct = Number.isFinite(medianTimeToRunupPassMs) && confirmWindowMs > 0
+          ? ((Number(medianTimeToRunupPassMs) / confirmWindowMs) * 100)
+          : null;
+        const runupTimingBuckets = { lt10s: 0, s10_20: 0, s20_40: 0, s40_60: 0, gt60s: 0 };
+        for (const tMs of passedRunupTimesMs) {
+          if (tMs < 10_000) runupTimingBuckets.lt10s += 1;
+          else if (tMs < 20_000) runupTimingBuckets.s10_20 += 1;
+          else if (tMs < 40_000) runupTimingBuckets.s20_40 += 1;
+          else if (tMs <= 60_000) runupTimingBuckets.s40_60 += 1;
+          else runupTimingBuckets.gt60s += 1;
+        }
         const recycledRequalifiedPassedCount = Number(state?.runtime?.confirmRetryRequalifiedPassed || 0);
         const top3ConfirmBlockers = Object.entries(confirmRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
         const top3AttemptBlockers = Object.entries(attemptRejectCounts).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0,3).map(([k,v])=>`${k}:${v}`).join(', ') || 'none';
@@ -6810,6 +6827,7 @@ async function main() {
           `🧪 *Diag (confirm)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
           'HEADER',
           `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastConfirmAgeSec=${lastConfirmEvalAgeSec}`,
+          `confirmWindowMs=${confirmWindowMs} confirmWindowSec=${confirmWindowSec}`, 
           ...(showCircuitAbnormal ? [
             `circuitAbnormal=true open=${circuitOpen ? 'true' : 'false'} reason=${circuitOpenReason} cooldownRemainingSec=${circuitOpenRemainingSec}`,
           ] : []),
@@ -6830,7 +6848,9 @@ async function main() {
           `- failedAfterRunupNoTradeSequence=${failedAfterRunupNoTradeSequence}`,
           `- runupSourceUsed=${runupSourceUsedSummary}`,
           `- tradeSequenceSourceUsed=${tradeSequenceSourceUsedSummary}`,
-          `- medianTimeToRunupMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'}`,
+          `- confirmWindowActiveMs=${confirmWindowMs} (${confirmWindowSec}s)`,
+          `- medianTimeToRunupMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'}${Number.isFinite(medianTimeToRunupWindowPct) ? ` (~${Number(medianTimeToRunupWindowPct).toFixed(1)}% of window)` : ''}`,
+          `- runupTimingBucketsPassed=<10s:${runupTimingBuckets.lt10s} 10-20s:${runupTimingBuckets.s10_20} 20-40s:${runupTimingBuckets.s20_40} 40-60s:${runupTimingBuckets.s40_60}${runupTimingBuckets.gt60s > 0 ? ` >60s:${runupTimingBuckets.gt60s}` : ''}`,
           '',
           'BLOCKER SUMMARY',
           `- topConfirmBlockers=${top3ConfirmBlockers}`,
