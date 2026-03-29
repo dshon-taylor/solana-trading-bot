@@ -16,6 +16,8 @@ class BirdEyeWS extends EventEmitter {
     this.subscribed = new Set();
     this.desired = new Set();
     this._timer = null;
+    this._lastSubSig = '';
+    this._lastSubSentAtMs = 0;
   }
 
   url() {
@@ -33,8 +35,9 @@ class BirdEyeWS extends EventEmitter {
         this.status = 'OPEN';
         this.backoffMs = 1000;
         this.emit('open');
-        // resubscribe desired set
-        for (const mint of this.desired) this._subscribeMint(mint);
+        // resubscribe desired set as one complex subscription per message type
+        this._lastSubSig = '';
+        this._syncSubscriptions();
       };
       ws.onmessage = (ev) => this._onMessage(ev?.data);
       ws.onerror = () => {
@@ -110,12 +113,57 @@ class BirdEyeWS extends EventEmitter {
 
   _syncSubscriptions() {
     const entries = cache.entries('birdeye:sub:');
-    const desired = new Set(entries.map(([k]) => String(k).replace(/^birdeye:sub:/, '')));
+    const desiredRaw = entries.map(([k]) => String(k).replace(/^birdeye:sub:/, '')).filter(Boolean);
+    const desired = new Set(desiredRaw.slice(0, 100));
     this.desired = desired;
-    for (const mint of desired) this._subscribeMint(mint);
-    for (const mint of Array.from(this.subscribed)) {
-      if (!desired.has(mint)) this._unsubscribeMint(mint);
+
+    // BirdEye WS keeps one active subscription per message type.
+    // Use complex queries that include the full desired set instead of per-mint simple messages.
+    const desiredArr = Array.from(desired).sort();
+    this.subscribed = new Set(desiredArr);
+    const sig = desiredArr.join(',');
+    const nowMs = Date.now();
+    const changed = sig !== this._lastSubSig;
+    const minResubMs = 2500;
+    if (!changed && (nowMs - this._lastSubSentAtMs) < minResubMs) return;
+
+    if (!this.ws || this.status !== 'OPEN') return;
+
+    if (!desiredArr.length) {
+      this._send({ type: 'UNSUBSCRIBE_PRICE' });
+      this._send({ type: 'UNSUBSCRIBE_TXS' });
+      this.subscribed = new Set();
+      this._lastSubSig = sig;
+      this._lastSubSentAtMs = nowMs;
+      return;
     }
+
+    const priceQuery = desiredArr
+      .map((m) => `(address = ${m} AND chartType = 1s AND currency = usd)`)
+      .join(' OR ');
+    const txQuery = desiredArr
+      .map((m) => `address = ${m}`)
+      .join(' OR ');
+
+    this._send({
+      type: 'SUBSCRIBE_PRICE',
+      data: {
+        queryType: 'complex',
+        query: priceQuery,
+      },
+    });
+    this._send({
+      type: 'SUBSCRIBE_TXS',
+      data: {
+        queryType: 'complex',
+        query: txQuery,
+        txsType: 'swap',
+      },
+    });
+
+    this.subscribed = new Set(desiredArr);
+    this._lastSubSig = sig;
+    this._lastSubSentAtMs = nowMs;
   }
 
   _onMessage(raw) {
@@ -123,7 +171,13 @@ class BirdEyeWS extends EventEmitter {
     try { msg = JSON.parse(String(raw || '{}')); } catch { return; }
     const type = String(msg?.type || '');
     const d = msg?.data || {};
-    const mint = String(d?.address || d?.tokenAddress || d?.from?.address || '').trim();
+    const preferredCandidates = [
+      String(d?.tokenAddress || '').trim(),
+      String(d?.address || '').trim(),
+      String(d?.from?.address || '').trim(),
+      String(d?.to?.address || '').trim(),
+    ].filter(Boolean);
+    let mint = preferredCandidates.find((m) => this.desired.has(m)) || preferredCandidates[0] || '';
     if (!mint) return;
 
     if (type === 'PRICE_DATA') {
@@ -195,6 +249,8 @@ class BirdEyeWS extends EventEmitter {
       status: this.status,
       subscribedCount: this.subscribed.size,
       desiredCount: this.desired.size,
+      subscriptionMode: 'complex_bulk',
+      lastSubSentAtMs: this._lastSubSentAtMs || 0,
       url: WS_URL,
     };
   }
