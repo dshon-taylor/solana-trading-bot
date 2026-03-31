@@ -1,3 +1,11 @@
+import { resolveConfirmTxMetricsFromDiagEvent } from '../../diag_event_invariants.mjs';
+import { buildExecutionDiagMessage } from './messages/execution_message.mjs';
+import { buildScannerDiagMessage } from './messages/scanner_message.mjs';
+import { buildConfirmDiagMessage } from './messages/confirm_message.mjs';
+import { buildMomentumDiagMessage } from './messages/momentum_message.mjs';
+import { buildCompactDiagMessage } from './messages/compact_message.mjs';
+import { buildFullDiagMessage } from './messages/full_message.mjs';
+
 /**
  * stage_get_diag_message_full_implementation.mjs
  * 
@@ -353,6 +361,11 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         return frag;
       }
 
+      function cleanTokenText(v) {
+        if (v == null) return '';
+        return String(v).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+
       if (mode === 'execution') {
         const medianLocal = (arr) => { const a = arr.filter((v) => Number.isFinite(Number(v))).map(Number); if (!a.length) return null; const srt=a.slice().sort((x,y)=>x-y); const m=Math.floor(srt.length/2); return srt.length%2?srt[m]:(srt[m-1]+srt[m])/2; };
         const fmtMed = (v, d=0) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : 'n/a';
@@ -469,98 +482,95 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const reserveBlockedN = Number(executionRejectCounts['reserveBlocked'] || 0);
         const targetUsdTooSmallN = Number(executionRejectCounts['targetUsdTooSmall'] || 0);
 
-        const lines = [
-          `🧪 *Diag (execution)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
-          'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastAttemptAgeSec=${lastAttemptAgeSec}`,
-        ];
-        if (circuitOpen) {
-          lines.push(`circuit: open=true reason=${circuitOpenReason} since=${circuitOpenSinceMs ? fmtCt(circuitOpenSinceMs) : 'n/a'} cooldownRemainingSec=${circuitOpenRemainingSec}`);
-        }
-        lines.push('',
-          'FLOW',
-          `- lastHour: attemptReached=${hourAttemptReached} attemptPassed=${hourAttemptPassed} fill=${hourFill} swapFailed=${hourSwapFailed}`,
-          `- cumulative: attemptReached=${cumAttemptReached} attemptPassed=${cumAttemptPassed} fill=${cumFill} swapFailed=${cumSwapFailed}`,
-          `- attemptPassRate=${cumAttemptPassed}/${cumAttemptReached || 0} (${(attemptPassRate*100).toFixed(1)}%)`,
-          `- fillFromAttemptRate=${cumFill}/${cumAttemptReached || 0} (${(fillFromAttemptRate*100).toFixed(1)}%)`,
-          `- fillFromConfirmRate=${cumFill}/${cumConfirmPassed || 0} (${(fillFromConfirmRate*100).toFixed(1)}%)`,
-          '',
-          'EXECUTION BLOCKERS',
-          ...(topExecutionBlockers.length ? topExecutionBlockers : ['- none']),
-          '',
-          'FILL QUALITY',
-          `- median quoteToSendMs=${fmtMed(medianLocal(quoteToSendMs),0)}`,
-          `- median sendToFillMs=${fmtMed(medianLocal(sendToFillMs),0)}`,
-          `- median totalAttemptToFillMs=${fmtMed(medianLocal(totalAttemptToFillMs),0)}`,
-          `- median realizedSlippageBps=${fmtMed(medianLocal(realizedSlippageBps),1)}`,
-          `- median quotedPriceImpactPct=${fmtMed(medianLocal(quotedPriceImpactPct),4)}`,
-          '',
-          'ATTEMPT SHAPE',
-          `- median entry liq=${fmtMed(medianLocal(entryLiq),0)}`,
-          `- median entry mcap=${fmtMed(medianLocal(entryMcap),0)}`,
-          `- median entry priceImpactPct=${fmtMed(medianLocal(entryPi),4)}`,
-          `- median entry slippageBps=${fmtMed(medianLocal(entrySlip),0)}`,
-          `- routeSourceMix=${routeMixStr}`,
-          '',
-          'HANDOFF SUMMARY',
-          `- confirmPassed=${cumConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill} topHandoffBlocker=${topHandoffBlocker}`,
-          '',
-          'TOP EXAMPLES',
-          '- strongest failed attempts:',
-          ...(failedAttemptsCompact.length ? failedAttemptsCompact : ['- none']),
-          '- strongest filled attempts:',
-          ...(filledAttemptsCompact.length ? filledAttemptsCompact : ['- none'])
-        );
-
-        if (swapErrSummary.length) {
-          lines.push('', 'SWAP/PREFLIGHT ERRORS', ...swapErrSummary);
-        }
-        if (missingDecimalsN > 0) lines.push(`- missingDecimals=${missingDecimalsN}`);
-        if (reserveBlockedN > 0) lines.push(`- reserveBlocked=${reserveBlockedN}`);
-        if (targetUsdTooSmallN > 0) lines.push(`- targetUsdTooSmall=${targetUsdTooSmallN}`);
-
-        return lines.join('\n');
+        return buildExecutionDiagMessage({
+          windowHeaderLabel,
+          fmtCt,
+          effectiveWindowStartMs,
+          updatedIso,
+          elapsedHours,
+          warmingUp,
+          lastAttemptAgeSec,
+          circuitOpen,
+          circuitOpenReason,
+          circuitOpenSinceMs,
+          circuitOpenRemainingSec,
+          hourAttemptReached,
+          hourAttemptPassed,
+          hourFill,
+          hourSwapFailed,
+          cumAttemptReached,
+          cumAttemptPassed,
+          cumFill,
+          cumSwapFailed,
+          attemptPassRate,
+          fillFromAttemptRate,
+          fillFromConfirmRate,
+          cumConfirmPassed,
+          topExecutionBlockers,
+          medianLocal,
+          quoteToSendMs,
+          sendToFillMs,
+          totalAttemptToFillMs,
+          realizedSlippageBps,
+          quotedPriceImpactPct,
+          fmtMed,
+          entryLiq,
+          entryMcap,
+          entryPi,
+          entrySlip,
+          routeMixStr,
+          topHandoffBlocker,
+          failedAttemptsCompact,
+          filledAttemptsCompact,
+          swapErrSummary,
+          missingDecimalsN,
+          reserveBlockedN,
+          targetUsdTooSmallN,
+        });
       }
 
       if (mode === 'scanner') {
-        return [
-          `🧪 *Diag (scanner)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`, 
-          'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} scannerHealth=${scannerHealth} scannerCycleCount=${scannerCycleCount} scansPerHour=${warmingUp ? 'warming_up' : scansPerHourWindow.toFixed(1)}`,
-          '',
-          'SCAN RATE',
-          `scannerIntervalMs=${avgScanIntervalMs != null ? Math.round(avgScanIntervalMs) : 'n/a'} avgScanDurationMs=${avgScanDurationMs != null ? Math.round(avgScanDurationMs) : 'n/a'} scanWallClockMs=${scanPhaseAverages.scanWallClockMs != null ? Math.round(scanPhaseAverages.scanWallClockMs) : 'n/a'} scanAggregateTaskMs=${scanPhaseAverages.scanAggregateTaskMs != null ? Math.round(scanPhaseAverages.scanAggregateTaskMs) : 'n/a'}`,
-          '',
-          'PHASE BREAKDOWN',
-          `candidateDiscoveryMs=${scanPhaseAverages.candidateDiscoveryMs != null ? Math.round(scanPhaseAverages.candidateDiscoveryMs) : 'n/a'} snapshotBuildMs=${scanPhaseAverages.snapshotBuildMs != null ? Math.round(scanPhaseAverages.snapshotBuildMs) : 'n/a'} adaptiveDelayMs=${scanPhaseAverages.adaptiveDelayMs != null ? Math.round(scanPhaseAverages.adaptiveDelayMs) : 'n/a'} top3LongestScanPhases=${top3ScanPhases}`,
-          '',
-          'CANDIDATE DISCOVERY SUBPHASES',
-          `sourcePolling=${scanPhaseAverages.candidateSourcePollingMs != null ? Math.round(scanPhaseAverages.candidateSourcePollingMs) : 'n/a'} sourceMerging=${scanPhaseAverages.candidateSourceMergingMs != null ? Math.round(scanPhaseAverages.candidateSourceMergingMs) : 'n/a'} sourceTransforms=${scanPhaseAverages.candidateSourceTransformsMs != null ? Math.round(scanPhaseAverages.candidateSourceTransformsMs) : 'n/a'} streamDrain=${scanPhaseAverages.candidateStreamDrainMs != null ? Math.round(scanPhaseAverages.candidateStreamDrainMs) : 'n/a'} tokenlistFetch=${scanPhaseAverages.candidateTokenlistFetchMs != null ? Math.round(scanPhaseAverages.candidateTokenlistFetchMs) : 'n/a'} tokenlistPoolBuild=${scanPhaseAverages.candidateTokenlistPoolBuildMs != null ? Math.round(scanPhaseAverages.candidateTokenlistPoolBuildMs) : 'n/a'} tokenlistSampling=${scanPhaseAverages.candidateTokenlistSamplingMs != null ? Math.round(scanPhaseAverages.candidateTokenlistSamplingMs) : 'n/a'} tokenlistQuoteabilityChecks=${scanPhaseAverages.candidateTokenlistQuoteabilityChecksMs != null ? Math.round(scanPhaseAverages.candidateTokenlistQuoteabilityChecksMs) : 'n/a'} iteration=${scanPhaseAverages.candidateIterationMs != null ? Math.round(scanPhaseAverages.candidateIterationMs) : 'n/a'} stateLookup=${scanPhaseAverages.candidateStateLookupMs != null ? Math.round(scanPhaseAverages.candidateStateLookupMs) : 'n/a'} cacheReads=${scanPhaseAverages.candidateCacheReadsMs != null ? Math.round(scanPhaseAverages.candidateCacheReadsMs) : 'n/a'} cacheWrites=${scanPhaseAverages.candidateCacheWritesMs != null ? Math.round(scanPhaseAverages.candidateCacheWritesMs) : 'n/a'} filterLoops=${scanPhaseAverages.candidateFilterLoopsMs != null ? Math.round(scanPhaseAverages.candidateFilterLoopsMs) : 'n/a'} asyncWaitUnclassified=${scanPhaseAverages.candidateAsyncWaitUnclassifiedMs != null ? Math.round(scanPhaseAverages.candidateAsyncWaitUnclassifiedMs) : 'n/a'} cooldownFiltering=${scanPhaseAverages.candidateCooldownFilteringMs != null ? Math.round(scanPhaseAverages.candidateCooldownFilteringMs) : 'n/a'} shortlistPrefilter=${scanPhaseAverages.candidateShortlistPrefilterMs != null ? Math.round(scanPhaseAverages.candidateShortlistPrefilterMs) : 'n/a'} routeabilityChecks=${scanPhaseAverages.candidateRouteabilityChecksMs != null ? Math.round(scanPhaseAverages.candidateRouteabilityChecksMs) : 'n/a'} other=${scanPhaseAverages.candidateOtherMs != null ? Math.round(scanPhaseAverages.candidateOtherMs) : 'n/a'}`,
-          '',
-          'SNAPSHOT BUILD SUBPHASES',
-          `birdEyeFetch=${scanPhaseAverages.snapshotBirdseyeFetchMs != null ? Math.round(scanPhaseAverages.snapshotBirdseyeFetchMs) : 'n/a'} pairEnrichment=${scanPhaseAverages.snapshotPairEnrichmentMs != null ? Math.round(scanPhaseAverages.snapshotPairEnrichmentMs) : 'n/a'} liqMcapNormalization=${scanPhaseAverages.snapshotLiqMcapNormalizationMs != null ? Math.round(scanPhaseAverages.snapshotLiqMcapNormalizationMs) : 'n/a'} snapshotValidation=${scanPhaseAverages.snapshotValidationMs != null ? Math.round(scanPhaseAverages.snapshotValidationMs) : 'n/a'} watchlistRowConstruction=${scanPhaseAverages.snapshotWatchlistRowConstructionMs != null ? Math.round(scanPhaseAverages.snapshotWatchlistRowConstructionMs) : 'n/a'} other=${scanPhaseAverages.snapshotOtherMs != null ? Math.round(scanPhaseAverages.snapshotOtherMs) : 'n/a'}`,
-          '',
-          'CALL COUNTS',
-          `pairFetchCallsPerScan=${pairFetchCallsPerScan != null ? pairFetchCallsPerScan.toFixed(2) : 'n/a'} pairFetchConcurrencyPerScan=${pairFetchConcurrencyPerScan != null ? pairFetchConcurrencyPerScan.toFixed(2) : 'n/a'} birdeyeCallsPerScan=${birdeyeCallsPerScan != null ? birdeyeCallsPerScan.toFixed(2) : 'n/a'} rpcCallsPerScan=${rpcCallsPerScan != null ? rpcCallsPerScan.toFixed(2) : 'n/a'} maxSingleCallDurationMs=${maxSingleCallDurationMs != null ? Math.round(maxSingleCallDurationMs) : 'n/a'}`,
-          `routePrefilterDegradedScans=${degradedRoutePrefilterScans}/${scannerCycleCount} jupCooldownActiveScans=${jupCooldownActiveScans}/${scannerCycleCount} usableSnapshotWithoutPairPerScan=${usableSnapshotWithoutPairPerScan != null ? usableSnapshotWithoutPairPerScan.toFixed(2) : 'n/a'} noPairTempActivePerScan=${noPairTempActivePerScan != null ? noPairTempActivePerScan.toFixed(2) : 'n/a'}`,
-          `tokenlistCandidatesFilteredByLiquidity=${scanPhaseAverages.tokenlistCandidatesFilteredByLiquidity != null ? scanPhaseAverages.tokenlistCandidatesFilteredByLiquidity.toFixed(2) : 'n/a'} tokenlistQuoteChecksPerformed=${scanPhaseAverages.tokenlistQuoteChecksPerformed != null ? scanPhaseAverages.tokenlistQuoteChecksPerformed.toFixed(2) : 'n/a'} tokenlistQuoteChecksSkipped=${scanPhaseAverages.tokenlistQuoteChecksSkipped != null ? scanPhaseAverages.tokenlistQuoteChecksSkipped.toFixed(2) : 'n/a'}`,
-          '',
-          'SOURCE UNIVERSE',
-          `tokenlistTestMode=${cfg.JUP_TOKENLIST_ENABLED ? 'enabled' : 'disabled'}`,
-          `sourceEnabled.boosted=${sourceEnabled.boosted ? 'true' : 'false'} sourceEnabled.tokenlist=${sourceEnabled.tokenlist ? 'true' : 'false'} sourceEnabled.stream=${sourceEnabled.stream ? 'true' : 'false'} sourceEnabled.trending=${sourceEnabled.trending ? 'true' : 'false'}`,
-          `sourceMix=${`boosted=${sourceMix.boosted} tokenlist=${sourceMix.tokenlist} stream=${sourceMix.stream} trending=${sourceMix.trending} other=${sourceMix.other}`}`,
-          `candidatesSeenBySource=boosted:${candidatesSeenBySource.boosted} tokenlist:${candidatesSeenBySource.tokenlist} stream:${candidatesSeenBySource.stream} trending:${candidatesSeenBySource.trending} other:${candidatesSeenBySource.other}`,
-          `routeableBySource=boosted:${routeableBySource.boosted} tokenlist:${routeableBySource.tokenlist} stream:${routeableBySource.stream} trending:${routeableBySource.trending} other:${routeableBySource.other}`,
-          `aboveHotFloorBySource=boosted:${aboveHotFloorBySource.boosted} tokenlist:${aboveHotFloorBySource.tokenlist} stream:${aboveHotFloorBySource.stream} trending:${aboveHotFloorBySource.trending} other:${aboveHotFloorBySource.other}`,
-          `tokenlistDropoffStage=${tokenlistDropoffStage} tokenlistPath=${tokenlistSeen}->${tokenlistRouteable}->${tokenlistAboveHot}`,
-          `trendingPath(seen->routeable->aboveHotFloor)=${Number(candidatesSeenBySource.trending||0)}->${Number(routeableBySource.trending||0)}->${Number(aboveHotFloorBySource.trending||0)}`,
-          '',
-          'MARKET SHAPE',
-          `uniqueCandidatesSeen=${uniqueCandidatesSeen} uniqueCandidatesRouteable=${uniqueCandidatesRouteable} uniqueCandidatesAboveHotFloor=${uniqueAboveHotFloor} uniqueCandidatesAboveConfirmFloor=${uniqueAboveConfirmFloor} uniqueCandidatesAboveAttemptFloor=${uniqueAboveAttemptFloor}`,
-          '',
-          'WINDOW DEBUG',
-          `retroWindowMode=true requestedWindowStart=${fmtCt(requestedWindowStartMs)} effectiveWindowStart=${fmtCt(effectiveWindowStartMs)} botUptimeHours=${botUptimeHours.toFixed(2)} computedWindowHours=${elapsedHours.toFixed(2)}`, 
-        ].join('\n');
+        return buildScannerDiagMessage({
+          windowHeaderLabel,
+          fmtCt,
+          effectiveWindowStartMs,
+          updatedIso,
+          elapsedHours,
+          scannerHealth,
+          scannerCycleCount,
+          warmingUp,
+          scansPerHourWindow,
+          avgScanIntervalMs,
+          avgScanDurationMs,
+          scanPhaseAverages,
+          top3ScanPhases,
+          pairFetchCallsPerScan,
+          pairFetchConcurrencyPerScan,
+          birdeyeCallsPerScan,
+          rpcCallsPerScan,
+          maxSingleCallDurationMs,
+          degradedRoutePrefilterScans,
+          jupCooldownActiveScans,
+          usableSnapshotWithoutPairPerScan,
+          noPairTempActivePerScan,
+          cfg,
+          sourceEnabled,
+          sourceMix,
+          candidatesSeenBySource,
+          routeableBySource,
+          aboveHotFloorBySource,
+          tokenlistDropoffStage,
+          tokenlistSeen,
+          tokenlistRouteable,
+          tokenlistAboveHot,
+          uniqueCandidatesSeen,
+          uniqueCandidatesRouteable,
+          uniqueAboveHotFloor,
+          uniqueAboveConfirmFloor,
+          uniqueAboveAttemptFloor,
+          requestedWindowStartMs,
+          botUptimeHours,
+        });
       }
 
       if (mode === 'confirm') {
@@ -1019,57 +1029,51 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const showCircuitAbnormal = !!circuitOpen;
         const freshnessMajorBlocker = Number(confirmRejectCounts['confirm.mcapStaleRejected'] || 0) > 0;
 
-        return [
-          `🧪 *Diag (confirm)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
-          'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastConfirmAgeSec=${lastConfirmEvalAgeSec}`,
-          `confirmWindowMs=${confirmWindowMs} confirmWindowSec=${confirmWindowSec}`, 
-          ...(showCircuitAbnormal ? [
-            `circuitAbnormal=true open=${circuitOpen ? 'true' : 'false'} reason=${circuitOpenReason} cooldownRemainingSec=${circuitOpenRemainingSec}`,
-          ] : []),
-          '',
-          'FLOW',
-          `- lastHour: confirmReached=${hourConfirmReached2} confirmPassed=${hourConfirmPassed2} attemptReached=${hourAttemptReached2} fill=${hourFill2}`,
-          `- cumulative: confirmReached=${cumulativeConfirmReached} confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill}`,
-          `- confirmPassRate=${fmtRate(cumulativeConfirmPassed, cumulativeConfirmReached)}`,
-          `- attemptFromConfirmRate=${fmtRate(cumAttemptReached, cumulativeConfirmPassed)}`,
-          `- fillFromConfirmRate=${fmtRate(cumFill, cumulativeConfirmPassed)}`,
-          '',
-          'CONTINUATION OUTCOMES',
-          `- modeActive=${continuationModeActive ? 'true' : 'false'}`,
-          `- pass: runup=${Number(continuationPassReasonCounts.runup || 0)}`,
-          `- fail: hardDip=${continuationFailMix.hardDip} windowExpiredStall=${continuationFailMix.windowExpiredStall} windowExpiredWeak=${continuationFailMix.windowExpiredWeak} dataUnavailable=${continuationFailMix.dataUnavailable} liqDegraded=${continuationFailMix.liqDegraded} route=${continuationFailMix.route} impact=${continuationFailMix.impact} retryCooldown=${continuationFailMix.retryCooldown} retryNoImprovement=${continuationFailMix.retryNoImprovement} other=${continuationFailMix.other}`,
-          `- reached+1.5%InWindow=${confirmReachedRunup15}`,
-          `- reached+1.5%And2PositiveTrades=${confirmReachedRunupAndTradeSeq}`,
-          `- failedAfterRunupNoTradeSequence=${failedAfterRunupNoTradeSequence}`,
-          `- runupSourceUsed=${runupSourceUsedSummary}`,
-          `- tradeSequenceSourceUsed=${tradeSequenceSourceUsedSummary}`,
-          `- confirmWindowActiveMs=${confirmWindowMs} (${confirmWindowSec}s)`,
-          `- medianTimeToRunupMs=${Number.isFinite(medianTimeToRunupPassMs) ? Math.round(Number(medianTimeToRunupPassMs)) : 'n/a'}${Number.isFinite(medianTimeToRunupWindowPct) ? ` (~${Number(medianTimeToRunupWindowPct).toFixed(1)}% of window)` : ''}`,
-          `- runupTimingBucketsPassed=<10s:${runupTimingBuckets.lt10s} 10-20s:${runupTimingBuckets.s10_20} 20-40s:${runupTimingBuckets.s20_40} 40-60s:${runupTimingBuckets.s40_60}${runupTimingBuckets.gt60s > 0 ? ` >60s:${runupTimingBuckets.gt60s}` : ''}`,
-          '',
-          'BLOCKER SUMMARY',
-          `- topConfirmBlockers=${top3ConfirmBlockers}`,
-          `- topAttemptBlockers=${top3AttemptBlockers}`,
-          '',
-          'RETRY BEHAVIOR',
-          `- attempted=${continuationFailMix.retryCooldown + continuationFailMix.retryNoImprovement} blockedCooldown=${continuationFailMix.retryCooldown} blockedNoImprovement=${continuationFailMix.retryNoImprovement} requalifiedAndPassed=${recycledRequalifiedPassedCount}`,
-          '',
-          'ATTEMPT/FILL HANDOFF',
-          `- confirmPassed=${cumulativeConfirmPassed} attemptReached=${cumAttemptReached} fill=${cumFill} topHandoffBlocker=${topHandoffBlocker}`,
-          '',
-          'CONFIRM SHAPE',
-          `- medianRunupPct=${Number.isFinite(medianRunupPct) ? Number(medianRunupPct).toFixed(4) : 'n/a'} medianDipPct=${Number.isFinite(medianDipPct) ? Number(medianDipPct).toFixed(4) : 'n/a'} medianFinalPct=${Number.isFinite(medianFinalPct) ? Number(medianFinalPct).toFixed(4) : 'n/a'}`,
-          '',
-          'TOP EXAMPLES',
-          '- failed:',
-          ...(strongestFailedConfirmCompact.length ? strongestFailedConfirmCompact.slice(0,3) : ['- none']),
-          '- passed:',
-          ...(strongestPassedConfirmCompact.length ? strongestPassedConfirmCompact.slice(0,3) : ['- none']),
-          '',
-          'WS AUDITION TRACE (temporary sample)',
-          ...(wsTraceSampleRows.length ? wsTraceSampleRows : ['- none']),
-        ].join('\n');
+        return buildConfirmDiagMessage({
+          windowHeaderLabel,
+          fmtCt,
+          effectiveWindowStartMs,
+          updatedIso,
+          elapsedHours,
+          warmingUp,
+          lastConfirmEvalAgeSec,
+          confirmWindowMs,
+          confirmWindowSec,
+          showCircuitAbnormal,
+          circuitOpen,
+          circuitOpenReason,
+          circuitOpenRemainingSec,
+          hourConfirmReached2,
+          hourConfirmPassed2,
+          hourAttemptReached2,
+          hourFill2,
+          cumulativeConfirmReached,
+          cumulativeConfirmPassed,
+          cumAttemptReached,
+          cumFill,
+          fmtRate,
+          continuationModeActive,
+          continuationPassReasonCounts,
+          continuationFailMix,
+          confirmReachedRunup15,
+          confirmReachedRunupAndTradeSeq,
+          failedAfterRunupNoTradeSequence,
+          runupSourceUsedSummary,
+          tradeSequenceSourceUsedSummary,
+          medianTimeToRunupPassMs,
+          medianTimeToRunupWindowPct,
+          runupTimingBuckets,
+          top3ConfirmBlockers,
+          top3AttemptBlockers,
+          recycledRequalifiedPassedCount,
+          topHandoffBlocker,
+          medianRunupPct,
+          medianDipPct,
+          medianFinalPct,
+          strongestFailedConfirmCompact,
+          strongestPassedConfirmCompact,
+          wsTraceSampleRows,
+        });
       }
 
       if (mode === 'momentum') {
@@ -1264,42 +1268,38 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           }
         }
 
-        return [
-          `🧪 *Diag (momentum)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
-          'HEADER',
-          `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'} lastMomentumEvalAgeSec=${lastMomentumEvalAgeSec}`,
-          '',
-          'FLOW',
-          `- evaluated=${cumEvaluated} passed=${cumPassed} failed=${cumFailed}`,
-          `- passRate=${cumPassed}/${cumEvaluated} (${cumEvaluated > 0 ? ((cumPassed/cumEvaluated)*100).toFixed(1) : '0.0'}%)`,
-          `- branchMix=early:${earlyCountWin} mature:${Math.max(0, momentumAgeWin.length - earlyCountWin)}`,
-          `- choke=${chokeName} (${chokeCount} fails, ${chokePct.toFixed(1)}% of evaluated)`,
-          '',
-          'POST-MOMENTUM OUTCOMES',
-          `- momentumPassed=${momentumPassedMints.size} confirmPassed=${confirmPassedSet.size} fill=${fillSet.size}`,
-          `- reached+1.5%InConfirmWindow=${reachedRunup15Set.size}`,
-          `- confirmFailMix hardDip=${confirmFailMix.hardDip} windowExpired=${confirmFailMix.windowExpired} liq=${confirmFailMix.liq} route=${confirmFailMix.route} impact=${confirmFailMix.impact} other=${confirmFailMix.other}`,
-          '',
-          'BLOCKER SUMMARY',
-          `- topScoringFailReasons: ${(top3ScoringFailReasons.length ? top3ScoringFailReasons.map((x)=>x.replace(/^- /,'')).join(', ') : 'none')}`,
-          `- topHardGuardBlockers: ${(top3HardGuardBlockers.length ? top3HardGuardBlockers.map((x)=>x.replace(/^- /,'')).join(', ') : 'none')}`,
-          '',
-          'NEAR-PASS / GUARD-BLOCKED',
-          `- score>=threshold but hard-guard-blocked=${nearPassGuardBlocked.length} topGuardReason=${nearPassTopGuard}`,
-          '',
-          'TOP EXAMPLES',
-          '- strongest failed momentum candidates:',
-          ...(strongestFailedMomentumRows.length ? strongestFailedMomentumRows : ['- none']),
-          '- strongest passed momentum candidates:',
-          ...(strongestPassedMomentumRows.length ? strongestPassedMomentumRows : ['- none']),
-          '',
-          'LIQUIDITY DISTRIBUTION',
-          `- <30k=${liqBandM.lt30} 30–40k=${liqBandM.b30_40} 40–50k=${liqBandM.b40_50} 50–75k=${liqBandM.b50_75} 75k+=${liqBandM.gte75}`,
-          ...(repeatSuppressed > 0 ? [
-            '',
-            `REPEAT FAIL SUPPRESSION - count=${repeatSuppressed} mintsTop=${repeatMintsTop} reasonTop=${repeatReasonTop}`,
-          ] : []),
-        ].join('\n');
+        return buildMomentumDiagMessage({
+          windowHeaderLabel,
+          fmtCt,
+          effectiveWindowStartMs,
+          updatedIso,
+          elapsedHours,
+          warmingUp,
+          lastMomentumEvalAgeSec,
+          cumEvaluated,
+          cumPassed,
+          cumFailed,
+          earlyCountWin,
+          momentumAgeWin,
+          chokeName,
+          chokeCount,
+          chokePct,
+          momentumPassedMints,
+          confirmPassedSet,
+          fillSet,
+          reachedRunup15Set,
+          confirmFailMix,
+          top3ScoringFailReasons,
+          top3HardGuardBlockers,
+          nearPassGuardBlocked,
+          nearPassTopGuard,
+          strongestFailedMomentumRows,
+          strongestPassedMomentumRows,
+          liqBandM,
+          repeatSuppressed,
+          repeatMintsTop,
+          repeatReasonTop,
+        });
       }
 
       const routeable = Number(candidateRouteableWin.length || 0);
@@ -1379,43 +1379,51 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         examples.push(...earlyBlockers);
       }
 
-      return [
-        `🧪 *Diag (compact)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`, 
-        'SYSTEM',
-        `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} scansPerHour=${warmingUp ? 'warming_up' : scansPerHourWindow.toFixed(1)} watchlistSize=${watchlistSize} hotDepth=${hotDepth} evalsPerMinute=${warmingUp ? 'warming_up' : evalsPerMinute.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'}`,
-        `providers: birdeye=${providerRate(providers?.birdeye)} jupiter=${providerRate(providers?.jupiter)} dex=${providerRate(providers?.dexscreener)}`,
-        `scannerSummary: scansPerHour=${warmingUp ? 'warming_up' : scansPerHourWindow.toFixed(1)} scannerHealth=${scannerHealth} uniqueCandidatesSeen=${uniqueCandidatesSeen} uniqueCandidatesAboveHotFloor=${uniqueAboveHotFloor}`,
-        '',
-        'PIPELINE HEALTH',
-        `routeable=${routeable} pairFetchOkRate=${pairFetchRate} preHot considered/passed/failed=${preHotConsidered}/${preHotPassed}/${preHotFailed} hot enqueued/consumed=${hotEnq}/${hotCons} momentumEvaluated=${cumulativeMomentumEvaluated} confirmReached=${cumulativeConfirmReached} attemptReached=${cumulativeAttempt} fill=${cumulativeFill}`,
-        '',
-        'PRIMARY CHOKE',
-        `primaryChoke=${primaryChoke} chokeStage=${chokeStage}`,
-        ...(top5Blockers.length ? top5Blockers : ['- none']),
-        '',
-        'CANDIDATE SHAPE',
-        `preHotLiquidityThresholdActive=${Math.round(preHotMinLiqActive)} source=${state?.filterOverrides?.MIN_LIQUIDITY_USD != null ? 'filterOverride.MIN_LIQUIDITY_USD' : 'cfg.MIN_LIQUIDITY_FLOOR_USD'} hotStalkingFloor=${Math.round(hotStalkingFloor)} bypassAllowed=${bypassAllowed} bypassRejected=${bypassRejected} bypassPrimaryReject=${bypassPrimaryReject}`,
-        `stalkableCandidates=${stalkableCandidates} stalkableBandBreakdown(>=hotFloor): 30–50k=${stalkableBand.b30_50} 50–75k=${stalkableBand.b50_75} 75k+=${stalkableBand.gte75}`,
-        `liqBand(${liqBandFromMomentum ? 'momentum' : 'watchlist'}): <30k=${liqBand.lt30} 30–50k=${liqBand.b30_50} 50–75k=${liqBand.b50_75} 75k+=${liqBand.gte75}`,
-        '',
-        'DOWNSTREAM',
-        `momentumRule=mature:3_of_4 early(<30m):2_of_3`,
+      return buildCompactDiagMessage({
+        windowHeaderLabel,
+        fmtCt,
+        effectiveWindowStartMs,
+        updatedIso,
+        elapsedHours,
+        warmingUp,
+        scansPerHourWindow,
+        watchlistSize,
+        hotDepth,
+        evalsPerMinute,
+        providerRate,
+        providers,
+        scannerHealth,
+        uniqueCandidatesSeen,
+        uniqueAboveHotFloor,
+        routeable,
+        pairFetchRate,
+        preHotConsidered,
+        preHotPassed,
+        preHotFailed,
+        hotEnq,
+        hotCons,
+        cumulativeMomentumEvaluated,
+        cumulativeConfirmReached,
+        cumulativeAttempt,
+        cumulativeFill,
+        primaryChoke,
+        chokeStage,
+        top5Blockers,
+        preHotMinLiqActive,
+        state,
+        cfg,
+        hotStalkingFloor,
+        bypassAllowed,
+        bypassRejected,
+        bypassPrimaryReject,
+        stalkableCandidates,
+        stalkableBand,
+        liqBandFromMomentum,
+        liqBand,
         downstreamShort,
-        '',
-        'RECENT EXAMPLES',
-        ...(examples.length ? examples : ['- none']),
-      ].join('\n');
+        examples,
+      });
     }
-    state.runtime ||= {};
-    if (!Number.isFinite(Number(state.runtime.botStartTimeMs || 0))) state.runtime.botStartTimeMs = nowMs;
-    const botStartTimeMs = Number(state.runtime.botStartTimeMs || nowMs);
-    const useWindowHours = Number.isFinite(Number(windowHours)) && Number(windowHours) > 0 ? Number(windowHours) : null;
-    const windowStartMs = useWindowHours ? (nowMs - (useWindowHours * 3_600_000)) : botStartTimeMs;
-    const windowLabel = useWindowHours ? `${useWindowHours}h` : 'sinceStart';
-    return [
-      `🧪 *Diag Snapshot* window=${windowLabel} start=${fmtCt(windowStartMs)}`, 
-      `snapshotAt=${updatedIso} staleness=${ageSec == null ? 'n/a' : `${ageSec}s`} buildMs=${diagSnapshot.builtInMs}`,
-      diagSnapshot.message,
-    ].join('\n');
+    return buildFullDiagMessage({ state, fmtCt, nowMs, windowHours, updatedIso, ageSec, diagSnapshot });
   };
 }
