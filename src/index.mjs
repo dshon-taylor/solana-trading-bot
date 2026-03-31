@@ -205,14 +205,17 @@ async function quickRouteRecheck({ cfg, mint, solUsdNow, slippageBps, attempts, 
       totalAttempts += 1;
       try {
         const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-        const q = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps });
-        const pi = Number(q?.priceImpactPct || 0);
-        const routeable = !!q?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
-        if (routeable) return { recovered: true, attempts: totalAttempts, pass: pass + 1 };
-      } catch (e) {
-        const kind = parseJupQuoteFailure(e);
-        if (kind === 'rateLimited') return { recovered: false, attempts: totalAttempts, pass: pass + 1, rateLimited: true };
-      }
+        const route = await getRouteQuoteWithFallback({
+          cfg,
+          mint,
+          amountLamports: lam,
+          slippageBps,
+          solUsdNow,
+          source: 'quick-recheck',
+        });
+        if (route.routeAvailable) return { recovered: true, attempts: totalAttempts, pass: pass + 1 };
+        if (route.rateLimited) return { recovered: false, attempts: totalAttempts, pass: pass + 1, rateLimited: true };
+      } catch {}
     }
   }
   return { recovered: false, attempts: totalAttempts, pass: maxPasses };
@@ -294,16 +297,31 @@ function shouldApplyEarlyShortlistPrefilter({ cfg, tok }) {
 }
 
 function computeNoPairRevisitMs(reason, attempts = 1) {
+  const r = String(reason || 'providerEmpty');
   const factor = Math.max(0, Number(attempts || 1) - 1);
   const base = Math.min(NO_PAIR_RETRY_MAX_BACKOFF_MS, NO_PAIR_RETRY_BASE_MS * (2 ** factor));
-  const weighted = (reason === 'routeAvailable') ? Math.round(base * 0.7) : base;
-  return Math.max(NO_PAIR_REVISIT_MIN_MS, Math.min(NO_PAIR_REVISIT_MAX_MS, jitter(weighted, 0.35)));
+  const transient = r === 'providerEmpty' || r === 'staleData' || r === 'retriesExhausted';
+  const weighted = (r === 'routeAvailable')
+    ? Math.round(base * 0.7)
+    : (transient ? Math.round(base * 0.5) : base);
+  return Math.max(NO_PAIR_REVISIT_MIN_MS, Math.min(NO_PAIR_REVISIT_MAX_MS, jitter(weighted, transient ? 0.25 : 0.35)));
 }
 
 function computeNoPairTtlMs(reason, attempts = 1) {
-  if (reason === 'nonTradableMint') return NO_PAIR_NON_TRADABLE_TTL_MS;
-  if (reason === 'deadMint') return NO_PAIR_DEAD_MINT_TTL_MS;
-  if (reason === 'routeAvailable') return NO_PAIR_TEMP_TTL_ROUTEABLE_MS;
+  const r = String(reason || 'providerEmpty');
+  if (r === 'nonTradableMint') return NO_PAIR_NON_TRADABLE_TTL_MS;
+  if (r === 'deadMint') return NO_PAIR_DEAD_MINT_TTL_MS;
+  if (r === 'routeAvailable') return NO_PAIR_TEMP_TTL_ROUTEABLE_MS;
+  if (r === 'providerCooldown' || r === 'rateLimited') {
+    const tier = Math.min(3, Math.max(0, Number(attempts || 1) - 1));
+    const base = Math.max(25_000, Math.min(NO_PAIR_TEMP_TTL_MS, 45_000));
+    return base + (tier * 15_000);
+  }
+  if (r === 'providerEmpty' || r === 'staleData' || r === 'retriesExhausted') {
+    const tier = Math.min(3, Math.max(0, Number(attempts || 1) - 1));
+    const base = Math.max(20_000, Math.min(NO_PAIR_TEMP_TTL_MS, 35_000));
+    return base + (tier * 10_000);
+  }
   const tier = Math.min(4, Math.max(0, Number(attempts || 1) - 1));
   return NO_PAIR_TEMP_TTL_MS + (tier * 20_000);
 }
@@ -388,6 +406,119 @@ function parseJupQuoteFailure(err) {
   ) return 'nonTradableMint';
   if (err?.status === 400 || err?.status === 404) return 'routeNotFound';
   return 'providerEmpty';
+}
+
+function isRouteQuoteable({ quote, maxPriceImpactPct }) {
+  if (!quote?.routePlan?.length) return false;
+  const pi = Number(quote?.priceImpactPct || 0);
+  return (!pi || pi <= Number(maxPriceImpactPct || 0));
+}
+
+function isSolLikeQuoteToken(token) {
+  const symbol = String(token?.symbol || '').toUpperCase();
+  const addr = String(token?.address || '');
+  return symbol === 'SOL' || symbol === 'WSOL' || addr === 'So11111111111111111111111111111111111111112';
+}
+
+function isUsdcLikeQuoteToken(token) {
+  const symbol = String(token?.symbol || '').toUpperCase();
+  const addr = String(token?.address || '');
+  return symbol === 'USDC' || addr === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+}
+
+function buildAlternativeRouteQuote({ mint, amountLamports, slippageBps, pair, estimatedPriceImpactPct }) {
+  return {
+    inputMint: 'So11111111111111111111111111111111111111112',
+    outputMint: mint,
+    inAmount: String(Math.max(0, Math.floor(Number(amountLamports || 0)))),
+    outAmount: null,
+    slippageBps: Number(slippageBps || 0),
+    priceImpactPct: Number(estimatedPriceImpactPct || 0),
+    routePlan: [
+      {
+        percent: 100,
+        swapInfo: {
+          label: `DexScreenerAlt:${String(pair?.dexId || 'unknown')}`,
+          ammKey: String(pair?.pairAddress || ''),
+          inputMint: 'So11111111111111111111111111111111111111112',
+          outputMint: mint,
+        },
+      },
+    ],
+    synthetic: true,
+    provider: 'dexscreener-alt',
+  };
+}
+
+async function getRouteQuoteWithFallback({ cfg, mint, amountLamports, slippageBps, solUsdNow, source = 'unknown' }) {
+  let jupErrorKind = null;
+  let rateLimited = false;
+  try {
+    const quote = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: amountLamports, slippageBps });
+    return {
+      routeAvailable: isRouteQuoteable({ quote, maxPriceImpactPct: cfg.MAX_PRICE_IMPACT_PCT }),
+      quote,
+      provider: 'jupiter',
+      rateLimited: false,
+      routeErrorKind: null,
+    };
+  } catch (e) {
+    jupErrorKind = parseJupQuoteFailure(e);
+    rateLimited = jupErrorKind === 'rateLimited' || isJup429(e);
+    if (!cfg.ROUTE_ALT_ENABLED) {
+      return {
+        routeAvailable: false,
+        quote: null,
+        provider: 'jupiter',
+        rateLimited,
+        routeErrorKind: jupErrorKind,
+      };
+    }
+  }
+
+  try {
+    const pairs = await getTokenPairs('solana', mint);
+    const best = pickBestPair(pairs);
+    const liqUsd = Number(best?.liquidity?.usd || 0);
+    const quoteToken = best?.quoteToken || null;
+    const quoteTokenSupported = isSolLikeQuoteToken(quoteToken) || isUsdcLikeQuoteToken(quoteToken);
+    const notionalUsd = (Number(amountLamports || 0) / 1e9) * Math.max(0, Number(solUsdNow || 0));
+    const impactPct = liqUsd > 0 && notionalUsd > 0
+      ? Math.max(0, Math.min(99, (notionalUsd / Math.max(1, liqUsd)) * 130))
+      : Number(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT || 4);
+    const altRouteable = !!best
+      && quoteTokenSupported
+      && liqUsd >= Number(cfg.ROUTE_ALT_MIN_LIQ_USD || 0)
+      && impactPct <= Number(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT || 4);
+
+    if (!altRouteable) {
+      return {
+        routeAvailable: false,
+        quote: null,
+        provider: 'dexscreener-alt',
+        rateLimited,
+        routeErrorKind: jupErrorKind || 'routeNotFound',
+      };
+    }
+
+    return {
+      routeAvailable: true,
+      quote: buildAlternativeRouteQuote({ mint, amountLamports, slippageBps, pair: best, estimatedPriceImpactPct: impactPct }),
+      provider: 'dexscreener-alt',
+      rateLimited,
+      routeErrorKind: jupErrorKind,
+      meta: { source, liquidityUsd: liqUsd, impactPct },
+    };
+  } catch (e) {
+    const dexRateLimited = isDexScreener429(e);
+    return {
+      routeAvailable: false,
+      quote: null,
+      provider: 'dexscreener-alt',
+      rateLimited: rateLimited || dexRateLimited,
+      routeErrorKind: jupErrorKind || (dexRateLimited ? 'rateLimited' : 'providerEmpty'),
+    };
+  }
 }
 
 function classifyNoPairReason({ state, mint, nowMs, maxAgeMs, routeAvailable, routeErrorKind, hitRateLimit }) {
@@ -666,10 +797,15 @@ async function resolveWatchlistRouteMeta({ cfg, state, mint, row, solUsdNow, now
 
   try {
     const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-    const q = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-    const pi = Number(q?.priceImpactPct || 0);
-    const routeable = !!q?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
-    if (!routeable) {
+    const route = await getRouteQuoteWithFallback({
+      cfg,
+      mint,
+      amountLamports: lam,
+      slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+      solUsdNow,
+      source: 'watchlist-route-cache-recheck',
+    });
+    if (!route.routeAvailable || !route.quote) {
       counters.watchlist.routeCacheMiss += 1;
       counters.watchlist.routeCacheStaleInvalidated += 1;
       delete wl.routeCache[mint];
@@ -677,8 +813,8 @@ async function resolveWatchlistRouteMeta({ cfg, state, mint, row, solUsdNow, now
     }
     counters.watchlist.routeCacheHit += 1;
     row.routeHint = true;
-    cacheRouteReadyMint({ state, cfg, mint, quote: q, nowMs, source: 'watchlist-recheck' });
-    return { fromCache: true, cacheUsed: true, staleInvalidated: false, quote: q };
+    cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs, source: `watchlist-recheck:${route.provider}` });
+    return { fromCache: true, cacheUsed: true, staleInvalidated: false, quote: route.quote };
   } catch {
     counters.watchlist.routeCacheMiss += 1;
     return { fromCache: false, cacheUsed: false, staleInvalidated: false, quote: null };
@@ -5943,6 +6079,9 @@ async function main() {
       const pairFetchCallsPerScan = scannerCycleCount > 0
         ? (scanCyclesWin.reduce((a, x) => a + Number(x?.pairFetchCalls || 0), 0) / scannerCycleCount)
         : null;
+      const pairFetchConcurrencyPerScan = scannerCycleCount > 0
+        ? (scanCyclesWin.reduce((a, x) => a + Number(x?.pairFetchConcurrency || 0), 0) / scannerCycleCount)
+        : null;
       const birdeyeCallsPerScan = scannerCycleCount > 0
         ? (scanCyclesWin.reduce((a, x) => a + Number(x?.birdeyeCalls || 0), 0) / scannerCycleCount)
         : null;
@@ -5951,6 +6090,14 @@ async function main() {
         : null;
       const maxSingleCallDurationMs = scannerCycleCount > 0
         ? Math.max(...scanCyclesWin.map((x) => Number(x?.maxSingleCallDurationMs || 0)))
+        : null;
+      const degradedRoutePrefilterScans = scanCyclesWin.filter((x) => !!x?.degradedRoutePrefilterMode).length;
+      const jupCooldownActiveScans = scanCyclesWin.filter((x) => !!x?.jupCooldownActive).length;
+      const usableSnapshotWithoutPairPerScan = scannerCycleCount > 0
+        ? (scanCyclesWin.reduce((a, x) => a + Number(x?.usableSnapshotWithoutPairCount || 0), 0) / scannerCycleCount)
+        : null;
+      const noPairTempActivePerScan = scannerCycleCount > 0
+        ? (scanCyclesWin.reduce((a, x) => a + Number(x?.noPairTempActiveCount || 0), 0) / scannerCycleCount)
         : null;
       const phaseAvg = (k) => scannerCycleCount > 0
         ? (scanCyclesWin.reduce((a, x) => a + Number(x?.[k] || 0), 0) / scannerCycleCount)
@@ -6353,7 +6500,8 @@ async function main() {
           `birdEyeFetch=${scanPhaseAverages.snapshotBirdseyeFetchMs != null ? Math.round(scanPhaseAverages.snapshotBirdseyeFetchMs) : 'n/a'} pairEnrichment=${scanPhaseAverages.snapshotPairEnrichmentMs != null ? Math.round(scanPhaseAverages.snapshotPairEnrichmentMs) : 'n/a'} liqMcapNormalization=${scanPhaseAverages.snapshotLiqMcapNormalizationMs != null ? Math.round(scanPhaseAverages.snapshotLiqMcapNormalizationMs) : 'n/a'} snapshotValidation=${scanPhaseAverages.snapshotValidationMs != null ? Math.round(scanPhaseAverages.snapshotValidationMs) : 'n/a'} watchlistRowConstruction=${scanPhaseAverages.snapshotWatchlistRowConstructionMs != null ? Math.round(scanPhaseAverages.snapshotWatchlistRowConstructionMs) : 'n/a'} other=${scanPhaseAverages.snapshotOtherMs != null ? Math.round(scanPhaseAverages.snapshotOtherMs) : 'n/a'}`,
           '',
           'CALL COUNTS',
-          `pairFetchCallsPerScan=${pairFetchCallsPerScan != null ? pairFetchCallsPerScan.toFixed(2) : 'n/a'} birdeyeCallsPerScan=${birdeyeCallsPerScan != null ? birdeyeCallsPerScan.toFixed(2) : 'n/a'} rpcCallsPerScan=${rpcCallsPerScan != null ? rpcCallsPerScan.toFixed(2) : 'n/a'} maxSingleCallDurationMs=${maxSingleCallDurationMs != null ? Math.round(maxSingleCallDurationMs) : 'n/a'}`,
+          `pairFetchCallsPerScan=${pairFetchCallsPerScan != null ? pairFetchCallsPerScan.toFixed(2) : 'n/a'} pairFetchConcurrencyPerScan=${pairFetchConcurrencyPerScan != null ? pairFetchConcurrencyPerScan.toFixed(2) : 'n/a'} birdeyeCallsPerScan=${birdeyeCallsPerScan != null ? birdeyeCallsPerScan.toFixed(2) : 'n/a'} rpcCallsPerScan=${rpcCallsPerScan != null ? rpcCallsPerScan.toFixed(2) : 'n/a'} maxSingleCallDurationMs=${maxSingleCallDurationMs != null ? Math.round(maxSingleCallDurationMs) : 'n/a'}`,
+          `routePrefilterDegradedScans=${degradedRoutePrefilterScans}/${scannerCycleCount} jupCooldownActiveScans=${jupCooldownActiveScans}/${scannerCycleCount} usableSnapshotWithoutPairPerScan=${usableSnapshotWithoutPairPerScan != null ? usableSnapshotWithoutPairPerScan.toFixed(2) : 'n/a'} noPairTempActivePerScan=${noPairTempActivePerScan != null ? noPairTempActivePerScan.toFixed(2) : 'n/a'}`,
           `tokenlistCandidatesFilteredByLiquidity=${scanPhaseAverages.tokenlistCandidatesFilteredByLiquidity != null ? scanPhaseAverages.tokenlistCandidatesFilteredByLiquidity.toFixed(2) : 'n/a'} tokenlistQuoteChecksPerformed=${scanPhaseAverages.tokenlistQuoteChecksPerformed != null ? scanPhaseAverages.tokenlistQuoteChecksPerformed.toFixed(2) : 'n/a'} tokenlistQuoteChecksSkipped=${scanPhaseAverages.tokenlistQuoteChecksSkipped != null ? scanPhaseAverages.tokenlistQuoteChecksSkipped.toFixed(2) : 'n/a'}`,
           '',
           'SOURCE UNIVERSE',
@@ -8014,11 +8162,19 @@ async function main() {
       counters.scanLastAtMs = t;
       const scanWatchlistIngestStart = Number(counters?.watchlist?.ingested || 0);
       const scanPairFetchStart = Number(counters?.pairFetch?.started || 0);
+      const scanRateLimitedStart = Number(counters?.pairFetch?.rateLimited || 0) + Number(counters?.reject?.noPairReasons?.rateLimited || 0);
       const scanBirdeyeReqStart = Number(state?.marketData?.providers?.birdeye?.requests || 0);
       let scanCandidatesFound = 0;
       let scanPairFetchCalls = 0;
       let scanBirdeyeCalls = 0;
       let scanRpcCalls = 0;
+      let scanPairFetchConcurrency = Math.max(1, Math.min(8, Number(cfg.PAIR_FETCH_CONCURRENCY || 1)));
+      let scanJupCooldownActive = false;
+      let scanJupCooldownRemainingMs = 0;
+      let scanRoutePrefilterDegraded = false;
+      let scanUsableSnapshotWithoutPairCount = 0;
+      let scanNoPairTempActiveCount = 0;
+      let scanNoPairTempRevisitCount = 0;
       let scanMaxSingleCallDurationMs = 0;
       const scanPhase = {
         candidateDiscoveryMs: 0,
@@ -8157,8 +8313,15 @@ async function main() {
           candidatesFound: Number(scanCandidatesFound || 0),
           watchlistIngest: watchlistIngestPerScan,
           pairFetchCalls: Number(scanPairFetchCalls || 0),
+          pairFetchConcurrency: Number(scanPairFetchConcurrency || 1),
           birdeyeCalls: Number(scanBirdeyeCalls || 0),
           rpcCalls: Number(scanRpcCalls || 0),
+          jupCooldownActive: !!scanJupCooldownActive,
+          jupCooldownRemainingMs: Number(scanJupCooldownRemainingMs || 0),
+          degradedRoutePrefilterMode: !!scanRoutePrefilterDegraded,
+          usableSnapshotWithoutPairCount: Number(scanUsableSnapshotWithoutPairCount || 0),
+          noPairTempActiveCount: Number(scanNoPairTempActiveCount || 0),
+          noPairTempRevisitCount: Number(scanNoPairTempRevisitCount || 0),
           maxSingleCallDurationMs: Number(scanMaxSingleCallDurationMs || 0),
           candidateDiscoveryMs: Number(scanPhase.candidateDiscoveryMs || 0),
           candidateSourcePollingMs: Number(scanPhase.candidateSourcePollingMs || 0),
@@ -8513,17 +8676,23 @@ async function main() {
                   const _tQuoteable = Date.now();
                   scanPhase.tokenlistQuoteChecksPerformed += 1;
                   try {
-                    const q = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
+                    const q = await getRouteQuoteWithFallback({
+                      cfg,
+                      mint,
+                      amountLamports: lam,
+                      slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                      solUsdNow,
+                      source: 'tokenlist-quality-gate',
+                    });
                     scanPhase.candidateTokenlistQuoteabilityChecksMs += Math.max(0, Date.now() - _tQuoteable);
-                    const pi = Number(q?.priceImpactPct || 0);
-                    const routeable = !!q?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
+                    const routeable = !!q?.routeAvailable;
                     const _tCacheWrite = Date.now();
                     quoteCache[mint] = { atMs: Date.now(), routeable };
                     scanPhase.candidateCacheWritesMs += Math.max(0, Date.now() - _tCacheWrite);
                     resolved.push({ pick, routeable });
                   } catch (e) {
                     scanPhase.candidateTokenlistQuoteabilityChecksMs += Math.max(0, Date.now() - _tQuoteable);
-                    if (isJup429(e)) hitRateLimit = true;
+                    if (isJup429(e) || isDexScreener429(e)) hitRateLimit = true;
                     const _tCacheWrite = Date.now();
                     quoteCache[mint] = { atMs: Date.now(), routeable: false };
                     scanPhase.candidateCacheWritesMs += Math.max(0, Date.now() - _tCacheWrite);
@@ -8582,8 +8751,12 @@ async function main() {
           }
           let dexHit429 = false;
           let jupHit429 = false;
+          let jupRoutePrefilterDegraded = false;
+          let jupRoutePrefilterDegradedReason = null;
           const noPairTemporary = ensureNoPairTemporaryState(state);
           const noPairDeadMints = ensureNoPairDeadMintState(state);
+          scanJupCooldownRemainingMs = Number(jupCooldownRemainingMs(state, t) || 0);
+          scanJupCooldownActive = scanJupCooldownRemainingMs > 0;
           const routeFirstEnabled = cfg.JUP_PREFILTER_ENABLED || JUP_ROUTE_FIRST_ENABLED;
           const pairFetchQueue = [];
           counters.pairFetch.queueDepthPeak = Math.max(Number(counters.pairFetch.queueDepthPeak || 0), boosted.length);
@@ -8606,11 +8779,13 @@ async function main() {
 
             const tempNoPair = noPairTemporary[mint];
             if (tempNoPair && shouldSkipNoPairTemporary(tempNoPair, t)) {
+              scanNoPairTempActiveCount += 1;
               bumpRouteCounter(counters, 'noPairTempSkips');
               pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair_temporary(active:${Math.round((tempNoPair.untilMs - t) / 1000)}s)` });
               continue;
             }
             if (tempNoPair && Number(tempNoPair.untilMs || 0) > t) {
+              scanNoPairTempRevisitCount += 1;
               bumpRouteCounter(counters, 'noPairTempRevisits');
               pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair_temporary(revisit_due)` });
             }
@@ -8705,25 +8880,51 @@ async function main() {
                 routeAvailable = true;
                 bumpRouteCounter(counters, 'prefilterRouteable');
                 bumpRouteCounter(counters, 'prefilterCacheHit');
+              } else if (jupRoutePrefilterDegraded) {
+                bumpRouteCounter(counters, 'prefilterSkippedDueJupCooldown');
               } else {
               const jupRemain = jupCooldownRemainingMs(state, t);
               if (jupRemain > 0) {
                 jupHit429 = true;
                 bumpRouteCounter(counters, 'prefilterRateLimited');
-                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPrefilter(COOLDOWN:${Math.round(jupRemain / 1000)}s)` });
-                break;
+                if (!jupRoutePrefilterDegraded) {
+                  jupRoutePrefilterDegraded = true;
+                  jupRoutePrefilterDegradedReason = `cooldown:${Math.round(jupRemain / 1000)}s`;
+                  pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPrefilter(DEGRADED_COOLDOWN:${Math.round(jupRemain / 1000)}s)` });
+                }
               }
 
+              if (!jupRoutePrefilterDegraded) {
               try {
                 const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                const q = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-                const r0 = q;
-                const pi = Number(r0?.priceImpactPct || 0);
-                routeAvailable = !!r0?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
-                if (routeAvailable) {
-                  cacheRouteReadyMint({ state, cfg, mint, quote: r0, nowMs: t, source: 'route-first-prefilter' });
+                const route = await getRouteQuoteWithFallback({
+                  cfg,
+                  mint,
+                  amountLamports: lam,
+                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                  solUsdNow,
+                  source: 'route-first-prefilter',
+                });
+                routeAvailable = !!route.routeAvailable;
+                routeErrorKind = route.routeErrorKind || null;
+                hitRateLimit = !!route.rateLimited;
+                if (routeAvailable && route.quote) {
+                  cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `route-first-prefilter:${route.provider}` });
                 }
                 if (!routeAvailable) {
+                  if (route.rateLimited) {
+                    jupHit429 = true;
+                    hitRateLimit = true;
+                    bumpRouteCounter(counters, 'prefilterRateLimited');
+                    if (!jupRoutePrefilterDegraded) {
+                      jupRoutePrefilterDegraded = true;
+                      jupRoutePrefilterDegradedReason = 'JUPITER_429';
+                    }
+                    pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPrefilter(DEGRADED_JUPITER_429)' });
+                    circuitHit({ state, nowMs: t, dep: 'jup', note: 'prefilter(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
+                    hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPrefilter(429)', persist: () => saveState(cfg.STATE_PATH, state) });
+                    continue;
+                  }
                   let recovered = false;
                   if (cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_REJECT_RECHECK_BURST_ENABLED && (cfg.AGGRESSIVE_MODE || prevAttempts >= 1)) {
                     const recheck = await quickRouteRecheck({
@@ -8752,48 +8953,13 @@ async function main() {
                 }
                 bumpRouteCounter(counters, 'prefilterRouteable');
               } catch (e) {
-                routeErrorKind = parseJupQuoteFailure(e);
-                if (isJup429(e) || routeErrorKind === 'rateLimited') {
-                  jupHit429 = true;
-                  hitRateLimit = true;
-                  bumpRouteCounter(counters, 'prefilterRateLimited');
-                  pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPrefilter(JUPITER_429)' });
-                  circuitHit({ state, nowMs: t, dep: 'jup', note: 'prefilter(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                  hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPrefilter(429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                  break;
-                }
-                const reason = (routeErrorKind === 'nonTradableMint') ? 'nonTradableMint' : (routeErrorKind || 'providerEmpty');
-                let recovered = false;
-                if (cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_REJECT_RECHECK_BURST_ENABLED && (cfg.AGGRESSIVE_MODE || prevAttempts >= 1)) {
-                  const recheck = await quickRouteRecheck({
-                    cfg,
-                    mint,
-                    solUsdNow,
-                    slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                    attempts: cfg.LIVE_REJECT_RECHECK_BURST_ATTEMPTS,
-                    delayMs: cfg.LIVE_REJECT_RECHECK_BURST_DELAY_MS,
-                    passes: cfg.LIVE_REJECT_RECHECK_PASSES,
-                    passDelayMs: cfg.LIVE_REJECT_RECHECK_PASS_DELAY_MS,
-                  });
-                  recovered = !!recheck.recovered;
-                  if (recovered) bumpRouteCounter(counters, 'rejectRecheckRecovered');
-                  else bumpRouteCounter(counters, 'rejectRecheckMisses');
-                }
-                if (!recovered) {
-                  bumpRouteCounter(counters, 'prefilterRejected');
-                  bumpNoPairReason(counters, reason, candidateSource);
-                  setNoPairTemporary(noPairTemporary, mint, { reason, nowMs: t, attempts: prevAttempts + 1 });
-                  if (reason === 'nonTradableMint') {
-                    recordNonTradableMint(counters, mint, 'rejected');
-                    const strikes = Number(noPairDeadMints[mint]?.strikes || 0) + 1;
-                    if (strikes >= NO_PAIR_DEAD_MINT_STRIKES) {
-                      noPairDeadMints[mint] = { untilMs: t + NO_PAIR_DEAD_MINT_TTL_MS, atMs: t, strikes, reason: 'nonTradableMint' };
-                    } else {
-                      noPairDeadMints[mint] = { untilMs: t + NO_PAIR_NON_TRADABLE_TTL_MS, atMs: t, strikes, reason: 'nonTradableMint' };
-                    }
-                  }
-                  continue;
-                }
+                // Emergency safety net — getRouteQuoteWithFallback should absorb all errors internally.
+                // If we somehow land here, treat as an unexpected provider error and skip this candidate.
+                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPrefilter(UNEXPECTED_ERR:${e?.message || e})` });
+                bumpNoPairReason(counters, 'providerEmpty', candidateSource);
+                setNoPairTemporary(noPairTemporary, mint, { reason: 'providerEmpty', nowMs: t, attempts: prevAttempts + 1 });
+                continue;
+              }
               }
               }
             }
@@ -8802,45 +8968,57 @@ async function main() {
               const cachedRoute = getFreshRouteCacheEntry({ state, cfg, mint, nowMs: t });
               if (cachedRoute) {
                 routeAvailable = true;
+              } else if (jupRoutePrefilterDegraded) {
+                bumpRouteCounter(counters, 'prefilterSkippedDueJupCooldown');
               } else {
                 try {
                 const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                const route = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-                const pi = Number(route?.priceImpactPct || 0);
-                routeAvailable = !!route?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
-                if (routeAvailable) {
-                  cacheRouteReadyMint({ state, cfg, mint, quote: route, nowMs: t, source: 'jup-source-preflight' });
+                const route = await getRouteQuoteWithFallback({
+                  cfg,
+                  mint,
+                  amountLamports: lam,
+                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                  solUsdNow,
+                  source: 'jup-source-preflight',
+                });
+                routeAvailable = !!route.routeAvailable;
+                routeErrorKind = route.routeErrorKind || null;
+                hitRateLimit = !!route.rateLimited;
+                if (routeAvailable && route.quote) {
+                  cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `jup-source-preflight:${route.provider}` });
                 }
                 if (!routeAvailable) {
+                  if (route.rateLimited) {
+                    hitRateLimit = true;
+                    jupHit429 = true;
+                    if (!jupRoutePrefilterDegraded) {
+                      jupRoutePrefilterDegraded = true;
+                      jupRoutePrefilterDegradedReason = 'JUPITER_429';
+                    }
+                    pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPreflight(DEGRADED_JUPITER_429)' });
+                    circuitHit({ state, nowMs: t, dep: 'jup', note: 'preflight(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
+                    hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPreflight(429)', persist: () => saveState(cfg.STATE_PATH, state) });
+                    continue;
+                  }
                   bumpNoPairReason(counters, 'routeNotFound', candidateSource);
                   setNoPairTemporary(noPairTemporary, mint, { reason: 'routeNotFound', nowMs: t, attempts: prevAttempts + 1 });
                   continue;
                 }
               } catch (e) {
-                routeErrorKind = parseJupQuoteFailure(e);
-                if (routeErrorKind === 'rateLimited') {
-                  hitRateLimit = true;
-                  jupHit429 = true;
-                  pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPreflight(JUPITER_429)' });
-                  circuitHit({ state, nowMs: t, dep: 'jup', note: 'preflight(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                  hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPreflight(429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                  break;
-                }
-                const reason = (routeErrorKind === 'nonTradableMint') ? 'nonTradableMint' : (routeErrorKind || 'providerEmpty');
-                bumpNoPairReason(counters, reason, candidateSource);
-                setNoPairTemporary(noPairTemporary, mint, { reason, nowMs: t, attempts: prevAttempts + 1 });
-                if (reason === 'nonTradableMint') {
-                  recordNonTradableMint(counters, mint, 'rejected');
-                  const strikes = Number(noPairDeadMints[mint]?.strikes || 0) + 1;
-                  if (strikes >= NO_PAIR_DEAD_MINT_STRIKES) {
-                    noPairDeadMints[mint] = { untilMs: t + NO_PAIR_DEAD_MINT_TTL_MS, atMs: t, strikes, reason };
-                  } else {
-                    noPairDeadMints[mint] = { untilMs: t + NO_PAIR_NON_TRADABLE_TTL_MS, atMs: t, strikes, reason };
-                  }
-                }
+                // Emergency safety net — getRouteQuoteWithFallback should absorb all errors internally.
+                // If we somehow land here, treat as an unexpected provider error and skip this candidate.
+                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPreflight(UNEXPECTED_ERR:${e?.message || e})` });
+                bumpNoPairReason(counters, 'providerEmpty', candidateSource);
+                setNoPairTemporary(noPairTemporary, mint, { reason: 'providerEmpty', nowMs: t, attempts: prevAttempts + 1 });
                 continue;
               }
               }
+            }
+
+            scanRoutePrefilterDegraded = scanRoutePrefilterDegraded || jupRoutePrefilterDegraded;
+            if (jupRoutePrefilterDegraded) {
+              scanJupCooldownActive = true;
+              scanJupCooldownRemainingMs = Math.max(scanJupCooldownRemainingMs, Number(jupCooldownRemainingMs(state, t) || 0));
             }
 
             scanPhase.candidateRouteabilityChecksMs += Math.max(0, Date.now() - _tRouteability);
@@ -8850,9 +9028,8 @@ async function main() {
           }
           scanPhase.routePrepMs += Math.max(0, Date.now() - _tRoutePrep);
 
-          if (jupHit429) {
-            // Jupiter is rate-limiting; skip ranking/execution this cycle.
-            continue;
+          if (jupHit429 && jupRoutePrefilterDegradedReason) {
+            pushDebug(state, { t: nowIso(), reason: `scanDegraded(jupRoutePrefilter=${jupRoutePrefilterDegradedReason})` });
           }
 
           if (dexHit429) {
@@ -8860,7 +9037,15 @@ async function main() {
             continue;
           }
 
-          const pairFetchConcurrency = Math.max(1, Math.min(8, Number(cfg.PAIR_FETCH_CONCURRENCY || 1)));
+          state.runtime ||= {};
+          state.runtime.pairFetchGovernor ||= { degradedUntilMs: 0 };
+          const basePairFetchConcurrency = Math.max(1, Math.min(8, Number(cfg.PAIR_FETCH_CONCURRENCY || 1)));
+          const governorDegradedUntilMs = Number(state.runtime.pairFetchGovernor.degradedUntilMs || 0);
+          const governorActive = governorDegradedUntilMs > t;
+          const pairFetchConcurrency = governorActive
+            ? Math.max(1, Math.floor(basePairFetchConcurrency * 0.6))
+            : basePairFetchConcurrency;
+          scanPairFetchConcurrency = pairFetchConcurrency;
           const routeAvailableImmediateRows = [];
           const routeAvailableImmediateRowMints = new Set();
           counters.pairFetch.queued += pairFetchQueue.length;
@@ -8913,19 +9098,28 @@ async function main() {
             counters.pairFetch.latencySamples += 1;
             counters.pairFetch.latencyMsTotal += Math.max(0, Date.now() - startedAt);
 
-            if (!snapshot?.priceUsd || !pair) {
+            if (!snapshot?.priceUsd) {
               counters.pairFetch.failed += 1;
               if (routeAvailable == null) {
                 try {
                   const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                  const route = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-                  routeAvailable = !!route?.routePlan?.length;
-                  if (routeAvailable) {
-                    cacheRouteReadyMint({ state, cfg, mint, quote: route, nowMs: t, source: 'pairfetch-fallback' });
+                  const route = await getRouteQuoteWithFallback({
+                    cfg,
+                    mint,
+                    amountLamports: lam,
+                    slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                    solUsdNow,
+                    source: 'pairfetch-fallback',
+                  });
+                  routeAvailable = !!route.routeAvailable;
+                  routeErrorKind = route.routeErrorKind || null;
+                  hitRateLimit = !!route.rateLimited;
+                  if (routeAvailable && route.quote) {
+                    cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `pairfetch-fallback:${route.provider}` });
                   }
                 } catch (e) {
                   routeErrorKind = parseJupQuoteFailure(e);
-                  if (routeErrorKind === 'rateLimited') hitRateLimit = true;
+                  hitRateLimit = isJup429(e) || isDexScreener429(e);
                 }
               }
 
@@ -8980,6 +9174,19 @@ async function main() {
               return;
             }
 
+            if (!pair) {
+              scanUsableSnapshotWithoutPairCount += 1;
+              pair = snapshot?.pair || {
+                baseToken: { address: mint, symbol: tok?.tokenSymbol || null },
+                pairCreatedAt: Number(snapshot?.pairCreatedAt || 0) || null,
+                priceUsd: Number(snapshot?.priceUsd || 0) || null,
+                liquidity: { usd: Number(snapshot?.liquidityUsd || 0) || 0 },
+                txns: { h1: { buys: 0, sells: 0 } },
+                volume: { h1: 0, h4: 0 },
+                priceChange: { h1: 0, h4: 0 },
+              };
+            }
+
             counters.pairFetch.success += 1;
             delete noPairTemporary[mint];
             delete noPairDeadMints[mint];
@@ -9004,6 +9211,16 @@ async function main() {
             bumpSourceCounter(counters, candidateSource, 'passedPair');
             preCandidates.push({ tok, mint, pair, snapshot, score, routeHint: routeAvailable === true });
           });
+
+          const rateLimitedNow = Number(counters?.pairFetch?.rateLimited || 0) + Number(counters?.reject?.noPairReasons?.rateLimited || 0);
+          const rateLimitedDelta = Math.max(0, rateLimitedNow - Number(scanRateLimitedStart || 0));
+          const governorShouldDegrade = rateLimitedDelta > 0 || jupRoutePrefilterDegraded;
+          if (governorShouldDegrade) {
+            state.runtime.pairFetchGovernor.degradedUntilMs = Math.max(
+              Number(state.runtime.pairFetchGovernor.degradedUntilMs || 0),
+              t + 120_000,
+            );
+          }
           scanPhase.pairFetchMs += Math.max(0, Date.now() - _tPairFetch);
 
           const _tShortlist = Date.now();
@@ -9024,10 +9241,15 @@ async function main() {
             const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
             const fanoutChecks = await Promise.all(fanoutSet.map(async (c) => {
               try {
-                const q = await jupQuote({ inputMint: cfg.SOL_MINT, outputMint: c.mint, amount: lam, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-                const pi = Number(q?.priceImpactPct || 0);
-                const routeable = !!q?.routePlan?.length && (!pi || pi <= cfg.MAX_PRICE_IMPACT_PCT);
-                return { mint: c.mint, routeable };
+                const route = await getRouteQuoteWithFallback({
+                  cfg,
+                  mint: c.mint,
+                  amountLamports: lam,
+                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                  solUsdNow,
+                  source: 'fanout',
+                });
+                return { mint: c.mint, routeable: !!route.routeAvailable };
               } catch {
                 return { mint: c.mint, routeable: false };
               }
@@ -9371,14 +9593,15 @@ async function main() {
                 if (strongLiq && strongTx) {
                   try {
                     const probeLamports = toBaseUnits((Math.max(1, cfg.JUP_PREFILTER_AMOUNT_USD) / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                    const fallbackQuote = await jupQuote({
-                      inputMint: cfg.SOL_MINT,
-                      outputMint: mint,
-                      amount: probeLamports,
+                    const fallbackRoute = await getRouteQuoteWithFallback({
+                      cfg,
+                      mint,
+                      amountLamports: probeLamports,
                       slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
+                      solUsdNow,
+                      source: 'momentum-fallback',
                     });
-                    const piFallback = Number(fallbackQuote?.priceImpactPct || 0);
-                    const routeableFallback = !!fallbackQuote?.routePlan?.length && (!piFallback || piFallback <= cfg.MAX_PRICE_IMPACT_PCT);
+                    const routeableFallback = !!fallbackRoute.routeAvailable;
                     if (routeableFallback) {
                       fallbackUsed = true;
                       signalTrigger = 'fallback';
@@ -9489,6 +9712,9 @@ async function main() {
               const usdTargetCapped = Math.min(cfg.MAX_POSITION_USDC * 1.1, Math.max(cfg.MAX_POSITION_USDC * 0.1, usdTarget));
 
               // Gatekeeper (AI) gets the quote before signing.
+              // NOTE: Intentionally Jupiter-only — this is an execution quote for priceImpact/outAmount display,
+              // not a routeability check. The alt-route fallback (getRouteQuoteWithFallback) is used upstream
+              // in the scanner pipeline; swap execution always uses Jupiter directly.
               const solLamports = toBaseUnits((usdTargetCapped / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
               const quote = await jupQuote({
                 inputMint: cfg.SOL_MINT,
@@ -9575,6 +9801,7 @@ async function main() {
               finalUsdTarget = softReserve.adjustedUsdTarget;
 
               // Re-quote with final sizing right before execution.
+              // NOTE: Intentionally Jupiter-only — must use a live Jupiter quote for the actual swap transaction.
               const solLamportsFinal = toBaseUnits((finalUsdTarget / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
               const quoteFinal = await jupQuote({
                 inputMint: cfg.SOL_MINT,

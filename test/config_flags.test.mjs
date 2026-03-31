@@ -19,6 +19,9 @@ const ENV_KEYS = [
   'SOURCE_MODE',
   'SOURCE_QUALITY_JUP_SAMPLE_N',
   'SOURCE_QUALITY_REQUIRE_JUP_QUOTEABLE',
+  'ROUTE_ALT_ENABLED',
+  'ROUTE_ALT_MIN_LIQ_USD',
+  'ROUTE_ALT_MAX_PRICE_IMPACT_PCT',
   'BIRDEYE_LITE_ENABLED',
   'BIRDEYE_API_KEY',
   'BIRDEYE_LITE_MAX_RPS',
@@ -77,6 +80,9 @@ describe('pass1 config flags', () => {
     expect(cfg.SOURCE_MODE).toBe('mixed');
     expect(cfg.SOURCE_QUALITY_JUP_SAMPLE_N).toBe(8);
     expect(cfg.SOURCE_QUALITY_REQUIRE_JUP_QUOTEABLE).toBe(true);
+    expect(cfg.ROUTE_ALT_ENABLED).toBe(true);
+    expect(cfg.ROUTE_ALT_MIN_LIQ_USD).toBe(18000);
+    expect(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT).toBe(4);
     expect(cfg.BIRDEYE_LITE_ENABLED).toBe(false);
     expect(cfg.BIRDEYE_LITE_MAX_RPS).toBe(12);
     expect(cfg.AGGRESSIVE_MODE).toBe(false);
@@ -160,6 +166,16 @@ describe('pass1 config flags', () => {
     expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH).toBe(false);
     expect(cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS).toBe(false);
     expect(cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS).toBe(4);
+  });
+
+  it('supports route alternative flags', () => {
+    process.env.ROUTE_ALT_ENABLED = 'false';
+    process.env.ROUTE_ALT_MIN_LIQ_USD = '25000';
+    process.env.ROUTE_ALT_MAX_PRICE_IMPACT_PCT = '5.5';
+    const cfg = getConfig();
+    expect(cfg.ROUTE_ALT_ENABLED).toBe(false);
+    expect(cfg.ROUTE_ALT_MIN_LIQ_USD).toBe(25_000);
+    expect(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT).toBe(5.5);
   });
 
   it('validates SOURCE_MODE values', () => {

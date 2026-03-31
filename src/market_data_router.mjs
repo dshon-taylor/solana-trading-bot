@@ -46,7 +46,29 @@ function ensureRouterState(state) {
   state.marketData ||= {};
   state.marketData.providers ||= {};
   state.marketData.lastKnownGood ||= {};
+  state.marketData.staleSkips ||= {};
+  state.marketData.staleSkipStrikes ||= {};
   return state.marketData;
+}
+
+function clearStaleSkip(state, mint) {
+  if (!state?.marketData || !mint) return;
+  if (state.marketData.staleSkips) delete state.marketData.staleSkips[mint];
+  if (state.marketData.staleSkipStrikes) delete state.marketData.staleSkipStrikes[mint];
+}
+
+function markStaleSkip(state, mint, nowMs) {
+  if (!state?.marketData || !mint) return;
+  state.marketData.staleSkips ||= {};
+  state.marketData.staleSkipStrikes ||= {};
+  const prev = Number(state.marketData.staleSkipStrikes[mint] || 0);
+  const strikes = Math.max(1, Math.min(6, prev + 1));
+  state.marketData.staleSkipStrikes[mint] = strikes;
+
+  const baseMs = Math.max(10_000, Number(process.env.SKIP_MINT_ON_STALE_BASE_MS || 60_000));
+  const maxMs = Math.max(baseMs, Number(process.env.SKIP_MINT_ON_STALE_MAX_MS || 300_000));
+  const skipMs = Math.min(maxMs, Math.round(baseMs * (2 ** (strikes - 1))));
+  state.marketData.staleSkips[mint] = nowMs + skipMs;
 }
 
 function ensureProviderHealth(state, provider) {
@@ -682,6 +704,7 @@ export async function getMarketSnapshot({
       markProviderHit(state, PROVIDERS.bird);
       markProviderSuccess(state, PROVIDERS.bird, nowMs);
       rememberLkg(state, mint, wsSnap, nowMs, lkgMaxEntries);
+      clearStaleSkip(state, mint);
       return wsSnap;
     }
   }
@@ -699,6 +722,7 @@ export async function getMarketSnapshot({
           markProviderHit(state, PROVIDERS.bird);
           markProviderSuccess(state, PROVIDERS.bird, nowMs);
           rememberLkg(state, mint, birdSnap, nowMs, lkgMaxEntries);
+          clearStaleSkip(state, mint);
           return birdSnap;
         }
 
@@ -713,6 +737,7 @@ export async function getMarketSnapshot({
             markProviderHit(state, PROVIDERS.bird);
             markProviderSuccess(state, PROVIDERS.bird, nowMs);
             rememberLkg(state, mint, birdSnap2, nowMs, lkgMaxEntries);
+            clearStaleSkip(state, mint);
             return birdSnap2;
           }
         } catch (e) {
@@ -743,6 +768,7 @@ export async function getMarketSnapshot({
         const lkg = state.marketData.lastKnownGood?.[mint] || null;
         if (lkg?.liquidityUsd && !jupSnap.liquidityUsd) jupSnap.liquidityUsd = Number(lkg.liquidityUsd);
         rememberLkg(state, mint, jupSnap, nowMs, lkgMaxEntries);
+        clearStaleSkip(state, mint);
         return jupSnap;
       }
       markProviderMiss(state, PROVIDERS.jup);
@@ -764,6 +790,7 @@ export async function getMarketSnapshot({
         markProviderHit(state, PROVIDERS.dex);
         markProviderSuccess(state, PROVIDERS.dex, nowMs);
         // DexScreener is discovery-only: do not persist it as last-known-good for cache-backed entry gating.
+        clearStaleSkip(state, mint);
         return dexSnap;
       }
       markProviderMiss(state, PROVIDERS.dex);
@@ -778,11 +805,14 @@ export async function getMarketSnapshot({
   const lkg = state.marketData.lastKnownGood?.[mint] || null;
   if (lkg) {
     const snap = snapshotFromLkg(lkg, nowMs);
-    if (snap && Number(snap.freshnessMs || 0) <= Number(maxAgeMs || 0)) return snap;
+    if (snap && Number(snap.freshnessMs || 0) <= Number(maxAgeMs || 0)) {
+      clearStaleSkip(state, mint);
+      return snap;
+    }
   }
 
   // If we got here, nothing usable found.
   // If BirdEye was stale earlier, set a temporary skip to avoid repeated wasted fetches.
-  state.marketData.staleSkips[mint] = nowMs + Number(process.env.SKIP_MINT_ON_STALE_MS || 300_000);
+  markStaleSkip(state, mint, nowMs);
   return null;
 }
