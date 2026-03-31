@@ -112,7 +112,7 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 - [x] Back-compat shim in `src/control_tower/watchlist_pipeline_runtime.mjs`
 
 ## 15) Validation + cleanup
-- [ ] Ensure all current import paths continue working (via shims or import updates)
-- [ ] Remove dead code and duplicated helpers after extraction
-- [ ] Run `npm test --silent` and verify 34/34, 139/139
-- [ ] Commit with focused message(s)
+- [x] Ensure all current import paths continue working (via shims or import updates)
+- [x] Remove dead code and duplicated helpers after extraction
+- [x] Run `npm test --silent` and verify 34/34, 139/139
+- [x] Commit with focused message(s)
