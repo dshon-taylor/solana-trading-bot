@@ -1,6 +1,7 @@
 import { estimateEquityUsd } from '../portfolio_control.mjs';
 import { positionCount } from '../position_policy.mjs';
-import { isPaperModeActive, jupCooldownRemainingMs } from '../route_control.mjs';
+import { isPaperModeActive } from '../route_control.mjs';
+import { jupCooldownRemainingMs } from '../../jup_cooldown.mjs';
 import { formatTrackerIngestionSummary } from '../../tracker.mjs';
 import { getModels } from '../../ai_pipeline.mjs';
 import { fmtUsd } from '../ops_reporting.mjs';
