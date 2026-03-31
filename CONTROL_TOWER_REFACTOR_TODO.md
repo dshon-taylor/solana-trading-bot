@@ -6,12 +6,11 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 ---
 
 ## 1) `candidate_pipeline.mjs` → `candidate_pipeline/`
-- [ ] Create `src/control_tower/candidate_pipeline/index.mjs`
-- [ ] Stage: `stage_source_ingestion.mjs` (streaming + fallback source fetch)
-- [ ] Stage: `stage_candidate_normalization.mjs` (shape/normalize token rows)
-- [ ] Stage: `stage_source_gatekeeping.mjs` (cooldowns, quality, dedupe)
-- [ ] Stage: `stage_pipeline_result.mjs` (return structure + counters updates)
-- [ ] Back-compat shim in `src/control_tower/candidate_pipeline.mjs`
+- [x] Create `src/control_tower/candidate_pipeline/index.mjs`
+- [x] Stage: `stage_source_discovery.mjs` (BirdEye + DexScreener + stream merge)
+- [x] Stage: `stage_jup_expansion.mjs` (BirdEye-seeded Jupiter expansion)
+- [x] Stage: `stage_finalize_candidates.mjs` (dedupe + preview)
+- [x] Back-compat shim in `src/control_tower/candidate_pipeline.mjs`
 
 ## 2) `diag_reporting.mjs` → `diag_reporting/`
 - [ ] Create `src/control_tower/diag_reporting/index.mjs`
