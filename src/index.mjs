@@ -51,6 +51,7 @@ import { createPositionsLoop } from './control_tower/positions_loop.mjs';
 import { createDiagReporting } from './control_tower/diag_reporting.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
+import { createScanPipeline } from './control_tower/scan_pipeline/index.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
@@ -59,6 +60,8 @@ import { CORE_MOMO_CHECKS, canaryMomoShouldSample, recordCanaryMomoFailChecks, c
 import {
   JUP_ROUTE_FIRST_ENABLED,
   JUP_SOURCE_PREFLIGHT_ENABLED,
+  NO_PAIR_RETRY_BASE_MS,
+  NO_PAIR_RETRY_MAX_BACKOFF_MS,
   NO_PAIR_RETRY_TOTAL_BUDGET_MS,
   NO_PAIR_NON_TRADABLE_TTL_MS,
   NO_PAIR_DEAD_MINT_TTL_MS,
@@ -971,6 +974,63 @@ async function main() {
     cfg, state, birdseye, streamingProvider, tgSend, saveState,
   });
 
+  const { runScanPipeline } = createScanPipeline({
+    cfg,
+    state,
+    tgSend,
+    nowIso,
+    pushDebug,
+    saveState,
+    jupCooldownRemainingMs,
+    ensureNoPairTemporaryState,
+    ensureNoPairDeadMintState,
+    normalizeCandidateSource,
+    bumpSourceCounter,
+    bumpRouteCounter,
+    bumpNoPairReason,
+    recordNonTradableMint,
+    shouldSkipNoPairTemporary,
+    setNoPairTemporary,
+    getCachedPairSnapshot,
+    shouldApplyEarlyShortlistPrefilter,
+    getBoostUsd,
+    logCandidateDaily,
+    getFreshRouteCacheEntry,
+    cacheRouteReadyMint,
+    toBaseUnits,
+    DECIMALS,
+    getRouteQuoteWithFallback,
+    quickRouteRecheck,
+    circuitHit,
+    hitJup429,
+    JUP_ROUTE_FIRST_ENABLED,
+    JUP_SOURCE_PREFLIGHT_ENABLED,
+    getMarketSnapshot,
+    getTokenPairs,
+    pickBestPair,
+    birdseye,
+    mapWithConcurrency,
+    effectiveNoPairRetryAttempts,
+    NO_PAIR_RETRY_TOTAL_BUDGET_MS,
+    NO_PAIR_RETRY_BASE_MS,
+    NO_PAIR_RETRY_MAX_BACKOFF_MS,
+    jitter,
+    parseJupQuoteFailure,
+    isJup429,
+    isDexScreener429,
+    promoteRouteAvailableCandidate,
+    classifyNoPairReason,
+    NO_PAIR_DEAD_MINT_STRIKES,
+    NO_PAIR_DEAD_MINT_TTL_MS,
+    NO_PAIR_NON_TRADABLE_TTL_MS,
+    getSnapshotStatus,
+    trackerMaybeEnqueue,
+    circuitOkForEntries,
+    entryCapacityAvailable,
+    isPaperModeActive,
+    PLAYBOOK_MODE_DEGRADED,
+  });
+
   while (true) {
     const t = Date.now();
     rollWatchlistMinuteWindow(counters, t);
@@ -1805,578 +1865,52 @@ async function main() {
           if (newDexCooldownUntil != null) dexCooldownUntil = newDexCooldownUntil;
 
 
-          const preCandidates = [];
-          // Visibility ping (noisy)
-          const visibilityPings = (state?.flags?.tgVisibilityPings ?? cfg.TG_VISIBILITY_PINGS);
-          if (visibilityPings) {
-            try {
-              if (!globalThis.__lastEvalPingAt || (t - globalThis.__lastEvalPingAt) > 30 * 60_000) {
-                globalThis.__lastEvalPingAt = t;
-                await tgSend(cfg, `🔎 Scan cycle: boostedRaw=${boostedRaw.length} deduped=${boosted.length}`);
-              }
-            } catch {}
-          }
-          let dexHit429 = false;
-          let jupHit429 = false;
-          let jupRoutePrefilterDegraded = false;
-          let jupRoutePrefilterDegradedReason = null;
-          const noPairTemporary = ensureNoPairTemporaryState(state);
-          const noPairDeadMints = ensureNoPairDeadMintState(state);
-          scanJupCooldownRemainingMs = Number(jupCooldownRemainingMs(state, t) || 0);
-          scanJupCooldownActive = scanJupCooldownRemainingMs > 0;
-          const routeFirstEnabled = cfg.JUP_PREFILTER_ENABLED || JUP_ROUTE_FIRST_ENABLED;
-          const pairFetchQueue = [];
-          counters.pairFetch.queueDepthPeak = Math.max(Number(counters.pairFetch.queueDepthPeak || 0), boosted.length);
-          const _tRoutePrep = Date.now();
-          for (const tok of boosted) {
-            const mint = tok.tokenAddress;
-            const candidateSource = normalizeCandidateSource(tok?._source || 'dex');
-            bumpSourceCounter(counters, candidateSource, 'seen');
-            pushScanCompactEvent('candidateSeen', { mint, source: candidateSource });
-            const _tCooldown = Date.now();
-            const deadMint = noPairDeadMints[mint];
-            if (deadMint && Number(deadMint.untilMs || 0) > t) {
-              bumpRouteCounter(counters, 'deadMintSkips');
-              bumpNoPairReason(counters, 'deadMint', candidateSource);
-              if (String(deadMint?.reason || '') === 'nonTradableMint') recordNonTradableMint(counters, mint, 'cooldownActive');
-              pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair_deadMint(active:${Math.round((Number(deadMint.untilMs || 0) - t) / 1000)}s)` });
-              continue;
-            }
-            if (deadMint && Number(deadMint.untilMs || 0) <= t) delete noPairDeadMints[mint];
+          const scanPipelineResult = await runScanPipeline({
+            t,
+            solUsdNow,
+            boostedRaw,
+            boosted,
+            counters,
+            scanPhase,
+            scanRateLimitedStart,
+            scanState: {
+              scanCandidatesFound,
+              scanPairFetchConcurrency,
+              scanJupCooldownActive,
+              scanJupCooldownRemainingMs,
+              scanRoutePrefilterDegraded,
+              scanUsableSnapshotWithoutPairCount,
+              scanNoPairTempActiveCount,
+              scanNoPairTempRevisitCount,
+            },
+            pushScanCompactEvent,
+          });
 
-            const tempNoPair = noPairTemporary[mint];
-            if (tempNoPair && shouldSkipNoPairTemporary(tempNoPair, t)) {
-              scanNoPairTempActiveCount += 1;
-              bumpRouteCounter(counters, 'noPairTempSkips');
-              pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair_temporary(active:${Math.round((tempNoPair.untilMs - t) / 1000)}s)` });
-              continue;
-            }
-            if (tempNoPair && Number(tempNoPair.untilMs || 0) > t) {
-              scanNoPairTempRevisitCount += 1;
-              bumpRouteCounter(counters, 'noPairTempRevisits');
-              pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair_temporary(revisit_due)` });
-            }
-
-            scanPhase.candidateCooldownFilteringMs += Math.max(0, Date.now() - _tCooldown);
-            const prevAttempts = Math.max(0, Number(tempNoPair?.attempts || 0));
-            const _tRouteLoopStart = Date.now();
-
-            // Early shortlist prefilter: drop obvious low-value candidates before expensive pair fetch.
-            // (1) If we already have a cached pair snapshot for this mint, and it shows too-low activity,
-            //     skip refetching this cycle.
-            const _tShortlistPrefilter = Date.now();
-            if (cfg.EARLY_SHORTLIST_PREFILTER_ACTIVE) {
-              try {
-                const cached = getCachedPairSnapshot({ state, mint, nowMs: t, maxAgeMs: cfg.PAIR_CACHE_MAX_AGE_MS });
-                const p = cached?.pair;
-                if (p) {
-                  const liq = Number(p?.liquidity?.usd || 0);
-                  const tx1h = Number(p?.txns?.h1?.buys || 0) + Number(p?.txns?.h1?.sells || 0);
-                  if ((liq > 0 && liq < cfg.EARLY_SHORTLIST_PREFILTER_MIN_LIQ_USD) || (tx1h >= 0 && tx1h < cfg.EARLY_SHORTLIST_PREFILTER_MIN_TX1H)) {
-                    bumpRouteCounter(counters, 'shortlistPrefilterDropped');
-                    setNoPairTemporary(noPairTemporary, mint, { reason: 'shortlistCachedLowActivity', nowMs: t, attempts: prevAttempts + 1 });
-                    pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `earlyPrefilter(cache liq=${liq.toFixed(0)} tx1h=${tx1h})` });
-                    logCandidateDaily({
-                      dir: cfg.CANDIDATE_LEDGER_DIR,
-                      retentionDays: cfg.CANDIDATE_LEDGER_RETENTION_DAYS,
-                      event: { t: nowIso(), bot: 'candle-carl', mint, symbol: tok?.tokenSymbol || null, source: tok?._source || 'dex', outcome: 'reject', reason: `earlyPrefilter(cache liq=${liq.toFixed(0)} tx1h=${tx1h})` },
-                    });
-                    continue;
-                  }
-                }
-              } catch {}
-
-              // (2) Dex boost sanity: ignore tiny boosts (often low-liq / low-activity spam).
-              if (shouldApplyEarlyShortlistPrefilter({ cfg, tok })) {
-                const boostUsd = getBoostUsd(tok);
-                if (boostUsd > 0 && boostUsd < cfg.EARLY_SHORTLIST_PREFILTER_MIN_BOOST_USD) {
-                  bumpRouteCounter(counters, 'shortlistPrefilterDropped');
-                  setNoPairTemporary(noPairTemporary, mint, { reason: 'shortlistBoostTooSmall', nowMs: t, attempts: prevAttempts + 1 });
-                  pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `earlyPrefilter(boostUsd=${boostUsd.toFixed(2)} < ${cfg.EARLY_SHORTLIST_PREFILTER_MIN_BOOST_USD})` });
-                  logCandidateDaily({
-                    dir: cfg.CANDIDATE_LEDGER_DIR,
-                    retentionDays: cfg.CANDIDATE_LEDGER_RETENTION_DAYS,
-                    event: { t: nowIso(), bot: 'candle-carl', mint, symbol: tok?.tokenSymbol || null, source: tok?._source || 'dex', outcome: 'reject', reason: `earlyPrefilter(boostUsd=${boostUsd.toFixed(2)})` },
-                  });
-                  continue;
-                }
-              }
-            }
-            scanPhase.candidateShortlistPrefilterMs += Math.max(0, Date.now() - _tShortlistPrefilter);
-
-            if (cfg.EARLY_SHORTLIST_PREFILTER_ACTIVE) bumpRouteCounter(counters, 'shortlistPrefilterPassed');
-
-            // Early source-capture record (survives even if pair fetch/filters fail later).
-            logCandidateDaily({
-              dir: cfg.CANDIDATE_LEDGER_DIR,
-              retentionDays: cfg.CANDIDATE_LEDGER_RETENTION_DAYS,
-              event: {
-                t: nowIso(),
-                bot: 'candle-carl',
-                mint,
-                symbol: tok?.tokenSymbol || null,
-                source: tok?._source || 'dex',
-                priceUsd: null,
-                liqUsd: null,
-                ageHours: null,
-                mcapUsd: null,
-                rugScore: null,
-                v1h: null,
-                v4h: null,
-                buys1h: null,
-                sells1h: null,
-                tx1h: null,
-                pc1h: null,
-                pc4h: null,
-                outcome: 'seen_source',
-                reason: 'queued_for_pair_fetch',
-              },
-            });
-
-            let hitRateLimit = false;
-            let routeAvailable = null;
-            let routeErrorKind = null;
-
-            // Jupiter quoteability prefilter (cheap early reject)
-            // If Jupiter is throttling, abort this scan cycle to avoid hammering both Jup and Dex.
-            const _tRouteability = Date.now();
-            if (routeFirstEnabled) {
-              bumpRouteCounter(counters, 'prefilterChecks');
-              const cachedRoute = getFreshRouteCacheEntry({ state, cfg, mint, nowMs: t });
-              if (cachedRoute) {
-                routeAvailable = true;
-                bumpRouteCounter(counters, 'prefilterRouteable');
-                bumpRouteCounter(counters, 'prefilterCacheHit');
-              } else if (jupRoutePrefilterDegraded) {
-                bumpRouteCounter(counters, 'prefilterSkippedDueJupCooldown');
-              } else {
-              const jupRemain = jupCooldownRemainingMs(state, t);
-              if (jupRemain > 0) {
-                jupHit429 = true;
-                bumpRouteCounter(counters, 'prefilterRateLimited');
-                if (!jupRoutePrefilterDegraded) {
-                  jupRoutePrefilterDegraded = true;
-                  jupRoutePrefilterDegradedReason = `cooldown:${Math.round(jupRemain / 1000)}s`;
-                  pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPrefilter(DEGRADED_COOLDOWN:${Math.round(jupRemain / 1000)}s)` });
-                }
-              }
-
-              if (!jupRoutePrefilterDegraded) {
-              try {
-                const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                const route = await getRouteQuoteWithFallback({
-                  cfg,
-                  mint,
-                  amountLamports: lam,
-                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                  solUsdNow,
-                  source: 'route-first-prefilter',
-                });
-                routeAvailable = !!route.routeAvailable;
-                routeErrorKind = route.routeErrorKind || null;
-                hitRateLimit = !!route.rateLimited;
-                if (routeAvailable && route.quote) {
-                  cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `route-first-prefilter:${route.provider}` });
-                }
-                if (!routeAvailable) {
-                  if (route.rateLimited) {
-                    jupHit429 = true;
-                    hitRateLimit = true;
-                    bumpRouteCounter(counters, 'prefilterRateLimited');
-                    if (!jupRoutePrefilterDegraded) {
-                      jupRoutePrefilterDegraded = true;
-                      jupRoutePrefilterDegradedReason = 'JUPITER_429';
-                    }
-                    pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPrefilter(DEGRADED_JUPITER_429)' });
-                    circuitHit({ state, nowMs: t, dep: 'jup', note: 'prefilter(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                    hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPrefilter(429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                    continue;
-                  }
-                  let recovered = false;
-                  if (cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_REJECT_RECHECK_BURST_ENABLED && (cfg.AGGRESSIVE_MODE || prevAttempts >= 1)) {
-                    const recheck = await quickRouteRecheck({
-                      cfg,
-                      mint,
-                      solUsdNow,
-                      slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                      attempts: cfg.LIVE_REJECT_RECHECK_BURST_ATTEMPTS,
-                      delayMs: cfg.LIVE_REJECT_RECHECK_BURST_DELAY_MS,
-                      passes: cfg.LIVE_REJECT_RECHECK_PASSES,
-                      passDelayMs: cfg.LIVE_REJECT_RECHECK_PASS_DELAY_MS,
-                    });
-                    recovered = !!recheck.recovered;
-                    if (recovered) {
-                      bumpRouteCounter(counters, 'rejectRecheckRecovered');
-                    } else {
-                      bumpRouteCounter(counters, 'rejectRecheckMisses');
-                    }
-                  }
-                  if (!recovered) {
-                    bumpRouteCounter(counters, 'prefilterRejected');
-                    bumpNoPairReason(counters, 'routeNotFound', candidateSource);
-                    setNoPairTemporary(noPairTemporary, mint, { reason: 'routeNotFound', nowMs: t, attempts: prevAttempts + 1 });
-                    continue;
-                  }
-                }
-                bumpRouteCounter(counters, 'prefilterRouteable');
-              } catch (e) {
-                // Emergency safety net — getRouteQuoteWithFallback should absorb all errors internally.
-                // If we somehow land here, treat as an unexpected provider error and skip this candidate.
-                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPrefilter(UNEXPECTED_ERR:${e?.message || e})` });
-                bumpNoPairReason(counters, 'providerEmpty', candidateSource);
-                setNoPairTemporary(noPairTemporary, mint, { reason: 'providerEmpty', nowMs: t, attempts: prevAttempts + 1 });
-                continue;
-              }
-              }
-              }
-            }
-
-            if (!routeFirstEnabled && JUP_SOURCE_PREFLIGHT_ENABLED && tok?._source === 'jup') {
-              const cachedRoute = getFreshRouteCacheEntry({ state, cfg, mint, nowMs: t });
-              if (cachedRoute) {
-                routeAvailable = true;
-              } else if (jupRoutePrefilterDegraded) {
-                bumpRouteCounter(counters, 'prefilterSkippedDueJupCooldown');
-              } else {
-                try {
-                const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                const route = await getRouteQuoteWithFallback({
-                  cfg,
-                  mint,
-                  amountLamports: lam,
-                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                  solUsdNow,
-                  source: 'jup-source-preflight',
-                });
-                routeAvailable = !!route.routeAvailable;
-                routeErrorKind = route.routeErrorKind || null;
-                hitRateLimit = !!route.rateLimited;
-                if (routeAvailable && route.quote) {
-                  cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `jup-source-preflight:${route.provider}` });
-                }
-                if (!routeAvailable) {
-                  if (route.rateLimited) {
-                    hitRateLimit = true;
-                    jupHit429 = true;
-                    if (!jupRoutePrefilterDegraded) {
-                      jupRoutePrefilterDegraded = true;
-                      jupRoutePrefilterDegradedReason = 'JUPITER_429';
-                    }
-                    pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: 'jupPreflight(DEGRADED_JUPITER_429)' });
-                    circuitHit({ state, nowMs: t, dep: 'jup', note: 'preflight(JUPITER_429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                    hitJup429({ state, nowMs: t, baseMs: 15_000, reason: 'jupPreflight(429)', persist: () => saveState(cfg.STATE_PATH, state) });
-                    continue;
-                  }
-                  bumpNoPairReason(counters, 'routeNotFound', candidateSource);
-                  setNoPairTemporary(noPairTemporary, mint, { reason: 'routeNotFound', nowMs: t, attempts: prevAttempts + 1 });
-                  continue;
-                }
-              } catch (e) {
-                // Emergency safety net — getRouteQuoteWithFallback should absorb all errors internally.
-                // If we somehow land here, treat as an unexpected provider error and skip this candidate.
-                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `jupPreflight(UNEXPECTED_ERR:${e?.message || e})` });
-                bumpNoPairReason(counters, 'providerEmpty', candidateSource);
-                setNoPairTemporary(noPairTemporary, mint, { reason: 'providerEmpty', nowMs: t, attempts: prevAttempts + 1 });
-                continue;
-              }
-              }
-            }
-
-            scanRoutePrefilterDegraded = scanRoutePrefilterDegraded || jupRoutePrefilterDegraded;
-            if (jupRoutePrefilterDegraded) {
-              scanJupCooldownActive = true;
-              scanJupCooldownRemainingMs = Math.max(scanJupCooldownRemainingMs, Number(jupCooldownRemainingMs(state, t) || 0));
-            }
-
-            scanPhase.candidateRouteabilityChecksMs += Math.max(0, Date.now() - _tRouteability);
-            scanPhase.candidateOtherMs += Math.max(0, Date.now() - _tRouteLoopStart);
-            if (routeAvailable === true) pushScanCompactEvent('candidateRouteable', { mint, source: candidateSource });
-            pairFetchQueue.push({ tok, mint, candidateSource, routeAvailable, routeErrorKind, hitRateLimit, prevAttempts });
-          }
-          scanPhase.routePrepMs += Math.max(0, Date.now() - _tRoutePrep);
-
-          if (jupHit429 && jupRoutePrefilterDegradedReason) {
-            pushDebug(state, { t: nowIso(), reason: `scanDegraded(jupRoutePrefilter=${jupRoutePrefilterDegradedReason})` });
+          if (scanPipelineResult?.scanState) {
+            ({
+              scanCandidatesFound,
+              scanPairFetchConcurrency,
+              scanJupCooldownActive,
+              scanJupCooldownRemainingMs,
+              scanRoutePrefilterDegraded,
+              scanUsableSnapshotWithoutPairCount,
+              scanNoPairTempActiveCount,
+              scanNoPairTempRevisitCount,
+            } = scanPipelineResult.scanState);
           }
 
-          if (dexHit429) {
-            // DexScreener is rate-limiting; skip ranking/execution this cycle.
+          if (scanPipelineResult?.skipCycle) {
             continue;
           }
 
-          state.runtime ||= {};
-          state.runtime.pairFetchGovernor ||= { degradedUntilMs: 0 };
-          const basePairFetchConcurrency = Math.max(1, Math.min(8, Number(cfg.PAIR_FETCH_CONCURRENCY || 1)));
-          const governorDegradedUntilMs = Number(state.runtime.pairFetchGovernor.degradedUntilMs || 0);
-          const governorActive = governorDegradedUntilMs > t;
-          const pairFetchConcurrency = governorActive
-            ? Math.max(1, Math.floor(basePairFetchConcurrency * 0.6))
-            : basePairFetchConcurrency;
-          scanPairFetchConcurrency = pairFetchConcurrency;
-          const routeAvailableImmediateRows = [];
-          const routeAvailableImmediateRowMints = new Set();
-          counters.pairFetch.queued += pairFetchQueue.length;
-          counters.pairFetch.queueDepthPeak = Math.max(Number(counters.pairFetch.queueDepthPeak || 0), pairFetchQueue.length);
-          const _tPairFetch = Date.now();
-          await mapWithConcurrency(pairFetchQueue, pairFetchConcurrency, async (item) => {
-            const { tok, mint, candidateSource, prevAttempts } = item;
-            let { routeAvailable, routeErrorKind, hitRateLimit } = item;
-            const startedAt = Date.now();
-            let snapshot = null;
-            let pair = null;
-            let attemptsUsed = 0;
-            const maxAttempts = effectiveNoPairRetryAttempts();
-            const _tSnapshotBuild = Date.now();
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              attemptsUsed = attempt;
-              const _tSnapFetch = Date.now();
-              snapshot = await getMarketSnapshot({
-                state,
-                mint,
-                nowMs: Date.now(),
-                maxAgeMs: cfg.PAIR_CACHE_MAX_AGE_MS,
-                getTokenPairs,
-                pickBestPair,
-                birdeyeEnabled: birdseye.enabled,
-                getBirdseyeSnapshot: birdseye.getTokenSnapshot,
-              });
-              const _snapFetchDur = Math.max(0, Date.now() - _tSnapFetch);
-              if (String(snapshot?.source || '').toLowerCase().includes('bird')) scanPhase.snapshotBirdseyeFetchMs += _snapFetchDur;
-              else scanPhase.snapshotPairEnrichmentMs += _snapFetchDur;
-              pair = snapshot?.pair || null;
-              if (snapshot?.priceUsd && pair) break;
-              const elapsed = Date.now() - startedAt;
-              if (elapsed >= NO_PAIR_RETRY_TOTAL_BUDGET_MS) break;
-              if (attempt < maxAttempts) {
-                const waitMs = jitter(Math.min(NO_PAIR_RETRY_MAX_BACKOFF_MS, NO_PAIR_RETRY_BASE_MS * (2 ** (attempt - 1))), 0.35);
-                const remainingBudgetMs = Math.max(0, NO_PAIR_RETRY_TOTAL_BUDGET_MS - elapsed);
-                if (remainingBudgetMs < 25) break;
-                await new Promise(r => setTimeout(r, Math.max(10, Math.min(waitMs, remainingBudgetMs))));
-              }
-            }
-
-            const _snapshotBuildDur = Math.max(0, Date.now() - _tSnapshotBuild);
-            scanPhase.snapshotBuildMs += _snapshotBuildDur;
-            if (String(snapshot?.source || '').toLowerCase().includes('bird')) scanPhase.birdeyeMs += _snapshotBuildDur;
-
-            counters.pairFetch.started += 1;
-            counters.pairFetch.attempts += attemptsUsed;
-            counters.pairFetch.completed += 1;
-            counters.pairFetch.latencySamples += 1;
-            counters.pairFetch.latencyMsTotal += Math.max(0, Date.now() - startedAt);
-
-            if (!snapshot?.priceUsd) {
-              counters.pairFetch.failed += 1;
-              if (routeAvailable == null) {
-                try {
-                  const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-                  const route = await getRouteQuoteWithFallback({
-                    cfg,
-                    mint,
-                    amountLamports: lam,
-                    slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                    solUsdNow,
-                    source: 'pairfetch-fallback',
-                  });
-                  routeAvailable = !!route.routeAvailable;
-                  routeErrorKind = route.routeErrorKind || null;
-                  hitRateLimit = !!route.rateLimited;
-                  if (routeAvailable && route.quote) {
-                    cacheRouteReadyMint({ state, cfg, mint, quote: route.quote, nowMs: t, source: `pairfetch-fallback:${route.provider}` });
-                  }
-                } catch (e) {
-                  routeErrorKind = parseJupQuoteFailure(e);
-                  hitRateLimit = isJup429(e) || isDexScreener429(e);
-                }
-              }
-
-              if (routeAvailable) {
-                pushScanCompactEvent('candidateRouteable', { mint, source: candidateSource });
-                bumpRouteCounter(counters, 'routeableByJupiter');
-                setNoPairTemporary(noPairTemporary, mint, { reason: 'routeAvailable', nowMs: t, attempts: prevAttempts + 1 });
-                const promoted = await promoteRouteAvailableCandidate({
-                  state,
-                  cfg,
-                  counters,
-                  nowMs: t,
-                  tok,
-                  mint,
-                  immediateRows: routeAvailableImmediateRows,
-                  immediateRowMints: routeAvailableImmediateRowMints,
-                  birdseye,
-                });
-                pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: promoted ? 'routeAvailable(viaJupiter,promotedWatchlist)' : 'routeAvailable(viaJupiter)' });
-                logCandidateDaily({
-                  dir: cfg.CANDIDATE_LEDGER_DIR,
-                  retentionDays: cfg.CANDIDATE_LEDGER_RETENTION_DAYS,
-                  event: { t: nowIso(), bot: 'candle-carl', mint, symbol: tok?.tokenSymbol || null, source: tok?._source || 'dex', outcome: promoted ? 'watchlist_promoted' : 'noPair_temporary', reason: promoted ? 'routeAvailable(viaJupiter,promotedWatchlist)' : 'routeAvailable(viaJupiter)' },
-                });
-                return;
-              }
-
-              const noPairReason = classifyNoPairReason({
-                state,
-                mint,
-                nowMs: t,
-                maxAgeMs: cfg.PAIR_CACHE_MAX_AGE_MS,
-                routeAvailable,
-                routeErrorKind,
-                hitRateLimit,
-              });
-              if (noPairReason === 'rateLimited') counters.pairFetch.rateLimited += 1;
-              bumpNoPairReason(counters, noPairReason, candidateSource);
-              setNoPairTemporary(noPairTemporary, mint, { reason: noPairReason, nowMs: t, attempts: prevAttempts + 1 });
-              if (noPairReason === 'nonTradableMint' || noPairReason === 'deadMint') {
-                if (noPairReason === 'nonTradableMint') recordNonTradableMint(counters, mint, 'rejected');
-                const strikes = Number(noPairDeadMints[mint]?.strikes || 0) + 1;
-                const untilMs = strikes >= NO_PAIR_DEAD_MINT_STRIKES ? (t + NO_PAIR_DEAD_MINT_TTL_MS) : (t + NO_PAIR_NON_TRADABLE_TTL_MS);
-                noPairDeadMints[mint] = { untilMs, atMs: t, strikes, reason: noPairReason };
-              }
-              pushDebug(state, { t: nowIso(), mint, symbol: tok?.tokenSymbol || null, reason: `noPair(${noPairReason})` });
-              logCandidateDaily({
-                dir: cfg.CANDIDATE_LEDGER_DIR,
-                retentionDays: cfg.CANDIDATE_LEDGER_RETENTION_DAYS,
-                event: { t: nowIso(), bot: 'candle-carl', mint, symbol: tok?.tokenSymbol || null, source: tok?._source || 'dex', outcome: 'reject', reason: `noPair(${noPairReason})` },
-              });
-              return;
-            }
-
-            if (!pair) {
-              scanUsableSnapshotWithoutPairCount += 1;
-              pair = snapshot?.pair || {
-                baseToken: { address: mint, symbol: tok?.tokenSymbol || null },
-                pairCreatedAt: Number(snapshot?.pairCreatedAt || 0) || null,
-                priceUsd: Number(snapshot?.priceUsd || 0) || null,
-                liquidity: { usd: Number(snapshot?.liquidityUsd || 0) || 0 },
-                txns: { h1: { buys: 0, sells: 0 } },
-                volume: { h1: 0, h4: 0 },
-                priceChange: { h1: 0, h4: 0 },
-              };
-            }
-
-            counters.pairFetch.success += 1;
-            delete noPairTemporary[mint];
-            delete noPairDeadMints[mint];
-
-            const _tNorm = Date.now();
-            const liqUsd = Number(snapshot?.liquidityUsd || pair?.liquidity?.usd || 0);
-            const mcapUsdNorm = Number(snapshot?.marketCapUsd || pair?.marketCap || pair?.fdv || 0);
-            const v1h = Number(pair?.volume?.h1 || 0);
-            const tx1h = Number(pair?.txns?.h1?.buys || 0) + Number(pair?.txns?.h1?.sells || 0);
-            const pc1h = Number(pair?.priceChange?.h1 || 0);
-            scanPhase.snapshotLiqMcapNormalizationMs += Math.max(0, Date.now() - _tNorm);
-
-            const _tValidate = Date.now();
-            void mcapUsdNorm;
-            void getSnapshotStatus(snapshot);
-            scanPhase.snapshotValidationMs += Math.max(0, Date.now() - _tValidate);
-            pushScanCompactEvent('candidateLiquiditySeen', { mint, source: candidateSource, liqUsd });
-
-            // Score: favor tradability + activity (liq, volume, tx, mild price move)
-            const score = (Math.log10(Math.max(liqUsd, 1)) * 3) + (Math.log10(Math.max(v1h, 1)) * 2) + (Math.log10(Math.max(tx1h, 1)) * 2) + (Math.max(0, pc1h) * 0.2);
-
-            bumpSourceCounter(counters, candidateSource, 'passedPair');
-            preCandidates.push({ tok, mint, pair, snapshot, score, routeHint: routeAvailable === true });
-          });
-
-          const rateLimitedNow = Number(counters?.pairFetch?.rateLimited || 0) + Number(counters?.reject?.noPairReasons?.rateLimited || 0);
-          const rateLimitedDelta = Math.max(0, rateLimitedNow - Number(scanRateLimitedStart || 0));
-          const governorShouldDegrade = rateLimitedDelta > 0 || jupRoutePrefilterDegraded;
-          if (governorShouldDegrade) {
-            state.runtime.pairFetchGovernor.degradedUntilMs = Math.max(
-              Number(state.runtime.pairFetchGovernor.degradedUntilMs || 0),
-              t + 120_000,
-            );
-          }
-          scanPhase.pairFetchMs += Math.max(0, Date.now() - _tPairFetch);
-
-          const _tShortlist = Date.now();
-          preCandidates.sort((a, b) => b.score - a.score);
-          scanCandidatesFound = Number(preCandidates.length || 0);
-          if (cfg.AGGRESSIVE_MODE) {
-            preCandidates.sort((a, b) => {
-              const ar = a.routeHint ? 1 : 0;
-              const br = b.routeHint ? 1 : 0;
-              return (br - ar) || (b.score - a.score);
-            });
-          }
-
-          // High-conversion profile: small bounded quote fanout for top-ranked candidates.
-          if (cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_PARALLEL_QUOTE_FANOUT_N > 0 && preCandidates.length > 1) {
-            const fanoutN = Math.min(cfg.LIVE_PARALLEL_QUOTE_FANOUT_N, preCandidates.length);
-            const fanoutSet = preCandidates.slice(0, fanoutN);
-            const lam = toBaseUnits((cfg.JUP_PREFILTER_AMOUNT_USD / solUsdNow), DECIMALS[cfg.SOL_MINT] ?? 9);
-            const fanoutChecks = await Promise.all(fanoutSet.map(async (c) => {
-              try {
-                const route = await getRouteQuoteWithFallback({
-                  cfg,
-                  mint: c.mint,
-                  amountLamports: lam,
-                  slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
-                  solUsdNow,
-                  source: 'fanout',
-                });
-                return { mint: c.mint, routeable: !!route.routeAvailable };
-              } catch {
-                return { mint: c.mint, routeable: false };
-              }
-            }));
-            counters.route.quoteFanoutChecked += fanoutChecks.length;
-            const routeableMints = new Set(fanoutChecks.filter(x => x.routeable).map(x => x.mint));
-            counters.route.quoteFanoutRouteable += routeableMints.size;
-            preCandidates.sort((a, b) => {
-              const ar = routeableMints.has(a.mint) ? 1 : 0;
-              const br = routeableMints.has(b.mint) ? 1 : 0;
-              return (br - ar) || (b.score - a.score);
-            });
-          }
-
-          // Enqueue forward tracking for the best "safe" candidates (passed base filters already by definition here)
-          try {
-            const trackable = preCandidates
-              .filter(x => Number(x?.pair?.liquidity?.usd || x?.pair?.liquidityUsd || x?.pair?.liquidityUsd) || true) // keep shape flexible
-              .slice(0, 25)
-              .map(x => ({ mint: x.mint, pair: x.pair, tok: x.tok }));
-            if (cfg.SCANNER_TRACKING_ENABLED) {
-              trackerMaybeEnqueue({ cfg, state, candidates: trackable, nowIso });
-            }
-          } catch {}
-
-          // quick visibility: log source mix (noisy)
-          const visibilityPings2 = (state?.flags?.tgVisibilityPings ?? cfg.TG_VISIBILITY_PINGS);
-          if (visibilityPings2) {
-            try {
-              const total = preCandidates.length;
-              const fromJup = preCandidates.filter(x => x?.tok?._source === 'jup').length;
-              if (total > 0 && (!globalThis.__lastSourcePingAt || (t - globalThis.__lastSourcePingAt) > 30 * 60_000)) {
-                globalThis.__lastSourcePingAt = t;
-                await tgSend(cfg, `🧭 Candidate sources: total=${total} (jup=${fromJup}, dexBoosted=${total - fromJup})`);
-              }
-            } catch {}
-          }
-
-          const circuitOk = circuitOkForEntries({ state, nowMs: t });
-          const playbookBlocks = cfg.PLAYBOOK_ENABLED && (state.playbook?.mode === PLAYBOOK_MODE_DEGRADED);
-          const lowSolPaused = state.flags?.lowSolPauseEntries === true;
-          const capOk = entryCapacityAvailable(state, cfg);
-          const paperModeActive = isPaperModeActive({ state, cfg, nowMs: t });
-          const executionAllowed = (cfg.EXECUTION_ENABLED || paperModeActive) && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
-          const executionAllowedReason = !(cfg.EXECUTION_ENABLED || paperModeActive) ? 'cfgExecutionOff'
-            : (!state.tradingEnabled ? 'stateTradingOff'
-              : (playbookBlocks ? 'playbookDegraded'
-                : (!circuitOk ? 'circuitOpen' : (lowSolPaused ? 'lowSolPause' : (!capOk ? 'maxPositionsHysteresis' : null)))));
-          const rawTopCandidates = preCandidates.slice(0, cfg.LIVE_CANDIDATE_SHORTLIST_N);
-          const probeEnabled = !!(cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_PROBE_CONFIRM_ENABLED);
-          scanPhase.shortlistMs += Math.max(0, Date.now() - _tShortlist);
-          const probeShortlist = probeEnabled
-            ? rawTopCandidates
-              .filter(({ pair }) => {
-                const liq = Number(pair?.liquidity?.usd || 0);
-                const tx1h = Number(pair?.txns?.h1?.buys || 0) + Number(pair?.txns?.h1?.sells || 0);
-                return liq >= cfg.LIVE_PROBE_MIN_LIQ_USD && tx1h >= cfg.LIVE_PROBE_MIN_TX1H;
-              })
-              .slice(0, cfg.LIVE_PROBE_MAX_CANDIDATES)
-            : rawTopCandidates;
+          const {
+            preCandidates,
+            probeEnabled,
+            probeShortlist,
+            executionAllowed,
+            executionAllowedReason,
+            routeAvailableImmediateRows,
+          } = scanPipelineResult;
 
           const _tWatchlistWrite = Date.now();
           if (cfg.WATCHLIST_TRIGGER_MODE) {
