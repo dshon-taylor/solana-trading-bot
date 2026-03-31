@@ -57,6 +57,8 @@ export function createCandidatePipeline({
 
     return {
       ...finalized,
+      // Back-compat for existing scan pipeline caller contract.
+      boosted: Array.isArray(finalized?.candidates) ? finalized.candidates : [],
       newDexCooldownUntil: sourceResult.newDexCooldownUntil,
     };
   }

@@ -23,10 +23,11 @@ export async function runJupExpansionStage({
   try {
     const jupTtl = Number(process.env.JUP_TOKENS_CACHE_MS || 15 * 60_000);
     if (!cacheState.jupTokens || !cacheState.jupTokensAt || (t - cacheState.jupTokensAt) > jupTtl) {
-      cacheState.jupTokens = await birdseye.listJupiterTokens();
+      const hasListFn = typeof birdseye?.listJupiterTokens === 'function';
+      cacheState.jupTokens = hasListFn ? await birdseye.listJupiterTokens() : [];
       cacheState.jupTokensAt = t;
     }
-    const jupTokens = cacheState.jupTokens || [];
+    const jupTokens = Array.isArray(cacheState.jupTokens) ? cacheState.jupTokens : [];
     const sourceSet = (cacheState.trendingTokens || []).map((x) => ({ mint: x.mint, source: 'trending' }))
       .concat((cacheState.marketTrendingTokens || []).map((x) => ({ mint: x.mint, source: 'market_trending' })))
       .concat((cacheState.birdEyeBoostedTokens || []).map((x) => ({ mint: x.mint, source: 'birdseye_boosted' })));
