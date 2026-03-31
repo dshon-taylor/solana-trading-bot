@@ -45,6 +45,7 @@ import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
 import { estimateEquityUsd, shouldStopPortfolio, reconcilePositions } from './control_tower/portfolio_control.mjs';
+import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
@@ -2551,104 +2552,19 @@ async function main() {
     ].join('\n');
   }
 
-  function splitForTelegram(text, maxLen = 3500) {
-    const s = String(text || '');
-    if (s.length <= maxLen) return [s];
-    const out = [];
-    let rest = s;
-    while (rest.length > maxLen) {
-      let cut = rest.lastIndexOf('\n', maxLen);
-      if (cut < Math.floor(maxLen * 0.6)) cut = maxLen;
-      out.push(rest.slice(0, cut));
-      rest = rest.slice(cut).replace(/^\n+/, '');
-    }
-    if (rest.length) out.push(rest);
-    return out;
-  }
-
-  async function tgSendChunked(cfg, text) {
-    const parts = splitForTelegram(text, 3500);
-    for (let i = 0; i < parts.length; i++) {
-      const head = parts.length > 1 ? `(${i + 1}/${parts.length})\n` : '';
-      await tgSend(cfg, `${head}${parts[i]}`);
-    }
-  }
-
-  async function sendPositionsReport() {
-    const openEntries = Object.entries(state.positions || {}).filter(([, p]) => p?.status === 'open');
-    if (!openEntries.length) {
-      await tgSend(cfg, '📌 *Positions*\n\nNone open.');
-      return;
-    }
-
-    const lines = [];
-    for (const [mint, p] of openEntries) {
-      let tokenName = String(p?.tokenName || '').trim();
-      let tokenSymbol = String(p?.symbol || '').trim();
-      const stop = Number(p?.stopPriceUsd || 0);
-      const peak = Math.max(
-        Number(p?.peakPriceUsd || 0),
-        Number(p?.lastPeakPrice || 0),
-        Number(p?.trailingAnchor || 0),
-        0,
-      );
-
-      let dec = Number(p?.decimals);
-      let livePrice = Number(p?.lastSeenPriceUsd || 0);
-      try {
-        const snap = await birdseye?.getTokenSnapshot?.(mint);
-        const d = Number(snap?.raw?.decimals);
-        if (Number.isFinite(d) && d >= 0) dec = d;
-        const px = Number(snap?.priceUsd || 0);
-        if (px > 0) livePrice = px;
-        if (!tokenName) tokenName = String(snap?.raw?.name || '').trim();
-        if (!tokenSymbol) tokenSymbol = String(snap?.raw?.symbol || '').trim();
-      } catch {}
-
-      let liveRaw = Number(p?.onchain?.amount || 0);
-      try {
-        const bal = await getSplBalance(conn, pub, mint);
-        if (bal?.fetchOk !== false && Number(bal?.amount || 0) >= 0) liveRaw = Number(bal.amount || 0);
-      } catch {}
-
-      const recvRaw = Number(p?.receivedTokensRaw || 0);
-      const basisRaw = recvRaw > 0 ? recvRaw : liveRaw;
-      const basisTokens = (basisRaw > 0 && Number.isFinite(dec) && dec >= 0) ? (basisRaw / (10 ** dec)) : null;
-      const liveTokens = (liveRaw > 0 && Number.isFinite(dec) && dec >= 0) ? (liveRaw / (10 ** dec)) : null;
-
-      const spentUsd = (Number(p?.spentSolApprox || 0) > 0 && Number(p?.solUsdAtEntry || 0) > 0)
-        ? (Number(p.spentSolApprox) * Number(p.solUsdAtEntry))
-        : null;
-      const basisPx = (basisTokens && spentUsd) ? (spentUsd / basisTokens) : Number(p?.entryPriceUsd || 0) || null;
-      const pnlPct = (basisPx && livePrice > 0) ? (((livePrice - basisPx) / basisPx) * 100) : null;
-      const estValue = (liveTokens && livePrice > 0) ? (liveTokens * livePrice) : null;
-
-      const label = tokenDisplayName({ name: tokenName, symbol: tokenSymbol, mint });
-      lines.push(`• ${label} (${mint.slice(0,6)}…)`);
-      if (tokenName || tokenSymbol) lines.push(`  name=${tokenName || 'n/a'} symbol=${tokenSymbol || 'n/a'}`);
-      lines.push(`  stop=$${stop.toFixed(6)} last=$${livePrice.toFixed(6)} peak=$${peak.toFixed(6)}`);
-      lines.push(`  trailing=${p?.trailingActive ? 'on' : 'off'} trailPct=${Number.isFinite(Number(p?.activeTrailPct)) ? `${(Number(p.activeTrailPct)*100).toFixed(1)}%` : 'n/a'}`);
-      lines.push(`  basis=${basisPx ? `$${basisPx.toFixed(10)}` : 'n/a'} source=${p?.entryPriceSource || 'unknown'} tokens=${liveTokens ? liveTokens.toFixed(5) : 'n/a'} spent≈${spentUsd != null ? fmtUsd(spentUsd) : 'n/a'}`);
-      lines.push(`  estValue=${estValue != null ? fmtUsd(estValue) : 'n/a'} pnl=${pnlPct != null ? `${pnlPct.toFixed(2)}%` : 'n/a'}`);
-    }
-
-    const msg = `📌 *Positions* (${openEntries.length})\n\n` + lines.join('\n');
-    if (msg.length <= 3500) {
-      await tgSend(cfg, msg);
-    } else {
-      const chunks = [];
-      let cur = `📌 *Positions* (${openEntries.length})\n\n`;
-      for (const line of lines) {
-        if ((cur + line + '\n').length > 3200) {
-          chunks.push(cur);
-          cur = '';
-        }
-        cur += line + '\n';
-      }
-      if (cur.trim()) chunks.push(cur);
-      for (const ch of chunks) await tgSend(cfg, ch);
-    }
-  }
+  const {
+    tgSendChunked,
+    sendPositionsReport,
+  } = createOpsReporting({
+    cfg,
+    state,
+    conn,
+    pub,
+    birdseye,
+    tgSend,
+    getSplBalance,
+    tokenDisplayName,
+  });
 
   refreshDiagSnapshot(Date.now());
 
@@ -2676,30 +2592,16 @@ async function main() {
 
   // Cached spend summaries to keep /spend off the hot loop path.
   const SPEND_CACHE_TTL_MS = Math.max(60_000, Number(process.env.SPEND_CACHE_TTL_MS || 5 * 60_000));
-  const spendSummaryCache = {
-    loadedAtMs: 0,
-    summaries: new Map(),
-    inFlight: false,
-    lastError: null,
-  };
-  function refreshSpendSummaryCacheAsync() {
-    if (spendSummaryCache.inFlight) return;
-    spendSummaryCache.inFlight = true;
-    Promise.resolve().then(() => {
-      const events = readLedger(cfg.LEDGER_PATH);
-      const next = new Map();
-      for (const key of ['last', '24h', '7d', '30d']) {
-        next.set(key, summarize(events, parseRange(key)));
-      }
-      spendSummaryCache.summaries = next;
-      spendSummaryCache.loadedAtMs = Date.now();
-      spendSummaryCache.lastError = null;
-    }).catch((e) => {
-      spendSummaryCache.lastError = safeErr(e).message;
-    }).finally(() => {
-      spendSummaryCache.inFlight = false;
-    });
-  }
+  const {
+    spendSummaryCache,
+    refreshSpendSummaryCacheAsync,
+  } = createSpendSummaryCache({
+    cfg,
+    parseRange,
+    readLedger,
+    summarize,
+    safeErr,
+  });
 
   // DexScreener rate-limit handling (centralized module)
   ensureDexState(state);
@@ -3181,7 +3083,7 @@ async function main() {
           const m = String(mode || 'compact').toLowerCase();
           const diagMode = (m === 'full' || m === 'momentum' || m === 'confirm' || m === 'execution' || m === 'scanner') ? m : 'compact';
           const msg = getDiagSnapshotMessage(Date.now(), diagMode, windowHours);
-          Promise.resolve(tgSendChunked(cfg, msg)).catch((e) => {
+          Promise.resolve(tgSendChunked(msg)).catch((e) => {
             console.warn('[diag] send failed', safeErr(e).message);
           });
         },
@@ -5326,7 +5228,7 @@ async function main() {
       state.flags.sendDiag = false;
       delete state.flags.sendDiagMode;
       delete state.flags.sendDiagWindowHours;
-      await tgSendChunked(cfg, getDiagSnapshotMessage(Date.now(), mode, useHours));
+      await tgSendChunked(getDiagSnapshotMessage(Date.now(), mode, useHours));
     }
 
     if (state.flags?.sendMode) {
