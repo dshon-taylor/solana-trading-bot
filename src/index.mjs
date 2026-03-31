@@ -645,10 +645,10 @@ async function main() {
       `trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`,
   );
 
-  // Register command menu in Telegram UI
-  await tgSetMyCommands(cfg);
-
   await tgSend(cfg, `🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`);
+
+  // Register command menu in Telegram UI (best-effort; must not block online ping)
+  void tgSetMyCommands(cfg);
 
   // Boot-time SOLUSD fetch: do NOT crash the bot if DexScreener is rate-limiting.
   // We'll cool down and retry until we have a price.
@@ -657,6 +657,13 @@ async function main() {
   while (!solUsd) {
     try {
       solUsd = (await getSolUsdPrice()).solUsd;
+      if (!solUsd) {
+        if (!bootPriceWarned) {
+          bootPriceWarned = true;
+          await tgSend(cfg, '⚠️ SOLUSD unavailable at boot (empty snapshot). Cooling down and retrying...');
+        }
+        await new Promise(r => setTimeout(r, 60_000));
+      }
     } catch (e) {
       if (!bootPriceWarned) {
         bootPriceWarned = true;
