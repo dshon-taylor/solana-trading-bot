@@ -141,7 +141,7 @@ export function summarizeConfigForBoot(cfg) {
   lines.push(`  reliability: pairCacheMaxAgeMs=${cfg.PAIR_CACHE_MAX_AGE_MS} adaptiveScanMaxMs=${cfg.SCAN_BACKOFF_MAX_MS}`);
   lines.push(`  sources: mode=${cfg.SOURCE_MODE} qualityJupSampleN=${cfg.SOURCE_QUALITY_JUP_SAMPLE_N} qualityTrendingSampleN=${cfg.SOURCE_QUALITY_TRENDING_SAMPLE_N} qualityRequireQuoteable=${cfg.SOURCE_QUALITY_REQUIRE_JUP_QUOTEABLE} trendingEnabled=${cfg.TRENDING_ENABLED} trendingRefreshMs=${cfg.TRENDING_REFRESH_MS} birdeye=${cfg.BIRDEYE_LITE_ENABLED} rps=${cfg.BIRDEYE_LITE_MAX_RPS}`);
   lines.push(`  streaming: provider=${cfg.STREAMING_PROVIDER_MODE} laserEnabled=${cfg.LASERSTREAM_ENABLED} staging=${cfg.LASERSTREAM_STAGING_MODE} rollback=LASERSTREAM_ENABLED=false STREAMING_PROVIDER_MODE=existing`);
-  lines.push(`  jup: tokenlist=${cfg.JUP_TOKENLIST_ENABLED} prefilter=${cfg.JUP_PREFILTER_ENABLED} amountUsd=${cfg.JUP_PREFILTER_AMOUNT_USD} altRoute(enabled=${cfg.ROUTE_ALT_ENABLED} minLiqUsd=${cfg.ROUTE_ALT_MIN_LIQ_USD} maxPiPct=${cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT})`);
+  lines.push(`  jup: tokenlist=${cfg.JUP_TOKENLIST_ENABLED} prefilter=${cfg.JUP_PREFILTER_ENABLED} amountUsd=${cfg.JUP_PREFILTER_AMOUNT_USD} altRoute(enabled=${cfg.ROUTE_ALT_ENABLED} minLiqUsd=${cfg.ROUTE_ALT_MIN_LIQ_USD} maxPiPct=${cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT} raydium=${cfg.ROUTE_ALT_RAYDIUM_ENABLED})`);
   lines.push(`  circuit: enabled=${cfg.CIRCUIT_BREAKER_ENABLED} cooldownMs=${cfg.CIRCUIT_COOLDOWN_MS} fails(dex=${cfg.CIRCUIT_FAILS_DEX}, rpc=${cfg.CIRCUIT_FAILS_RPC}, jup=${cfg.CIRCUIT_FAILS_JUP})`);
   lines.push(`  risk: stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} stopArmDelayMs=${cfg.LIVE_STOP_ARM_DELAY_MS} prearmCatStopPct=${cfg.LIVE_PREARM_CATASTROPHIC_STOP_PCT} trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT} fastStop(maxAgeMs=${cfg.LIVE_FAST_STOP_REENTRY_STOP_MAX_AGE_MS}, blockMs=${cfg.LIVE_FAST_STOP_REENTRY_WINDOW_MS}, requireNewHigh=${cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_NEW_HIGH}, requireTradeUpticks=${cfg.LIVE_FAST_STOP_REENTRY_REQUIRE_TRADE_UPTICKS}, minUpticks=${cfg.LIVE_FAST_STOP_REENTRY_MIN_CONSEC_TRADE_UPTICKS})`);
   lines.push(`  feeReserveSol=${cfg.MIN_SOL_FOR_FEES} softReserveSol=${cfg.CAPITAL_SOFT_RESERVE_SOL} retryBufferPct=${cfg.CAPITAL_RETRY_BUFFER_PCT} maxNewEntriesPerHour=${cfg.MAX_NEW_ENTRIES_PER_HOUR}`);
@@ -403,6 +403,7 @@ export function getConfig() {
   const ROUTE_ALT_ENABLED = (process.env.ROUTE_ALT_ENABLED ?? 'true') === 'true';
   const ROUTE_ALT_MIN_LIQ_USD = Math.max(0, Number(process.env.ROUTE_ALT_MIN_LIQ_USD ?? 18_000));
   const ROUTE_ALT_MAX_PRICE_IMPACT_PCT = Math.max(0.1, Number(process.env.ROUTE_ALT_MAX_PRICE_IMPACT_PCT ?? 4.0));
+  const ROUTE_ALT_RAYDIUM_ENABLED = (process.env.ROUTE_ALT_RAYDIUM_ENABLED ?? 'true') === 'true';
 
   const CANDIDATE_LEDGER_DIR = process.env.CANDIDATE_LEDGER_DIR || './state/candidates';
   const CANDIDATE_LEDGER_RETENTION_DAYS = Number(process.env.CANDIDATE_LEDGER_RETENTION_DAYS || 180);
@@ -742,6 +743,7 @@ export function getConfig() {
     ROUTE_ALT_ENABLED,
     ROUTE_ALT_MIN_LIQ_USD,
     ROUTE_ALT_MAX_PRICE_IMPACT_PCT,
+    ROUTE_ALT_RAYDIUM_ENABLED,
     CANDIDATE_LEDGER_DIR,
     CANDIDATE_LEDGER_RETENTION_DAYS,
     TRADES_LEDGER_PATH,

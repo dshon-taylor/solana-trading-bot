@@ -10,6 +10,7 @@ import { applyOnchainBalanceToPosition } from './reconcile_positions.mjs';
 import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './wallet.mjs';
 import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './portfolio.mjs';
 import { getBoostedTokens, getTokenPairs, pickBestPair } from './dexscreener.mjs';
+import { getRaydiumPools, pickBestRaydiumPool } from './raydium.mjs';
 import { getRugcheckReport, isTokenSafe, getConcentrationMetrics } from './rugcheck.mjs';
 import { getTokenSupply } from './helius.mjs';
 import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } from './strategy.mjs';
@@ -450,6 +451,43 @@ function buildAlternativeRouteQuote({ mint, amountLamports, slippageBps, pair, e
   };
 }
 
+// Returns true if the Raydium pool's non-target side is SOL-like or USDC-like,
+// meaning Jupiter can realistically route SOL -> token through this pool.
+function isRaydiumPoolSupported(pool, targetMint) {
+  if (!pool) return false;
+  const mintA = pool.mintA;
+  const mintB = pool.mintB;
+  const aIsTarget = mintA?.address === targetMint;
+  const bIsTarget = mintB?.address === targetMint;
+  if (aIsTarget) return isSolLikeQuoteToken(mintB) || isUsdcLikeQuoteToken(mintB);
+  if (bIsTarget) return isSolLikeQuoteToken(mintA) || isUsdcLikeQuoteToken(mintA);
+  return false;
+}
+
+function buildRaydiumRouteQuote({ mint, amountLamports, slippageBps, pool, estimatedPriceImpactPct }) {
+  return {
+    inputMint: 'So11111111111111111111111111111111111111112',
+    outputMint: mint,
+    inAmount: String(Math.max(0, Math.floor(Number(amountLamports || 0)))),
+    outAmount: null,
+    slippageBps: Number(slippageBps || 0),
+    priceImpactPct: Number(estimatedPriceImpactPct || 0),
+    routePlan: [
+      {
+        percent: 100,
+        swapInfo: {
+          label: `RaydiumAlt:${String(pool?.type || 'Standard')}`,
+          ammKey: String(pool?.id || ''),
+          inputMint: 'So11111111111111111111111111111111111111112',
+          outputMint: mint,
+        },
+      },
+    ],
+    synthetic: true,
+    provider: 'raydium-alt',
+  };
+}
+
 async function getRouteQuoteWithFallback({ cfg, mint, amountLamports, slippageBps, solUsdNow, source = 'unknown' }) {
   let jupErrorKind = null;
   let rateLimited = false;
@@ -476,31 +514,21 @@ async function getRouteQuoteWithFallback({ cfg, mint, amountLamports, slippageBp
     }
   }
 
-  try {
+  const notionalUsd = (Number(amountLamports || 0) / 1e9) * Math.max(0, Number(solUsdNow || 0));
+  const minLiq = Number(cfg.ROUTE_ALT_MIN_LIQ_USD || 0);
+  const maxImpact = Number(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT || 4);
+
+  // Build an alt-route result from DexScreener pair data, or null if criteria not met.
+  const dexTask = (async () => {
     const pairs = await getTokenPairs('solana', mint);
     const best = pickBestPair(pairs);
     const liqUsd = Number(best?.liquidity?.usd || 0);
     const quoteToken = best?.quoteToken || null;
     const quoteTokenSupported = isSolLikeQuoteToken(quoteToken) || isUsdcLikeQuoteToken(quoteToken);
-    const notionalUsd = (Number(amountLamports || 0) / 1e9) * Math.max(0, Number(solUsdNow || 0));
     const impactPct = liqUsd > 0 && notionalUsd > 0
       ? Math.max(0, Math.min(99, (notionalUsd / Math.max(1, liqUsd)) * 130))
-      : Number(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT || 4);
-    const altRouteable = !!best
-      && quoteTokenSupported
-      && liqUsd >= Number(cfg.ROUTE_ALT_MIN_LIQ_USD || 0)
-      && impactPct <= Number(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT || 4);
-
-    if (!altRouteable) {
-      return {
-        routeAvailable: false,
-        quote: null,
-        provider: 'dexscreener-alt',
-        rateLimited,
-        routeErrorKind: jupErrorKind || 'routeNotFound',
-      };
-    }
-
+      : maxImpact;
+    if (!best || !quoteTokenSupported || liqUsd < minLiq || impactPct > maxImpact) return null;
     return {
       routeAvailable: true,
       quote: buildAlternativeRouteQuote({ mint, amountLamports, slippageBps, pair: best, estimatedPriceImpactPct: impactPct }),
@@ -509,16 +537,50 @@ async function getRouteQuoteWithFallback({ cfg, mint, amountLamports, slippageBp
       routeErrorKind: jupErrorKind,
       meta: { source, liquidityUsd: liqUsd, impactPct },
     };
-  } catch (e) {
-    const dexRateLimited = isDexScreener429(e);
-    return {
-      routeAvailable: false,
-      quote: null,
-      provider: 'dexscreener-alt',
-      rateLimited: rateLimited || dexRateLimited,
-      routeErrorKind: jupErrorKind || (dexRateLimited ? 'rateLimited' : 'providerEmpty'),
-    };
-  }
+  })();
+
+  // Build an alt-route result from Raydium pool data, or null if criteria not met.
+  // Raydium is one of Jupiter's primary routing sources so pool existence is a stronger
+  // signal of Jupiter routeability than DexScreener listings.
+  const raydiumTask = cfg.ROUTE_ALT_RAYDIUM_ENABLED
+    ? (async () => {
+        const pools = await getRaydiumPools(mint);
+        const best = pickBestRaydiumPool(pools);
+        const tvl = Number(best?.tvl || 0);
+        const impactPct = tvl > 0 && notionalUsd > 0
+          ? Math.max(0, Math.min(99, (notionalUsd / Math.max(1, tvl)) * 130))
+          : maxImpact;
+        if (!best || !isRaydiumPoolSupported(best, mint) || tvl < minLiq || impactPct > maxImpact) return null;
+        return {
+          routeAvailable: true,
+          quote: buildRaydiumRouteQuote({ mint, amountLamports, slippageBps, pool: best, estimatedPriceImpactPct: impactPct }),
+          provider: 'raydium-alt',
+          rateLimited,
+          routeErrorKind: jupErrorKind,
+          meta: { source, liquidityUsd: tvl, impactPct },
+        };
+      })()
+    : Promise.resolve(null);
+
+  const [dexSettled, raydiumSettled] = await Promise.allSettled([dexTask, raydiumTask]);
+
+  // Raydium takes priority — prefer it over DexScreener when both confirm routeability.
+  const raydiumResult = raydiumSettled.status === 'fulfilled' ? raydiumSettled.value : null;
+  const dexResult = dexSettled.status === 'fulfilled' ? dexSettled.value : null;
+  const winner = raydiumResult || dexResult;
+
+  if (winner) return winner;
+
+  const anyRateLimited =
+    (dexSettled.status === 'rejected' && isDexScreener429(dexSettled.reason)) ||
+    (raydiumSettled.status === 'rejected' && raydiumSettled.reason?.status === 429);
+  return {
+    routeAvailable: false,
+    quote: null,
+    provider: 'alt',
+    rateLimited: rateLimited || anyRateLimited,
+    routeErrorKind: jupErrorKind || (anyRateLimited ? 'rateLimited' : 'routeNotFound'),
+  };
 }
 
 function classifyNoPairReason({ state, mint, nowMs, maxAgeMs, routeAvailable, routeErrorKind, hitRateLimit }) {
