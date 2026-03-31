@@ -2517,9 +2517,16 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
       const earlyBuyPressurePass = !dexFailed.includes('buyPressure');
       const earlyWalletExpansionPass = !dexFailed.includes('walletExpansion');
       const earlyPassCount = [earlyPriceBreakPass, earlyBuyPressurePass, earlyWalletExpansionPass].filter(Boolean).length;
+      const snapshotFreshnessMs = Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN);
+      const wsPxForMicro = cache.get(`birdeye:ws:price:${mint}`) || null;
+      const wsTsForMicro = Number(wsPxForMicro?.tsMs || 0);
+      const wsFreshnessMsForMicro = wsTsForMicro > 0 ? Math.max(0, nowMs - wsTsForMicro) : NaN;
+      const freshnessForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
+        ? Math.min(wsFreshnessMsForMicro, snapshotFreshnessMs)
+        : snapshotFreshnessMs;
       const microFreshGate = isMicroFreshEnough({
         microPresentCount: momentumMicroPresent,
-        freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? snapshot?.freshnessMs ?? NaN),
+        freshnessMs: freshnessForMicroGate,
         maxAgeMs: Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000),
         requireFreshMicro: !!cfg.MOMENTUM_REQUIRE_FRESH_MICRO,
         minPresentForGate: Number(cfg.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3),
