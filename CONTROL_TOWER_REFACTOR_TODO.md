@@ -28,12 +28,11 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 - [x] Back-compat shim in `src/control_tower/entry_engine.mjs`
 
 ## 4) `exit_engine.mjs` → `exit_engine/`
-- [ ] Create `src/control_tower/exit_engine/index.mjs`
-- [ ] Stage: `stage_price_selection.mjs`
-- [ ] Stage: `stage_stop_trail_update.mjs`
-- [ ] Stage: `stage_exit_decision.mjs`
-- [ ] Stage: `stage_close_execution.mjs`
-- [ ] Back-compat shim in `src/control_tower/exit_engine.mjs`
+- [x] Create `src/control_tower/exit_engine/index.mjs`
+- [x] Stage: `stage_hard_stop_policy.mjs`
+- [x] Stage: `stage_close_position.mjs`
+- [x] Stage: `stage_update_stops.mjs`
+- [x] Back-compat shim in `src/control_tower/exit_engine.mjs`
 
 ## 5) `operator_surfaces.mjs` → `operator_surfaces/`
 - [ ] Create `src/control_tower/operator_surfaces/index.mjs`

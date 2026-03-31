@@ -42,7 +42,7 @@ function recordHardStopAndMaybePause({ cfg, state, nowMs, reason }) {
   return { tripped: false };
 }
 
-export function createExitEngine({ getSolUsdPrice }) {
+function createExitEngine({ getSolUsdPrice }) {
   async function closePosition(cfg, conn, wallet, state, mint, pair, reason) {
     const pos = state.positions[mint];
     if (!pos || pos.status !== 'open') return;
@@ -414,4 +414,8 @@ export function createExitEngine({ getSolUsdPrice }) {
   };
 }
 
-export default createExitEngine;
+const __legacyCreateExitEngine = createExitEngine;
+void __legacyCreateExitEngine;
+
+export { default } from './exit_engine/index.mjs';
+export * from './exit_engine/index.mjs';
