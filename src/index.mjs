@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -9,29 +10,27 @@ import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './reconcile_positions.mjs';
 import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './wallet.mjs';
 import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './portfolio.mjs';
-import { getBoostedTokens, getTokenPairs, pickBestPair } from './dexscreener.mjs';
-import { getRugcheckReport, isTokenSafe, getConcentrationMetrics } from './rugcheck.mjs';
+import { getTokenPairs, pickBestPair } from './dexscreener.mjs';
+import { getRugcheckReport, isTokenSafe } from './rugcheck.mjs';
 import { getTokenSupply } from './helius.mjs';
 import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } from './strategy.mjs';
-import { paperComputeMomentumWindows } from './paper_momentum.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
-import { appendTradingLog, nowIso, safeErr } from './logger.mjs';
+import { nowIso, safeErr } from './logger.mjs';
 import { loadState, saveState } from './state.mjs';
 import { tgSend, tgSetMyCommands } from './telegram.mjs';
 import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './metrics.mjs';
 import { handleTelegramControls } from './telegram_control.mjs';
-import { trackerMaybeEnqueue, trackerTick, formatTrackerIngestionSummary, formatTrackerSamplingBreakdown } from './tracker.mjs';
-import { pushDebug, getLastDebug } from './debug_buffer.mjs';
+import { trackerMaybeEnqueue, trackerTick } from './tracker.mjs';
+import { pushDebug } from './debug_buffer.mjs';
 import { safeMsg } from './ai.mjs';
 import { getModels, preprocessCandidate, analyzeTrade, gatekeep } from './ai_pipeline.mjs';
 import { appendCost, estimateCostUsd, parseRange, readLedger, summarize } from './cost.mjs';
 import { jupQuote } from './jupiter.mjs';
 import { autoTuneFilters } from './autotune.mjs';
 import { logCandidateDaily, appendJsonl } from './candidates_ledger.mjs';
-import { fetchJupTokenList } from './jup_tokenlist.mjs';
 import { ensureDexState, getDexCooldownUntilMs, hitDex429, isDexScreener429 } from './dex_cooldown.mjs';
 import { ensureMarketDataState, computeAdaptiveScanDelayMs, getCachedPairSnapshot } from './market_data_reliability.mjs';
-import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isEntrySnapshotSafe, isStopSnapshotUsable, getWatchlistEntrySnapshotUnsafeReason, getSnapshotStatus, snapshotFromBirdseye, formatMarketDataProviderSummary, markMarketDataRejectImpact } from './market_data_router.mjs';
+import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isStopSnapshotUsable, getSnapshotStatus, snapshotFromBirdseye, formatMarketDataProviderSummary, markMarketDataRejectImpact } from './market_data_router.mjs';
 import { hitJup429, isJup429, jupCooldownRemainingMs } from './jup_cooldown.mjs';
 import { maybeAlivePing } from './alive_ping.mjs';
 import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './circuit_breaker.mjs';
@@ -44,7 +43,7 @@ import { didEntryFill } from './entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
-import { estimateEquityUsd, shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions } from './control_tower/portfolio_control.mjs';
+import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions } from './control_tower/portfolio_control.mjs';
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
@@ -54,10 +53,7 @@ import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline/index.mjs';
 import { createEntryDispatch } from './control_tower/entry_dispatch/index.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
-import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
-import { resolveConfirmTxMetricsFromDiagEvent } from './diag_event_invariants.mjs';
-import { CORE_MOMO_CHECKS, canaryMomoShouldSample, recordCanaryMomoFailChecks, coreMomentumProgress, decideMomentumBranch, normalizeEpochMs, pickEpochMsWithSource, applySnapshotToLatest, buildNormalizedMomentumInput, pruneMomentumRepeatFailMap } from './watchlist_eval_helpers.mjs';
 import {
   JUP_ROUTE_FIRST_ENABLED,
   JUP_SOURCE_PREFLIGHT_ENABLED,
@@ -82,9 +78,6 @@ import {
   setNoPairTemporary,
   shouldSkipNoPairTemporary,
   ensureForceAttemptPolicyState,
-  pruneForceAttemptPolicyWindows,
-  evaluateForceAttemptPolicyGuards,
-  recordForceAttemptPolicyAttempt,
   parseJupQuoteFailure,
   getRouteQuoteWithFallback,
   classifyNoPairReason,
@@ -96,22 +89,14 @@ import {
   pruneRouteCache,
   getFreshRouteCacheEntry,
   cacheRouteReadyMint,
-  resolveWatchlistRouteMeta,
-  readPct,
-  queueHotWatchlistMint,
   watchlistEntriesPrioritized,
-  resolvePairCreatedAtGlobal,
   evictWatchlist,
-  formatWatchlistSummary,
-  bumpImmediateBlockedReason,
 } from './control_tower/watchlist_control.mjs';
 import {
   positionCount,
   entryCapacityAvailable,
   enforceEntryCapacityGate,
-  cleanTokenText,
   tokenDisplayName,
-  tokenDisplayWithSymbol,
   conservativeExitMark,
 } from './control_tower/position_policy.mjs';
 import cache from './global_cache.mjs';
@@ -139,6 +124,51 @@ function clearAllTimers() {
     }
   }
 }
+
+function loadWallet() {
+  const sopsPath = String(process.env.SOPS_WALLET_FILE || '').trim();
+  if (sopsPath) return loadKeypairFromSopsFile(sopsPath);
+  return loadKeypairFromEnv();
+}
+
+async function getSolUsdPrice() {
+  try {
+    const pairs = await getTokenPairs('So11111111111111111111111111111111111111112');
+    const best = pickBestPair(pairs);
+    const solUsd = Number(best?.priceUsd || 0);
+    return { solUsd: Number.isFinite(solUsd) && solUsd > 0 ? solUsd : null };
+  } catch {
+    return { solUsd: null };
+  }
+}
+
+function startHealthServer({ stateRef, getSnapshot }) {
+  const port = Number(process.env.HEALTH_PORT || 0);
+  if (!Number.isFinite(port) || port <= 0) return null;
+
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/healthz') {
+      res.statusCode = 404;
+      res.end('not found');
+      return;
+    }
+
+    const snapshot = (typeof getSnapshot === 'function') ? getSnapshot() : {};
+    const payload = {
+      ok: true,
+      nowMs: Date.now(),
+      ...snapshot,
+      positions: Object.keys(stateRef?.positions || {}).length,
+    };
+
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(payload));
+  });
+
+  server.listen(port, '0.0.0.0');
+  return server;
+}
+
 // bind clients/listeners exactly once (prevents duplicate handlers on reconnect/restart cycles)
 if (!globalThis.__WSMGR_BOUND__) {
   wsmgr.bindClients({ wsClient: birdEyeWs, restClient: { fetchSnapshot: snapshotFromBirdseye } });
@@ -526,14 +556,14 @@ async function main() {
                       d.slippage_vs_trigger_price_pct = ((exitPriceUsd - triggerP) / triggerP) * 100;
                     }
                   }
-                }catch(e){}
+                }catch{}
                 anySuccess = true;
                 remaining = Math.max(0, remaining - take);
                 // small, fast pause between chunks
                 await new Promise(r=>setTimeout(r, 80));
                 // if process is taking too long, abort chunking
                 if (Date.now() - startMs > 1000) break;
-              }catch(e){
+              }catch{
                 // stop attempting further chunks on first error
                 break;
               }
@@ -546,7 +576,7 @@ async function main() {
               const finalBal = await getSplBalance(conn, wallet.publicKey.toBase58(), mint);
               if (!finalBal || Number(finalBal.amount||0) <= 0) {
                 // create minimal bookkeeping similar to closePosition by marking closed and saving state
-                try{ state.positions[mint].status='closed'; state.positions[mint].exitAt = new Date().toISOString(); }catch(e){}
+                try{ state.positions[mint].status='closed'; state.positions[mint].exitAt = new Date().toISOString(); }catch{}
               } else {
                 // still tokens remain — call closePosition to finish with full amount
                 await closePosition(cfg, conn, wallet, state, mint, pair, `ws_exit:${reason?.rule||'auto'}:post_chunks`);
@@ -1296,7 +1326,7 @@ async function main() {
               }
             }
           }
-        } catch (e) {
+        } catch {
           // best-effort only; do not throw
         }
 
@@ -1311,7 +1341,7 @@ async function main() {
             saveState(cfg.STATE_PATH, state);
             continue;
           }
-        } catch (e) {
+        } catch {
           // best-effort only; do not throw
         }
 
@@ -1840,7 +1870,7 @@ async function main() {
             console.warn(`[scan] BirdEye CU budget exceeded -> slowing scans ${oldDelay}ms -> ${nextScanDelayMs}ms (projectedDailyCu=${bs.projectedDailyCu})`);
           }
         }
-      } catch (e) {
+      } catch {
         // ignore getStats errors
       }
 
@@ -1956,7 +1986,6 @@ async function main() {
           }
 
           const {
-            preCandidates,
             probeEnabled,
             probeShortlist,
             executionAllowed,
