@@ -24,7 +24,7 @@ import { nowIso, safeErr } from '../logger.mjs';
  *   sendPositionsReport
  *   getLoopState        () => { dexCooldownUntil, lastScan, lastSolUsdAt }
  */
-export function createOperatorSurfaces({
+function createOperatorSurfaces({
   cfg,
   state,
   conn,
@@ -401,3 +401,8 @@ export function createOperatorSurfaces({
 
   return { processOperatorCommands };
 }
+
+const __legacyCreateOperatorSurfaces = createOperatorSurfaces;
+void __legacyCreateOperatorSurfaces;
+
+export * from './operator_surfaces/index.mjs';

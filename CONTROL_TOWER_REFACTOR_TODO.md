@@ -35,12 +35,12 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 - [x] Back-compat shim in `src/control_tower/exit_engine.mjs`
 
 ## 5) `operator_surfaces.mjs` → `operator_surfaces/`
-- [ ] Create `src/control_tower/operator_surfaces/index.mjs`
-- [ ] Stage: `stage_status_commands.mjs`
-- [ ] Stage: `stage_positions_commands.mjs`
-- [ ] Stage: `stage_config_filter_commands.mjs`
-- [ ] Stage: `stage_diag_replay_commands.mjs`
-- [ ] Back-compat shim in `src/control_tower/operator_surfaces.mjs`
+- [x] Create `src/control_tower/operator_surfaces/index.mjs`
+- [x] Stage: `stage_status_commands.mjs`
+- [x] Stage: `stage_positions_commands.mjs`
+- [x] Stage: `stage_config_filter_commands.mjs`
+- [x] Stage: `stage_diag_replay_commands.mjs`
+- [x] Back-compat shim in `src/control_tower/operator_surfaces.mjs`
 
 ## 6) `ops_reporting.mjs` → `ops_reporting/`
 - [ ] Create `src/control_tower/ops_reporting/index.mjs`
