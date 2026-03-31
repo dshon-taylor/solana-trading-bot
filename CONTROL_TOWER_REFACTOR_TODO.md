@@ -101,11 +101,11 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 - [ ] Back-compat shim in `src/control_tower/watchlist_control.mjs`
 
 ## 13) `watchlist_pipeline.mjs` → `watchlist_pipeline/`
-- [ ] Create `src/control_tower/watchlist_pipeline/index.mjs`
-- [ ] Stage: `stage_upsert_watchlist_mint.mjs`
-- [ ] Stage: `stage_promote_route_available.mjs`
-- [ ] Stage: `stage_runtime_delegate.mjs`
-- [ ] Back-compat shim in `src/control_tower/watchlist_pipeline.mjs`
+- [x] Create `src/control_tower/watchlist_pipeline/index.mjs`
+- [x] Stage: `stage_upsert_watchlist_mint.mjs`
+- [x] Stage: `stage_promote_route_available.mjs`
+- [x] Stage: `stage_runtime_delegate.mjs`
+- [x] Back-compat shim in `src/control_tower/watchlist_pipeline.mjs`
 
 ## 14) `watchlist_pipeline_runtime.mjs` → `watchlist_pipeline_runtime/`
 - [ ] Create `src/control_tower/watchlist_pipeline_runtime/index.mjs`

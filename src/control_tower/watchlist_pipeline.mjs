@@ -47,7 +47,7 @@ import {
 } from './route_control.mjs';
 import { entryCapacityAvailable, enforceEntryCapacityGate } from './position_policy.mjs';
 
-export function createWatchlistPipeline({
+function createWatchlistPipeline({
   confirmQualityGate,
   confirmContinuationGate,
   recordConfirmCarryTrace,
@@ -512,4 +512,8 @@ export function createWatchlistPipeline({
   };
 }
 
-export default createWatchlistPipeline;
+const __legacyCreateWatchlistPipeline = createWatchlistPipeline;
+void __legacyCreateWatchlistPipeline;
+
+export { default } from './watchlist_pipeline/index.mjs';
+export * from './watchlist_pipeline/index.mjs';
