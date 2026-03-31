@@ -44,6 +44,7 @@ import { didEntryFill } from './entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
+import { estimateEquityUsd, shouldStopPortfolio, reconcilePositions } from './control_tower/portfolio_control.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
@@ -102,7 +103,6 @@ import {
   tokenDisplayName,
   tokenDisplayWithSymbol,
   conservativeExitMark,
-  applyMomentumDefaultsToPosition,
 } from './control_tower/position_policy.mjs';
 import cache from './global_cache.mjs';
 import birdEyeWs from './providers/birdeye_ws.mjs';
@@ -415,116 +415,6 @@ async function computeMcapUsd(cfg, pair, rpcUrl) {
   // Note: do NOT apply any threshold here; thresholds belong in the scan loop
   // so state overrides (/setfilter mcap) work consistently.
   return { ok: true, reason: 'ok', mcapUsd, decimals };
-}
-
-async function estimateEquityUsd(cfg, conn, owner, state, solUsd) {
-  const solLamports = await getSolBalanceLamports(conn, owner);
-  const sol = solLamports / 1e9;
-  let equityUsd = sol * solUsd;
-
-  // Add value of open token positions (approx via DexScreener priceUsd)
-  for (const [mint, pos] of Object.entries(state.positions || {})) {
-    if (pos.status !== 'open') continue;
-    try {
-      const tokenBal = await getSplBalance(conn, owner, mint);
-      const amt = tokenBal.amount;
-      if (!amt || amt <= 0) continue;
-
-      // Get current price from DexScreener
-      const pairs = await getTokenPairs('solana', mint);
-      const pair = pickBestPair(pairs);
-      const priceUsd = Number(pair?.priceUsd || 0);
-      const decimals = typeof pos.decimals === 'number' ? pos.decimals : (pair?.baseToken?.decimals ?? null);
-
-      // If decimals unknown, skip valuation to avoid bogus equity.
-      if (typeof decimals !== 'number') continue;
-      const ui = amt / (10 ** decimals);
-      equityUsd += ui * priceUsd;
-    } catch {
-      // ignore valuation failures
-    }
-  }
-
-  return { equityUsd, solLamports };
-}
-
-async function shouldStopPortfolio(cfg, conn, owner, state, solUsd) {
-  const { equityUsd } = await estimateEquityUsd(cfg, conn, owner, state, solUsd);
-
-  // If both portfolio safety guards are explicitly disabled by config, skip stop logic.
-  if (cfg.PORTFOLIO_STOP_USDC <= 0 && cfg.MAX_DRAWDOWN_PCT >= 1) {
-    return { stop: false, reason: 'portfolio guards disabled', equityUsd };
-  }
-
-  state.portfolio.maxEquityUsd = Math.max(state.portfolio.maxEquityUsd || equityUsd, equityUsd);
-  const maxEquity = state.portfolio.maxEquityUsd;
-
-  if (equityUsd < cfg.PORTFOLIO_STOP_USDC) {
-    return { stop: true, reason: `portfolio stop: equity ${fmtUsd(equityUsd)} < ${fmtUsd(cfg.PORTFOLIO_STOP_USDC)}`, equityUsd };
-  }
-
-  const drawdown = maxEquity > 0 ? (maxEquity - equityUsd) / maxEquity : 0;
-  if (drawdown >= cfg.MAX_DRAWDOWN_PCT) {
-    return { stop: true, reason: `max drawdown hit: ${(drawdown * 100).toFixed(1)}%`, equityUsd };
-  }
-
-  return { stop: false, reason: 'ok', equityUsd };
-}
-
-async function reconcilePositions({ cfg, conn, ownerPubkey, state }) {
-  // Build on-chain holdings map: mint -> raw amount
-  const holdings = await getTokenHoldingsByMint(conn, ownerPubkey);
-
-  // 1) For any position we track: ensure state matches reality
-  for (const [mint, pos] of Object.entries(state.positions || {})) {
-    const amt = holdings.get(mint) || 0;
-
-    if (amt > 0) {
-      // We hold it: it must be open.
-      if (pos.status !== 'open') {
-        pos.status = 'open';
-        delete pos.exitAt;
-        delete pos.exitReason;
-        delete pos.exitTx;
-      }
-      applyMomentumDefaultsToPosition(cfg, pos);
-    } else {
-      // We do not hold it: it must be closed.
-      if (pos.status === 'open') {
-        pos.status = 'closed';
-        pos.exitAt = nowIso();
-        pos.exitReason = 'reconciled: no on-chain token holdings';
-      }
-    }
-  }
-
-  // 2) If we hold tokens that aren't in state at all, optionally add them.
-  // (We only add when there is at least one known position already, to avoid pulling in random dust.)
-  if (Object.keys(state.positions || {}).length) {
-    for (const [mint, amt] of holdings.entries()) {
-      if (!state.positions[mint]) {
-        state.positions[mint] = {
-          status: 'open',
-          mint,
-          symbol: null,
-          decimals: null,
-          pairUrl: null,
-          entryAt: nowIso(),
-          entryPriceUsd: null,
-          peakPriceUsd: null,
-          trailingActive: false,
-          stopAtEntry: true,
-          stopPriceUsd: null,
-          trailActivatePct: cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT,
-          trailDistancePct: cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT,
-          lastStopUpdateAt: nowIso(),
-          lastSeenPriceUsd: null,
-          note: `reconciled: found on-chain balance=${amt}`,
-          exitPending: true,
-        };
-      }
-    }
-  }
 }
 
 function initBirdEyeRuntimeListeners(state) {
