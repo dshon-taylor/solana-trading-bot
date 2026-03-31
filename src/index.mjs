@@ -131,15 +131,38 @@ function loadWallet() {
   return loadKeypairFromEnv();
 }
 
+function readLastSolUsdFallback() {
+  try {
+    const p = path.resolve(process.cwd(), 'state/last_sol_price.json');
+    const raw = fs.readFileSync(p, 'utf8');
+    const j = JSON.parse(raw || '{}');
+    const v = Number(j?.solUsd ?? j?.priceUsd ?? 0);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastSolUsdFallback(solUsd) {
+  try {
+    const v = Number(solUsd || 0);
+    if (!(Number.isFinite(v) && v > 0)) return;
+    const p = path.resolve(process.cwd(), 'state/last_sol_price.json');
+    fs.writeFileSync(p, JSON.stringify({ solUsd: v, at: Date.now() }));
+  } catch {}
+}
+
 async function getSolUsdPrice() {
   try {
     const pairs = await getTokenPairs('So11111111111111111111111111111111111111112');
     const best = pickBestPair(pairs);
     const solUsd = Number(best?.priceUsd || 0);
-    return { solUsd: Number.isFinite(solUsd) && solUsd > 0 ? solUsd : null };
-  } catch {
-    return { solUsd: null };
-  }
+    if (Number.isFinite(solUsd) && solUsd > 0) {
+      writeLastSolUsdFallback(solUsd);
+      return { solUsd };
+    }
+  } catch {}
+  return { solUsd: readLastSolUsdFallback() };
 }
 
 function startHealthServer({ stateRef, getSnapshot }) {
