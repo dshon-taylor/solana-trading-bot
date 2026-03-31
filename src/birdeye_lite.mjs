@@ -1,5 +1,6 @@
 import { fetchJsonWithRetry } from './fetch_retry.mjs';
 import cache from './global_cache.mjs';
+import { fetchJupTokenList } from './jup_tokenlist.mjs';
 
 const BASE = 'https://public-api.birdeye.so';
 
@@ -38,6 +39,7 @@ export function createBirdseyeLiteClient({
   perMintMinIntervalMs = 15_000,
   // Test hook
   fetchJson = fetchJsonWithRetry,
+  fetchTokenList = fetchJupTokenList,
 } = {}) {
   const isEnabled = !!enabled && !!String(apiKey || '').trim();
 
@@ -56,6 +58,8 @@ export function createBirdseyeLiteClient({
     fetches: 0,
     fetchAtMs: [], // rolling timestamps (ms)
   };
+  let tokenListCache = null;
+  let tokenListCacheAtMs = 0;
 
   function noteFetch(nowMs) {
     stats.fetchAtMs.push(nowMs);
@@ -421,10 +425,28 @@ export function createBirdseyeLiteClient({
     };
   }
 
+  async function listJupiterTokens(nowMs = Date.now()) {
+    const ttlMsTokens = Math.max(30_000, Number(process.env.JUP_TOKENS_CACHE_MS || 15 * 60_000));
+    if (Array.isArray(tokenListCache) && (nowMs - Number(tokenListCacheAtMs || 0)) <= ttlMsTokens) {
+      return tokenListCache;
+    }
+    try {
+      const rows = await fetchTokenList();
+      tokenListCache = Array.isArray(rows) ? rows : [];
+      tokenListCacheAtMs = nowMs;
+      return tokenListCache;
+    } catch {
+      // Keep this best-effort and non-fatal for scanner/candidate pipeline.
+      if (Array.isArray(tokenListCache)) return tokenListCache;
+      return [];
+    }
+  }
+
   return {
     enabled: isEnabled,
     getTokenSnapshot,
     getTokenSnapshotAt,
     getStats,
+    listJupiterTokens,
   };
 }
