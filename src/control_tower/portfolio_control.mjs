@@ -9,6 +9,14 @@ function fmtUsd(x) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+export function syncExposureStateWithPositions({ cfg, state }) {
+  state.exposure ||= { activeRunnerCount: 0, queue: [], pausedUntilMs: 0 };
+  const openCount = Object.values(state.positions || {}).filter((p) => p?.status === 'open').length;
+  const maxActive = Math.max(1, Number(cfg?.MAX_ACTIVE_RUNNERS || 3));
+  state.exposure.activeRunnerCount = Math.max(0, Math.min(openCount, maxActive));
+  return { openCount, activeRunnerCount: state.exposure.activeRunnerCount };
+}
+
 export async function estimateEquityUsd(cfg, conn, owner, state, solUsd) {
   const solLamports = await getSolBalanceLamports(conn, owner);
   const sol = solLamports / 1e9;
@@ -105,4 +113,25 @@ export async function reconcilePositions({ cfg, conn, ownerPubkey, state }) {
       }
     }
   }
+
+  const retentionDays = Math.max(1, Number(process.env.CLOSED_POSITION_RETENTION_DAYS || 14));
+  const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60_000);
+  let prunedClosedPositions = 0;
+  for (const [mint, pos] of Object.entries(state.positions || {})) {
+    if (!pos || pos.status !== 'closed') continue;
+    if (pos.exitPending === true) continue;
+    if (Number(holdings.get(mint) || 0) > 0) continue;
+    const exitAtMs = Date.parse(String(pos.exitAt || ''));
+    if (!Number.isFinite(exitAtMs) || exitAtMs <= 0) continue;
+    if (exitAtMs > cutoffMs) continue;
+    delete state.positions[mint];
+    prunedClosedPositions += 1;
+  }
+
+  const exposure = syncExposureStateWithPositions({ cfg, state });
+  return {
+    prunedClosedPositions,
+    openCount: exposure.openCount,
+    activeRunnerCount: exposure.activeRunnerCount,
+  };
 }

@@ -44,8 +44,9 @@ import { didEntryFill } from './entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
-import { estimateEquityUsd, shouldStopPortfolio, reconcilePositions } from './control_tower/portfolio_control.mjs';
+import { estimateEquityUsd, shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions } from './control_tower/portfolio_control.mjs';
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
+import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer } from './control_tower/runtime_timers.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from './lib/momentum_gate_controls.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
@@ -556,22 +557,7 @@ async function main() {
   });
 
   // detect stale live mints and trigger restResync once-per-incident
-  if (!globalTimers.watchlistCleanup) {
-    globalTimers.watchlistCleanup = setInterval(async ()=>{
-      try{
-        const now = Date.now();
-        let anyStale=false;
-        for(const [mint,pos] of wsmgr.live.entries()){
-          const d = wsmgr.diag[mint] || {};
-          const last = Number(d.last_ws_ts || 0);
-          if(last && (now - last) > (wsmgr.staleMs||1200)){
-            anyStale = true; break;
-          }
-        }
-        if(anyStale){ await wsmgr.restResync(); }
-      }catch(e){}
-    }, Math.max(300, Number(process.env.BIRDEYE_WS_STALE_POLL_MS||500)));
-  }
+  startWatchlistCleanupTimer({ globalTimers, cfg, wsmgr });
 
   state.positions ||= {};
   state.portfolio ||= { maxEquityUsd: cfg.STARTING_CAPITAL_USDC };
@@ -656,13 +642,16 @@ async function main() {
   try {
     const anyOpen = Object.values(state.positions || {}).some(p => p?.status === 'open');
     if (anyOpen) {
-      await reconcilePositions({ cfg, conn, ownerPubkey: pub, state });
+      const reconcileSummary = await reconcilePositions({ cfg, conn, ownerPubkey: pub, state });
       saveState(cfg.STATE_PATH, state);
-      console.log(`[startup] reconciled open positions: now open=${positionCount(state)}`);
+      console.log(`[startup] reconciled open positions: now open=${positionCount(state)} prunedClosed=${Number(reconcileSummary?.prunedClosedPositions || 0)} activeRunners=${Number(reconcileSummary?.activeRunnerCount || 0)}`);
     }
   } catch (e) {
     console.warn('[startup] reconcilePositions failed (continuing):', safeErr(e).message);
   }
+  try {
+    syncExposureStateWithPositions({ cfg, state });
+  } catch {}
 
   let lastScan = 0;
   let nextScanDelayMs = cfg.SCAN_EVERY_MS;
@@ -673,6 +662,7 @@ async function main() {
   let lastAutoTune = 0;
   let lastHourlyDiag = 0;
   let lastWatchlistEval = 0;
+  let lastExposureQueueDrainAt = 0;
 
   // loop timing (for /healthz)
   let _loopPrevAtMs = Date.now();
@@ -2569,26 +2559,16 @@ async function main() {
   refreshDiagSnapshot(Date.now());
 
   // Periodic observability summary (every 5 minutes)
-  if (!globalTimers.heartbeatLoop) {
-    globalTimers.heartbeatLoop = setInterval(() => {
-      try {
-        const entriesMinute = (counters.watchlist && counters.watchlist.funnelMinute) ? counters.watchlist.funnelMinute.watchlistSeen : (counters.scanned || 0);
-        const entriesHourEstimate = entriesMinute * 60;
-        const queueSize = Number(state.exposure?.queue?.length || 0);
-        const snapshotFailures = Number(state.marketData?.providers?.birdeye?.rejects || 0) + Number(state.marketData?.providers?.dexscreener?.rejects || 0) + Number(state.marketData?.providers?.jupiter?.rejects || 0);
-        const cuStats = (birdseye && typeof birdseye.getStats === 'function') ? birdseye.getStats(Date.now()) : null;
-        const cuEstimate = cuStats ? Number(cuStats.projectedDailyCu || 0) : null;
-        const regimeExposure = state.exposure?.activeRunnerCount || 0;
-        const msg = `OBSERVABILITY ─ entries/hour≈${entriesHourEstimate} queueSize=${queueSize} snapshotFailures=${snapshotFailures} projectedDailyCu=${cuEstimate || 'n/a'} activeRunners=${regimeExposure}`;
-        console.log(msg);
-        pushDebug(state, { t: nowIso(), reason: 'observability', msg, counters: { entriesMinute, queueSize, snapshotFailures, cuEstimate, regimeExposure } });
-        saveState(cfg.STATE_PATH, state);
-      } catch (e) {
-        console.warn('[observability] failed', e?.message || e);
-      }
-    }, 5 * 60_000);
-    if (globalTimers.heartbeatLoop.unref) globalTimers.heartbeatLoop.unref();
-  }
+  startObservabilityHeartbeatTimer({
+    globalTimers,
+    cfg,
+    state,
+    counters,
+    birdseye,
+    nowIso,
+    pushDebug,
+    saveState,
+  });
 
   // Cached spend summaries to keep /spend off the hot loop path.
   const SPEND_CACHE_TTL_MS = Math.max(60_000, Number(process.env.SPEND_CACHE_TTL_MS || 5 * 60_000));
@@ -2720,6 +2700,18 @@ async function main() {
     if (t - lastDiagSnapshotAt >= DIAG_SNAPSHOT_EVERY_MS) {
       lastDiagSnapshotAt = t;
       refreshDiagSnapshot(t);
+    }
+
+    if ((t - lastExposureQueueDrainAt) >= Math.max(2_000, Number(process.env.EXPOSURE_QUEUE_EVERY_MS || 7_500))) {
+      lastExposureQueueDrainAt = t;
+      try {
+        syncExposureStateWithPositions({ cfg, state });
+        if (Array.isArray(state.exposure?.queue) && state.exposure.queue.length > 0) {
+          await processExposureQueue(cfg, conn, wallet, state);
+        }
+      } catch (e) {
+        console.warn('[exposure] periodic queue drain failed', safeErr(e).message);
+      }
     }
 
     if (!spendSummaryCache.inFlight && (t - Number(spendSummaryCache.loadedAtMs || 0) >= SPEND_CACHE_TTL_MS)) {
