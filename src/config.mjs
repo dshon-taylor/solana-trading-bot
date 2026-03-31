@@ -131,7 +131,7 @@ export function summarizeConfigForBoot(cfg) {
   const lines = [];
   lines.push('[config] effective');
   lines.push(`  rpc=${cfg.SOLANA_RPC_URL ? 'set' : 'missing'}`);
-  lines.push(`  modes: data_capture=${cfg.DATA_CAPTURE_ENABLED} execution=${cfg.EXECUTION_ENABLED} sim_tracking=${cfg.SIM_TRACKING_ENABLED} live_momo=${cfg.LIVE_MOMO_ENABLED} tracker_live_exec=${cfg.TRACKER_LIVE_EXECUTION_ENABLED} paper=${cfg.PAPER_ENABLED} scanner_entries=${cfg.SCANNER_ENTRIES_ENABLED} tracking=${cfg.SCANNER_TRACKING_ENABLED} trackResultAlerts=${cfg.TRACK_RESULT_ALERTS_ENABLED}`);
+  lines.push(`  modes: data_capture=${cfg.DATA_CAPTURE_ENABLED} execution=${cfg.EXECUTION_ENABLED} sim_tracking=${cfg.SIM_TRACKING_ENABLED} live_momo=${cfg.LIVE_MOMO_ENABLED} tracker_live_exec=${cfg.TRACKER_LIVE_EXECUTION_ENABLED} paper=${cfg.PAPER_ENABLED} paperUseLiveProcess=${cfg.PAPER_USE_LIVE_PROCESS} scanner_entries=${cfg.SCANNER_ENTRIES_ENABLED} tracking=${cfg.SCANNER_TRACKING_ENABLED} trackResultAlerts=${cfg.TRACK_RESULT_ALERTS_ENABLED}`);
   lines.push(`  cadence: scanEveryMs=${cfg.SCAN_EVERY_MS} positionsEveryMs=${cfg.POSITIONS_EVERY_MS} heartbeatEveryMs=${cfg.HEARTBEAT_EVERY_MS}`);
   lines.push(`  diag: retentionDays=${cfg.DIAG_RETENTION_DAYS} retentionMs=${cfg.DIAG_RETENTION_MS}`);
   lines.push(`  watchlist: mode=${cfg.WATCHLIST_TRIGGER_MODE} maxSize=${cfg.WATCHLIST_MAX_SIZE} hotQueueMax=${cfg.WATCHLIST_HOT_QUEUE_MAX} hotTtlMs=${cfg.HOT_TTL_MS} eval(cold=${cfg.COLD_EVAL_MIN_MS}-${cfg.COLD_EVAL_MAX_MS}ms hot=${cfg.HOT_EVAL_MIN_MS}-${cfg.HOT_EVAL_MAX_MS}ms confirm=${cfg.CONFIRM_DELAY_MIN_MS}-${cfg.CONFIRM_DELAY_MAX_MS}ms) evalEveryMs=${cfg.WATCHLIST_EVAL_EVERY_MS} immediateMaxPerCycle=${cfg.WATCHLIST_IMMEDIATE_ROUTE_MAX_PER_CYCLE} immediateDedupMs=${cfg.WATCHLIST_IMMEDIATE_ROUTE_DEDUP_MS} mintTtlMs=${cfg.WATCHLIST_MINT_TTL_MS} evictMaxAgeHours=${cfg.WATCHLIST_EVICT_MAX_AGE_HOURS} staleCycles=${cfg.WATCHLIST_EVICT_STALE_CYCLES} rollback=WATCHLIST_TRIGGER_MODE=false`);
@@ -435,6 +435,7 @@ export function getConfig() {
 
   // Paper momentum trading (no live swaps; logs hypothetical entries/exits)
   const PAPER_ENABLED = (process.env.PAPER_ENABLED ?? 'false') === 'true';
+  const PAPER_USE_LIVE_PROCESS = (process.env.PAPER_USE_LIVE_PROCESS ?? 'true') === 'true';
 
   // Live momentum mode (executes swaps; uses same entry thresholds as PAPER_*)
   const LIVE_MOMO_ENABLED = (process.env.LIVE_MOMO_ENABLED ?? 'false') === 'true';
@@ -767,6 +768,7 @@ export function getConfig() {
     PLAYBOOK_STABLE_RECOVERY_MS,
 
     PAPER_ENABLED,
+    PAPER_USE_LIVE_PROCESS,
     MOMENTUM_PROFILE,
     AGGRESSIVE_PAPER_ENTRY_RET_15M_PCT,
     AGGRESSIVE_PAPER_ENTRY_RET_5M_PCT,

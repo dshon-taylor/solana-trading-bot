@@ -175,6 +175,10 @@ export function paperOnSample({ cfg, state, mint, symbol, entryAnchorPrice, tIso
     return null;
   }
 
+  // Parity mode: entries are sourced from the same scanner/live process path.
+  // In this mode this module only maintains existing paper positions (stops/trailing/exits).
+  if (cfg.PAPER_USE_LIVE_PROCESS) return null;
+
   // If no open position, evaluate momentum entry
   state.paper.lastEntryAtMs ||= {};
   const ret15 = getRetFromWindow(series, 15 * 60_000, tMs);

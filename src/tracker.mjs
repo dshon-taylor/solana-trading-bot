@@ -409,7 +409,8 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
         } catch {}
 
         const lowSolPaused = state.flags?.lowSolPauseEntries === true;
-        const executionAllowed = (cfg.EXECUTION_ENABLED === true) && (state.tradingEnabled !== false) && !lowSolPaused;
+        const paperModeActive = (cfg.PAPER_ENABLED === true) || (Date.now() < Number(state?.paper?.enabledUntilMs || 0));
+        const executionAllowed = (cfg.EXECUTION_ENABLED === true) && (state.tradingEnabled !== false) && !lowSolPaused && !paperModeActive;
         if (cfg.LIVE_MOMO_ENABLED && cfg.TRACKER_LIVE_EXECUTION_ENABLED && executionAllowed) {
           // Live momentum entry: spend fixed USD target in SOL, stop at entry, trailing per LIVE_MOMO_*.
           if (!conn || !wallet || !solUsd) {
@@ -592,6 +593,10 @@ export async function trackerTick({ cfg, state, send, nowIso, conn, wallet, solU
             ].join('\n'));
           }
         } else {
+          if (paperModeActive) {
+            paperAttempt.reason = 'skip:paper_mode_active';
+            try { appendJsonl(attemptsFp, { ...paperAttempt, stage: 'decision' }); } catch {}
+          }
           if (cfg.LIVE_MOMO_ENABLED && !cfg.TRACKER_LIVE_EXECUTION_ENABLED) {
             paperAttempt.reason = 'skip:tracker_live_execution_disabled';
             try { appendJsonl(attemptsFp, { ...paperAttempt, stage: 'decision' }); } catch {}

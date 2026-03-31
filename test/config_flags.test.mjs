@@ -33,6 +33,7 @@ const ENV_KEYS = [
   'LIVE_REJECT_RECHECK_PASSES',
   'LIVE_TWO_STAGE_SLIPPAGE_RETRY_ENABLED',
   'MOMENTUM_PROFILE',
+  'PAPER_USE_LIVE_PROCESS',
   'PAPER_ENTRY_RET_15M_PCT',
   'PAPER_ENTRY_RET_5M_PCT',
   'PAPER_ENTRY_GREEN_LAST5',
@@ -102,6 +103,7 @@ describe('pass1 config flags', () => {
     expect(cfg.EARLY_SHORTLIST_PREFILTER_MIN_TX1H).toBe(12);
     expect(cfg.EARLY_SHORTLIST_PREFILTER_MIN_BOOST_USD).toBe(100);
     expect(cfg.MOMENTUM_PROFILE).toBe('normal');
+    expect(cfg.PAPER_USE_LIVE_PROCESS).toBe(true);
     expect(cfg.MOMENTUM_FALLBACK_ENABLED).toBe(false);
     expect(cfg.PAPER_ENTRY_RET_15M_PCT).toBe(0.12);
     expect(cfg.PAPER_ENTRY_RET_5M_PCT).toBe(0.04);
@@ -180,6 +182,12 @@ describe('pass1 config flags', () => {
     expect(cfg.ROUTE_ALT_MIN_LIQ_USD).toBe(25_000);
     expect(cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT).toBe(5.5);
     expect(cfg.ROUTE_ALT_RAYDIUM_ENABLED).toBe(false);
+  });
+
+  it('supports paper/live process parity flag', () => {
+    process.env.PAPER_USE_LIVE_PROCESS = 'false';
+    const cfg = getConfig();
+    expect(cfg.PAPER_USE_LIVE_PROCESS).toBe(false);
   });
 
   it('validates SOURCE_MODE values', () => {

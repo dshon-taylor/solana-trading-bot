@@ -5,6 +5,7 @@ function mkCfg(overrides = {}) {
   return {
     LIVE_MOMO_ENABLED: true,
     PAPER_ENABLED: false,
+    PAPER_USE_LIVE_PROCESS: false,
 
     PAPER_ENTRY_COOLDOWN_MS: 60_000,
     PAPER_ENTRY_RET_15M_PCT: 0.12,

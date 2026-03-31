@@ -601,6 +601,11 @@ function classifyNoPairReason({ state, mint, nowMs, maxAgeMs, routeAvailable, ro
   return 'retriesExhausted';
 }
 
+function isPaperModeActive({ state, cfg, nowMs = Date.now() }) {
+  if (cfg.PAPER_ENABLED === true) return true;
+  return Number(state?.paper?.enabledUntilMs || 0) > Number(nowMs || 0);
+}
+
 function minHoldersRequired({ cfg, poolAgeSec }) {
   const age = Number(poolAgeSec);
   if (Number.isFinite(age) && age <= Number(cfg.HOLDER_TIER_NEW_MAX_AGE_SEC || 1800)) {
@@ -1670,6 +1675,7 @@ function bumpImmediateBlockedReason(counters, blockedReason) {
 
 async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, executionAllowed, executionAllowedReason = null, solUsdNow, conn, pub, wallet, birdseye = null, immediateMode = false, canary = null }) {
   const hotBypassTracePath = path.join(path.dirname(cfg.STATE_PATH || 'state/state.json'), 'hot_bypass_trace.jsonl');
+  const paperModeActive = isPaperModeActive({ state, cfg, nowMs });
   const pushBypassTraceSummary = (evt) => {
     counters.watchlist.hotBypassTraceFinalReason ||= {};
     if (evt?.nextStageReached === 'momentum') {
@@ -4015,6 +4021,7 @@ async function evaluateWatchlistRows({ rows, cfg, state, counters, nowMs, execut
         slippageBps: cfg.DEFAULT_SLIPPAGE_BPS,
         expectedOutAmount,
         expectedInAmount,
+        paperOnly: paperModeActive,
         stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
         stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
         trailActivatePct: cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT,
@@ -4661,6 +4668,60 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
   const maxSol = usdTarget / solUsd;
   const inAmountLamports = toBaseUnits(maxSol, DECIMALS[cfg.SOL_MINT] ?? 9);
 
+  const paperOnly = tradeCfg?.paperOnly === true;
+  if (paperOnly) {
+    const now = Date.now();
+    state.paper ||= { enabledUntilMs: 0, positions: {}, lastEntryAtMs: {}, series: {} };
+    state.paper.positions ||= {};
+    state.paper.lastEntryAtMs ||= {};
+    state.paper.lastEntryAtMs[mint] = now;
+    state.paper.positions[mint] = {
+      status: 'open',
+      mint,
+      symbol: symbol || null,
+      entryT: new Date(now).toISOString(),
+      entryPrice: Number(entryPriceUsd || 0),
+      stopPx: Number(stopPriceUsd || 0),
+      trailActivated: false,
+      activeTrailPct: Number(trailDistancePct || 0),
+      trailHigh: null,
+      trailStop: null,
+      source: 'scanner_live_process',
+      note: 'paperOnlyEntry',
+    };
+
+    try {
+      appendJsonl('./state/paper_trades.jsonl', {
+        t: nowIso(),
+        mode: 'paper',
+        type: 'entry',
+        source: 'scanner_live_process',
+        mint,
+        symbol,
+        entryPrice: Number(entryPriceUsd || 0),
+        stopPrice: Number(stopPriceUsd || 0),
+        usdTarget,
+        slippageBps,
+        mcapUsd: Number(mcapUsdAtEntry || 0) || null,
+        liquidityUsd: Number(liqUsdAtEntry || 0) || null,
+      });
+    } catch {}
+
+    pushDebug(state, {
+      t: nowIso(),
+      mint,
+      symbol,
+      reason: `PAPER(opened via live process, usdTarget=${Number(usdTarget || 0).toFixed(2)})`,
+    });
+
+    return {
+      signature: `paper:${mint}:${now}`,
+      mode: 'paper',
+      paperOnly: true,
+      swapMeta: { attempted: false, succeeded: false, reason: 'paperOnly' },
+    };
+  }
+
   const res = await executeSwap({
     conn,
     wallet,
@@ -4887,8 +4948,9 @@ async function processExposureQueue(cfg, conn, wallet, state) {
     const q = state.exposure.queue.shift();
     try {
       const tradeCfg = q.tradeCfg || {};
+      const paperModeActive = isPaperModeActive({ state, cfg, nowMs: Date.now() });
       if (!enforceEntryCapacityGate({ state, cfg, mint: q.mint, symbol: q.symbol, tag: 'queue' })) continue;
-      const entryRes = await openPosition(cfg, conn, wallet, state, q.solUsdNow || 0, q.pair, q.mcap || 0, q.decimals || null, q.report || null, q.sigReasons || null, tradeCfg);
+      const entryRes = await openPosition(cfg, conn, wallet, state, q.solUsdNow || 0, q.pair, q.mcap || 0, q.decimals || null, q.report || null, q.sigReasons || null, { ...tradeCfg, paperOnly: paperModeActive });
       if (!entryRes?.blocked) {
         state.exposure.activeRunnerCount = Number(state.exposure.activeRunnerCount || 0) + 1;
         pushDebug(state, { t: nowIso(), mint: q.mint, symbol: q.symbol, reason: `QUEUE(executed)` });
@@ -8095,8 +8157,9 @@ async function main() {
       const playbookBlocks = cfg.PLAYBOOK_ENABLED && (state.playbook?.mode === PLAYBOOK_MODE_DEGRADED);
       const lowSolPaused = state.flags?.lowSolPauseEntries === true;
       const capOk = entryCapacityAvailable(state, cfg);
-      const executionAllowed = cfg.EXECUTION_ENABLED && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
-      const executionAllowedReason = !cfg.EXECUTION_ENABLED ? 'cfgExecutionOff'
+      const paperModeActive = isPaperModeActive({ state, cfg, nowMs: t });
+      const executionAllowed = (cfg.EXECUTION_ENABLED || paperModeActive) && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
+      const executionAllowedReason = !(cfg.EXECUTION_ENABLED || paperModeActive) ? 'cfgExecutionOff'
         : (!state.tradingEnabled ? 'stateTradingOff'
           : (playbookBlocks ? 'playbookDegraded'
             : (!circuitOk ? 'circuitOpen' : (lowSolPaused ? 'lowSolPause' : (!capOk ? 'maxPositionsHysteresis' : null)))));
@@ -9354,8 +9417,9 @@ async function main() {
           const playbookBlocks = cfg.PLAYBOOK_ENABLED && (state.playbook?.mode === PLAYBOOK_MODE_DEGRADED);
           const lowSolPaused = state.flags?.lowSolPauseEntries === true;
           const capOk = entryCapacityAvailable(state, cfg);
-          const executionAllowed = cfg.EXECUTION_ENABLED && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
-          const executionAllowedReason = !cfg.EXECUTION_ENABLED ? 'cfgExecutionOff'
+          const paperModeActive = isPaperModeActive({ state, cfg, nowMs: t });
+          const executionAllowed = (cfg.EXECUTION_ENABLED || paperModeActive) && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
+          const executionAllowedReason = !(cfg.EXECUTION_ENABLED || paperModeActive) ? 'cfgExecutionOff'
             : (!state.tradingEnabled ? 'stateTradingOff'
               : (playbookBlocks ? 'playbookDegraded'
                 : (!circuitOk ? 'circuitOpen' : (lowSolPaused ? 'lowSolPause' : (!capOk ? 'maxPositionsHysteresis' : null)))));
@@ -9968,6 +10032,7 @@ async function main() {
                     slippageBps: finalSlip,
                     expectedOutAmount: Number(quoteFinal?.outAmount || 0),
                     expectedInAmount: Number(quoteFinal?.inAmount || 0),
+                    paperOnly: paperModeActive,
                     // Apply the same stop/trailing rules as LIVE momo
                     stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                     stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -10049,6 +10114,7 @@ async function main() {
                   slippageBps: finalSlip,
                   expectedOutAmount: Number(quoteFinal?.outAmount || 0),
                   expectedInAmount: Number(quoteFinal?.inAmount || 0),
+                  paperOnly: paperModeActive,
                   // Apply the same stop/trailing rules as LIVE momo
                   stopAtEntry: cfg.LIVE_MOMO_STOP_AT_ENTRY,
                   stopAtEntryBufferPct: cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT,
@@ -10217,7 +10283,7 @@ async function main() {
     if (state.flags?.sendMode) {
       state.flags.sendMode = false;
       const nowMs = Date.now();
-      const paperOn = Number(state.paper?.enabledUntilMs || 0) > nowMs;
+      const paperOn = isPaperModeActive({ state, cfg, nowMs });
       const mode = !state.tradingEnabled ? 'halted' : paperOn ? 'paper' : cfg.EXECUTION_ENABLED ? 'live' : 'monitoring';
       const gates = [
         `executionCfg=${cfg.EXECUTION_ENABLED ? 'on' : 'off'}`,
