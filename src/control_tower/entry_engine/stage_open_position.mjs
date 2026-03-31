@@ -1,16 +1,14 @@
-import cache from '../global_cache.mjs';
-import { getConcentrationMetrics } from '../rugcheck.mjs';
-import { getTokenSupply } from '../helius.mjs';
-import { executeSwap, toBaseUnits, DECIMALS } from '../trader.mjs';
-import { appendTradingLog, nowIso } from '../logger.mjs';
-import { tgSend } from '../telegram.mjs';
-import { appendJsonl } from '../candidates_ledger.mjs';
-import { resolveEntryAndStopForOpenPosition } from '../entry_guard.mjs';
-import { computePreTrailStopPrice } from '../lib/stop_policy.mjs';
-import { pushDebug } from '../debug_buffer.mjs';
-import { saveState } from '../state.mjs';
-import { isPaperModeActive } from './route_control.mjs';
-import { enforceEntryCapacityGate, tokenDisplayName, tokenDisplayWithSymbol } from './position_policy.mjs';
+import cache from '../../global_cache.mjs';
+import { getConcentrationMetrics } from '../../rugcheck.mjs';
+import { getTokenSupply } from '../../helius.mjs';
+import { executeSwap, toBaseUnits, DECIMALS } from '../../trader.mjs';
+import { appendTradingLog, nowIso } from '../../logger.mjs';
+import { tgSend } from '../../telegram.mjs';
+import { appendJsonl } from '../../candidates_ledger.mjs';
+import { resolveEntryAndStopForOpenPosition } from '../../entry_guard.mjs';
+import { computePreTrailStopPrice } from '../../lib/stop_policy.mjs';
+import { pushDebug } from '../../debug_buffer.mjs';
+import { tokenDisplayName, tokenDisplayWithSymbol } from '../position_policy.mjs';
 
 function fmtUsd(x) {
   const n = Number(x);
@@ -18,7 +16,7 @@ function fmtUsd(x) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, decimals, rugReport, signal, tradeCfg) {
+export async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, decimals, rugReport, signal, tradeCfg) {
   const mint = tradeCfg?.mint || pair?.baseToken?.address || null;
   const tokenName = tradeCfg?.tokenName || pair?.baseToken?.name || null;
   const symbol = tradeCfg?.symbol || pair?.baseToken?.symbol || null;
@@ -260,7 +258,7 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
   };
 
   if (process.env.TIMESCALE_ENABLED === 'true') {
-    import('../timeseries_db.mjs').then(({ insertTradeEntry }) => {
+    import('../../timeseries_db.mjs').then(({ insertTradeEntry }) => {
       insertTradeEntry({
         timestamp: now,
         mint,
@@ -371,34 +369,3 @@ async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapUsd, dec
 
   return res;
 }
-
-async function processExposureQueue(cfg, conn, wallet, state) {
-  state.exposure ||= { activeRunnerCount: 0, queue: [], pausedUntilMs: 0 };
-  const maxActive = Math.max(1, Number(cfg.MAX_ACTIVE_RUNNERS || 3));
-  const openCount = Object.values(state.positions || {}).filter((p) => p?.status === 'open').length;
-  state.exposure.activeRunnerCount = Math.max(0, Math.min(openCount, maxActive));
-  const nowMs = Date.now();
-  state.exposure.queue = (state.exposure.queue || []).filter(q => Number(q.expiryMs || 0) > nowMs);
-  if (Number(state.exposure.pausedUntilMs || 0) > nowMs) return;
-  while (state.exposure.queue.length && Number(state.exposure.activeRunnerCount || 0) < maxActive) {
-    const q = state.exposure.queue.shift();
-    try {
-      const tradeCfg = q.tradeCfg || {};
-      const paperModeActive = isPaperModeActive({ state, cfg, nowMs: Date.now() });
-      if (!enforceEntryCapacityGate({ state, cfg, mint: q.mint, symbol: q.symbol, tag: 'queue' })) continue;
-      const entryRes = await openPosition(cfg, conn, wallet, state, q.solUsdNow || 0, q.pair, q.mcap || 0, q.decimals || null, q.report || null, q.sigReasons || null, { ...tradeCfg, paperOnly: paperModeActive });
-      if (!entryRes?.blocked) {
-        const openAfter = Object.values(state.positions || {}).filter((p) => p?.status === 'open').length;
-        state.exposure.activeRunnerCount = Math.max(0, Math.min(openAfter, maxActive));
-        pushDebug(state, { t: nowIso(), mint: q.mint, symbol: q.symbol, reason: 'QUEUE(executed)' });
-      } else {
-        pushDebug(state, { t: nowIso(), mint: q.mint, symbol: q.symbol, reason: `QUEUE(blocked:${entryRes.reason})` });
-      }
-    } catch (e) {
-      pushDebug(state, { t: nowIso(), mint: q.mint, symbol: q.symbol, reason: `QUEUE(execError:${String(e?.message || e)})` });
-    }
-  }
-  saveState(cfg.STATE_PATH, state);
-}
-
-export * from './entry_engine/index.mjs';

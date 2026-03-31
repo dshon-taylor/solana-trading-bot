@@ -22,12 +22,10 @@ Refactor each module under `src/control_tower` into folder-based stage architect
 - [ ] Back-compat shim in `src/control_tower/diag_reporting.mjs`
 
 ## 3) `entry_engine.mjs` → `entry_engine/`
-- [ ] Create `src/control_tower/entry_engine/index.mjs`
-- [ ] Stage: `stage_entry_preflight.mjs` (inputs/guardrails)
-- [ ] Stage: `stage_quote_and_swap.mjs`
-- [ ] Stage: `stage_entry_state_commit.mjs`
-- [ ] Stage: `stage_exposure_queue.mjs`
-- [ ] Back-compat shim in `src/control_tower/entry_engine.mjs`
+- [x] Create `src/control_tower/entry_engine/index.mjs`
+- [x] Stage: `stage_open_position.mjs`
+- [x] Stage: `stage_exposure_queue.mjs`
+- [x] Back-compat shim in `src/control_tower/entry_engine.mjs`
 
 ## 4) `exit_engine.mjs` → `exit_engine/`
 - [ ] Create `src/control_tower/exit_engine/index.mjs`
