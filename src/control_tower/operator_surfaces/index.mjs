@@ -4,6 +4,7 @@ import { handleStatusCommands } from './stage_status_commands.mjs';
 import { handleConfigFilterCommands } from './stage_config_filter_commands.mjs';
 import { handleDiagReplayCommands } from './stage_diag_replay_commands.mjs';
 export { bootstrapOperatorSurfaces } from './stage_bootstrap.mjs';
+export { pollTelegramControls } from './stage_poll_telegram_controls.mjs';
 
 export function createOperatorSurfaces(context) {
   async function processOperatorCommands(t) {

@@ -4,6 +4,7 @@ import { runConfirmContinuationStage } from './stage_confirm_continuation.mjs';
 import { runAttemptPolicyAndEntryStage } from './stage_attempt_policy_and_entry.mjs';
 import { runPostAttemptOutcomesStage } from './stage_post_attempt_outcomes.mjs';
 import { appendDiagEvent } from '../diag_reporting/diag_event_store.mjs';
+export { runWatchlistTriggerLane } from './stage_watchlist_trigger_lane.mjs';
 
 export async function evaluateWatchlistRowsRuntime({
   rows,

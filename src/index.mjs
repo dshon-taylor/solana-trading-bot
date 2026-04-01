@@ -41,12 +41,13 @@ import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
-import { createDiagReporting, initializeDiagCounters } from './control_tower/diag_reporting.mjs';
+import { createDiagReporting, initializeDiagCounters, runRejectionSummary } from './control_tower/diag_reporting.mjs';
 import { appendDiagEvent, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createScanCompactEventPusher } from './control_tower/diag_reporting/stage_scan_compact_events.mjs';
 import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stage_boot_compact_window.mjs';
 import { createCandidatePipeline, bootstrapStreamingCandidateSources } from './control_tower/candidate_pipeline.mjs';
-import { createOperatorSurfaces, bootstrapOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
+import { createOperatorSurfaces, bootstrapOperatorSurfaces, pollTelegramControls } from './control_tower/operator_surfaces.mjs';
+import { runWatchlistTriggerLane } from './control_tower/watchlist_pipeline_runtime.mjs';
 import { createScanPipeline, createScanCycleState } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
 import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
@@ -687,118 +688,65 @@ async function main() {
     lastHourlyDiag = maintenance.lastHourlyDiag;
     counters = maintenance.counters;
 
-    // Telegram controls polling
-    if (t - lastTgPoll >= cfg.TELEGRAM_POLL_EVERY_MS) {
-      lastTgPoll = t;
-      await handleTelegramControls({
-        cfg,
-        state,
-        counters,
-        send: tgSend,
-        nowIso,
-        onDiagRequest: (mode = 'compact', windowHours = null) => {
-          const m = String(mode || 'compact').toLowerCase();
-          const diagMode = (m === 'full' || m === 'momentum' || m === 'confirm' || m === 'execution' || m === 'scanner') ? m : 'compact';
-          const msg = getDiagSnapshotMessage(Date.now(), diagMode, windowHours);
-          Promise.resolve(tgSendChunked(msg)).catch((e) => {
-            console.warn('[diag] send failed', safeErr(e).message);
-          });
-        },
-        onPositionsRequest: () => sendPositionsReport(),
-      });
-    }
+    const tgPoll = await pollTelegramControls({
+      t,
+      cfg,
+      state,
+      counters,
+      lastTgPoll,
+      handleTelegramControls,
+      tgSend,
+      nowIso,
+      getDiagSnapshotMessage,
+      tgSendChunked,
+      sendPositionsReport,
+      safeErr,
+    });
+    lastTgPoll = tgPoll.lastTgPoll;
 
     // Forward tracking tick ("what would have happened")
     try {
       await trackerTick({ cfg, state, send: tgSend, nowIso, conn, wallet, solUsd: lastSolUsd || solUsd || null, birdseye });
     } catch {}
 
-    // Watchlist trigger lane: decoupled high-cadence re-evaluation for entries.
-    if (cfg.WATCHLIST_TRIGGER_MODE && (t - lastWatchlistEval >= cfg.WATCHLIST_EVAL_EVERY_MS)) {
-      lastWatchlistEval = t;
-      const wl = ensureWatchlistState(state);
-      wl.stats.lastEvalAtMs = t;
-      evictWatchlist({ state, cfg, nowMs: t, counters });
-      pruneRouteCache({ state, cfg, nowMs: t });
+    const watchlistEval = await runWatchlistTriggerLane({
+      t,
+      cfg,
+      state,
+      counters,
+      conn,
+      pub,
+      wallet,
+      birdseye,
+      lastWatchlistEval,
+      lastSolUsd,
+      lastSolUsdAt,
+      solUsdFallback: solUsd,
+      ensureWatchlistState,
+      evictWatchlist,
+      pruneRouteCache,
+      circuitOkForEntries,
+      entryCapacityAvailable,
+      isPaperModeActive,
+      watchlistEntriesPrioritized,
+      getSolUsdPrice,
+      evaluateWatchlistRows,
+    });
+    lastWatchlistEval = watchlistEval.lastWatchlistEval;
+    lastSolUsd = watchlistEval.lastSolUsd;
+    lastSolUsdAt = watchlistEval.lastSolUsdAt;
 
-      const circuitOk = circuitOkForEntries({ state, nowMs: t });
-      const playbookBlocks = cfg.PLAYBOOK_ENABLED && (state.playbook?.mode === PLAYBOOK_MODE_DEGRADED);
-      const lowSolPaused = state.flags?.lowSolPauseEntries === true;
-      const capOk = entryCapacityAvailable(state, cfg);
-      const paperModeActive = isPaperModeActive({ state, cfg, nowMs: t });
-      const executionAllowed = (cfg.EXECUTION_ENABLED || paperModeActive) && state.tradingEnabled && !playbookBlocks && circuitOk && !lowSolPaused && capOk;
-      const executionAllowedReason = !(cfg.EXECUTION_ENABLED || paperModeActive) ? 'cfgExecutionOff'
-        : (!state.tradingEnabled ? 'stateTradingOff'
-          : (playbookBlocks ? 'playbookDegraded'
-            : (!circuitOk ? 'circuitOpen' : (lowSolPaused ? 'lowSolPause' : (!capOk ? 'maxPositionsHysteresis' : null)))));
-      const watchlistRows = watchlistEntriesPrioritized({ state, cfg, limit: cfg.LIVE_CANDIDATE_SHORTLIST_N, nowMs: t });
-
-      let solUsdNow = lastSolUsd || solUsd || null;
-      if (!solUsdNow || (t - lastSolUsdAt) > 5 * 60_000) {
-        try {
-          solUsdNow = (await getSolUsdPrice()).solUsd;
-          lastSolUsd = solUsdNow;
-          lastSolUsdAt = t;
-        } catch {}
-      }
-
-      await evaluateWatchlistRows({
-        rows: watchlistRows,
-        cfg,
-        state,
-        counters,
-        nowMs: t,
-        executionAllowed,
-        executionAllowedReason,
-        solUsdNow,
-        conn,
-        pub,
-        wallet,
-        birdseye,
-      });
-    }
-
-    // Periodic rejection summary (debug)
-    const rejEnabled = state.debug?.rejections ?? cfg.DEBUG_REJECTIONS;
-    const rejEveryMs = state.debug?.rejectionsEveryMs ?? cfg.DEBUG_REJECTIONS_EVERY_MS;
-    if (rejEnabled && t - lastRej >= rejEveryMs) {
-      lastRej = t;
-      const { snap, next } = snapshotAndReset(counters);
-      counters = next;
-      state.runtime.diagCounters = counters;
-      const msg = [
-        `DEBUG 📊 scanner summary (last ${(rejEveryMs/60000).toFixed(0)}m)`,
-        `scanned=${snap.scanned} consideredPairs=${snap.consideredPairs}`,
-        `reject(noPair)=${snap.reject.noPair}`,
-        `reject(noPair.providerEmpty)=${snap.reject.noPairReasons?.providerEmpty ?? 0}`,
-        `reject(noPair.rateLimited)=${snap.reject.noPairReasons?.rateLimited ?? 0}`,
-        `reject(noPair.routeNotFound)=${snap.reject.noPairReasons?.routeNotFound ?? 0}`,
-        `reject(noPair.nonTradableMint)=${snap.reject.noPairReasons?.nonTradableMint ?? 0}`,
-        `reject(noPair.deadMint)=${snap.reject.noPairReasons?.deadMint ?? 0}`,
-        `reject(noPair.routeableNoMarketData)=${snap.reject.noPairReasons?.routeableNoMarketData ?? 0}`,
-        `reject(noPair.providerCooldown)=${snap.reject.noPairReasons?.providerCooldown ?? 0}`,
-        `reject(noPair.staleData)=${snap.reject.noPairReasons?.staleData ?? 0}`,
-        `reject(noPair.retriesExhausted)=${snap.reject.noPairReasons?.retriesExhausted ?? 0}`,
-        `route(prefilterChecks)=${snap.route?.prefilterChecks ?? 0}`,
-        `route(prefilterRouteable)=${snap.route?.prefilterRouteable ?? 0}`,
-        `route(prefilterRejected)=${snap.route?.prefilterRejected ?? 0}`,
-        `route(shortlistPrefilter pass/drop)=${snap.route?.shortlistPrefilterPassed ?? 0}/${snap.route?.shortlistPrefilterDropped ?? 0}`,
-        `route(tempSkips/revisits/deadSkips)=${snap.route?.noPairTempSkips ?? 0}/${snap.route?.noPairTempRevisits ?? 0}/${snap.route?.deadMintSkips ?? 0}`,
-        `route(routeAvailable seen/promoted)=${snap.route?.routeAvailableSeen ?? 0}/${snap.route?.routeAvailablePromotedToWatchlist ?? 0}`,
-        `route(routeAvailable dropped)=${Object.entries(snap.route?.routeAvailableDropped || {}).filter(([, v]) => Number(v || 0) > 0).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 4).map(([k, v]) => `${k}:${v}`).join(', ') || 'none'}`,
-        `reject(baseFilters)=${snap.reject.baseFilters}`,
-        `reject(rugcheckFetch)=${snap.reject.rugcheckFetch}`,
-        `reject(rugUnsafe)=${snap.reject.rugUnsafe}`,
-        `reject(mcapFetch)=${snap.reject.mcapFetch}`,
-        `reject(mcapLowOrMissing)=${snap.reject.mcapLowOrMissing}`,
-        `reject(momentum)=${snap.reject.momentum}`,
-        `reject(noSocialMeta)=${snap.reject.noSocialMeta}`,
-        `reject(alreadyOpen)=${snap.reject.alreadyOpen}`,
-        `reject(lowSolFees)=${snap.reject.lowSolFees}`,
-        `reject(swapError)=${snap.reject.swapError}`,
-      ].join('\n');
-      await tgSend(cfg, msg);
-    }
+    const rejectionSummary = await runRejectionSummary({
+      t,
+      cfg,
+      state,
+      counters,
+      lastRej,
+      snapshotAndReset,
+      tgSend,
+    });
+    lastRej = rejectionSummary.lastRej;
+    counters = rejectionSummary.counters;
 
     // SOLUSD refresh periodically
     let solPrice;

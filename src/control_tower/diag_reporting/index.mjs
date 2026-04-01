@@ -2,6 +2,7 @@ import { createRefreshDiagSnapshot, initializeDiagSnapshotState } from './stage_
 import { createGetDiagSnapshotMessage } from './stage_get_diag_message.mjs';
 import { createMaybeRefreshDiagSnapshot } from './stage_maybe_refresh.mjs';
 export { initializeDiagCounters } from './stage_boot_counters.mjs';
+export { runRejectionSummary } from './stage_rejection_summary.mjs';
 
 export function createDiagReporting({
   state,
