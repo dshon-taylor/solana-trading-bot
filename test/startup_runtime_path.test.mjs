@@ -2,22 +2,30 @@ import { describe, it, expect, vi } from 'vitest';
 import { announceBootStatus, bootRuntimeContext } from '../src/control_tower/startup.mjs';
 
 describe('startup runtime path', () => {
-  it('populates Candle Carl online startup message with wallet', async () => {
+  it('retries boot online message and eventually sends wallet announcement', async () => {
     const sent = [];
-    const cfg = {};
+    const cfg = { BOOT_ANNOUNCE_RETRY_ATTEMPTS: 3, BOOT_ANNOUNCE_RETRY_DELAY_MS: 1 };
     const pub = 'WalletPubKey123';
+    const tgSetMyCommands = vi.fn();
 
+    let tries = 0;
     await announceBootStatus({
       cfg,
       pub,
-      tgSend: async (_cfg, msg) => { sent.push(msg); },
-      tgSetMyCommands: vi.fn(),
+      tgSend: async (_cfg, msg) => {
+        sent.push(msg);
+        tries += 1;
+        return tries >= 3;
+      },
+      tgSetMyCommands,
     });
 
-    expect(sent.length).toBe(1);
-    expect(sent[0]).toContain('Candle Carl online');
-    expect(sent[0]).toContain(pub);
-    expect(sent[0]).toContain('Base: SOL');
+    expect(tries).toBe(3);
+    expect(sent.length).toBe(3);
+    expect(sent[2]).toContain('Candle Carl online');
+    expect(sent[2]).toContain(pub);
+    expect(sent[2]).toContain('Base: SOL');
+    expect(tgSetMyCommands).toHaveBeenCalledTimes(1);
   });
 
   it('bootRuntimeContext executes startup/runtime wiring and returns context', async () => {

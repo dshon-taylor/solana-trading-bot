@@ -1,3 +1,13 @@
+async function tgSendWithRetry({ cfg, tgSend, text, attempts = 8, delayMs = 5000 }) {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      if (await tgSend(cfg, text)) return true;
+    } catch {}
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
+}
+
 export async function announceBootStatus({ cfg, pub, tgSend, tgSetMyCommands }) {
   console.log(`[wallet] publicKey=${pub}`);
   console.log(
@@ -7,6 +17,14 @@ export async function announceBootStatus({ cfg, pub, tgSend, tgSetMyCommands }) 
       `trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`,
   );
 
-  await tgSend(cfg, `🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`);
+  await tgSendWithRetry({
+    cfg,
+    tgSend,
+    text: `🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`,
+    attempts: Number(cfg.BOOT_ANNOUNCE_RETRY_ATTEMPTS || 8),
+    delayMs: Number(cfg.BOOT_ANNOUNCE_RETRY_DELAY_MS || 5000),
+  });
+
+  // best-effort: command registration must never block startup/announcements
   void tgSetMyCommands(cfg);
 }
