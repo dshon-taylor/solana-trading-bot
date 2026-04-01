@@ -43,6 +43,7 @@ import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPosi
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
 import { createDiagReporting } from './control_tower/diag_reporting.mjs';
 import { appendDiagEvent, getCompactWindowForDiagRequest, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
+import { createScanCompactEventPusher } from './control_tower/diag_reporting/stage_scan_compact_events.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
@@ -1289,52 +1290,11 @@ async function main() {
         maxScanMs: cfg.SCAN_BACKOFF_MAX_MS,
       });
 
-      const pushScanCompactEvent = (kind, extra = {}) => {
-        counters.watchlist ||= {};
-        counters.watchlist.compactWindow ||= {};
-        const w = counters.watchlist.compactWindow;
-        const now = Date.now();
-        const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-        const cutoff = now - retainMs;
-        if (kind === 'candidateSeen') {
-          if (!Array.isArray(w.candidateSeen)) w.candidateSeen = [];
-          w.candidateSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-          while (w.candidateSeen.length && Number(w.candidateSeen[0]?.tMs || 0) < cutoff) w.candidateSeen.shift();
-          try {
-            appendDiagEvent({
-              appendJsonl,
-              statePath: cfg.STATE_PATH,
-              event: { tMs: now, kind: 'candidateSeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } },
-            });
-          } catch {}
-          return;
-        }
-        if (kind === 'candidateRouteable') {
-          if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
-          w.candidateRouteable.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-          while (w.candidateRouteable.length && Number(w.candidateRouteable[0]?.tMs || 0) < cutoff) w.candidateRouteable.shift();
-          try {
-            appendDiagEvent({
-              appendJsonl,
-              statePath: cfg.STATE_PATH,
-              event: { tMs: now, kind: 'candidateRouteable', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } },
-            });
-          } catch {}
-          return;
-        }
-        if (kind === 'candidateLiquiditySeen') {
-          if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
-          w.candidateLiquiditySeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
-          while (w.candidateLiquiditySeen.length && Number(w.candidateLiquiditySeen[0]?.tMs || 0) < cutoff) w.candidateLiquiditySeen.shift();
-          try {
-            appendDiagEvent({
-              appendJsonl,
-              statePath: cfg.STATE_PATH,
-              event: { tMs: now, kind: 'candidateLiquiditySeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
-            });
-          } catch {}
-        }
-      };
+      const pushScanCompactEvent = createScanCompactEventPusher({
+        counters,
+        cfg,
+        appendJsonl,
+      });
 
       const finalizeScanTelemetry = () => {
         const scanDurationMs = Math.max(0, Date.now() - scanCycleStartedAtMs);
