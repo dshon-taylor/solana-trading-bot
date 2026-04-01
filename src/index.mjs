@@ -45,7 +45,7 @@ import { createDiagReporting } from './control_tower/diag_reporting.mjs';
 import { appendDiagEvent, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createScanCompactEventPusher } from './control_tower/diag_reporting/stage_scan_compact_events.mjs';
 import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stage_boot_compact_window.mjs';
-import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
+import { createCandidatePipeline, bootstrapStreamingCandidateSources } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
@@ -457,15 +457,18 @@ async function main() {
   let lastLowSolAlertAt = 0;
   let lastReconcileAt = 0;
 
-  streamingProvider = createStreamingProvider(cfg, {
-    log: (...args) => console.log(...args),
+  const streamingBoot = bootstrapStreamingCandidateSources({
+    cfg,
+    state,
+    birdseye,
+    tgSend,
+    saveState,
+    createStreamingProvider,
+    createCandidatePipeline,
   });
-  streamingProvider.start();
-  let lastStreamingHealthAt = 0;
-
-  const { fetchCandidateSources } = createCandidatePipeline({
-    cfg, state, birdseye, streamingProvider, tgSend, saveState,
-  });
+  streamingProvider = streamingBoot.streamingProvider;
+  let lastStreamingHealthAt = streamingBoot.lastStreamingHealthAt;
+  const fetchCandidateSources = streamingBoot.fetchCandidateSources;
 
   const { runScanPipeline } = createScanPipeline({
     cfg,

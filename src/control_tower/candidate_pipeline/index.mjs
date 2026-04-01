@@ -1,6 +1,9 @@
 import { runSourceDiscoveryStage } from './stage_source_discovery.mjs';
 import { runJupExpansionStage } from './stage_jup_expansion.mjs';
 import { runFinalizeCandidatesStage } from './stage_finalize_candidates.mjs';
+import { bootstrapStreamingCandidateSources } from './stage_streaming_bootstrap.mjs';
+
+export { bootstrapStreamingCandidateSources };
 
 export function createCandidatePipeline({
   cfg,
