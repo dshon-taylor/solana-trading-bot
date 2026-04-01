@@ -1,5 +1,5 @@
 import { resolveConfirmTxMetricsFromDiagEvent } from '../../diag_event_invariants.mjs';
-import { buildCompactWindowFromDiagEvents, readRecentDiagEvents } from './diag_event_store.mjs';
+import { getCompactWindowForDiagRequest } from './diag_event_store.mjs';
 import { buildExecutionDiagMessage } from './messages/execution_message.mjs';
 import { buildScannerDiagMessage } from './messages/scanner_message.mjs';
 import { buildConfirmDiagMessage } from './messages/confirm_message.mjs';
@@ -71,18 +71,17 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       let compactWindow = inMemoryCompactWindow;
       if (durableHistoryEnabled) {
         try {
-          const events = readRecentDiagEvents({
+          const durableCompactWindow = getCompactWindowForDiagRequest({
             statePath: cfg.STATE_PATH,
+            mode,
             nowMs: snapshotRefMs,
             windowStartMs: effectiveWindowStartMs,
             retainMs,
           });
-          if (events.length) {
-            compactWindow = buildCompactWindowFromDiagEvents({
-              events,
-              cutoffMs: effectiveWindowStartMs,
-            });
-          }
+          const arrKeys = ['momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill', 'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen'];
+          const durableCount = arrKeys.reduce((a, k) => a + Number((durableCompactWindow?.[k] || []).length || 0), 0);
+          const memoryCount = arrKeys.reduce((a, k) => a + Number((inMemoryCompactWindow?.[k] || []).length || 0), 0);
+          compactWindow = (durableCount > 0 || memoryCount === 0) ? durableCompactWindow : inMemoryCompactWindow;
         } catch {}
       }
       const inWindowTs = (arr) => (arr || []).filter((t) => Number(t || 0) >= effectiveWindowStartMs);

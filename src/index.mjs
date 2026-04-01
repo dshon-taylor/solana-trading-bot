@@ -48,7 +48,7 @@ import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_t
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
 import { createDiagReporting } from './control_tower/diag_reporting.mjs';
-import { appendDiagEvent, buildCompactWindowFromDiagEvents, getDiagEventsPath, readRecentDiagEvents } from './control_tower/diag_reporting/diag_event_store.mjs';
+import { appendDiagEvent, getCompactWindowForDiagRequest, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline/index.mjs';
@@ -790,25 +790,21 @@ async function main() {
   };
 
   // Hydrate compact diagnostic window from durable diag events log for retro windows across restarts.
-  // Single source of truth: replay retained events from diag_events.jsonl.
+  // Single source of truth: replay retained events from canonical diag stream (family logs are mirrors).
   try {
     const compactHasData = Array.isArray(counters?.watchlist?.compactWindow?.momentumAgeSamples)
       && counters.watchlist.compactWindow.momentumAgeSamples.length > 0;
     if (!compactHasData) {
       const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
       const nowMsForHydrate = Date.now();
-      const events = readRecentDiagEvents({
+      state.runtime.compactWindow = getCompactWindowForDiagRequest({
         statePath: cfg.STATE_PATH,
+        mode: 'compact',
         nowMs: nowMsForHydrate,
+        windowStartMs: nowMsForHydrate - retainMs,
         retainMs,
       });
-      if (events.length) {
-        state.runtime.compactWindow = buildCompactWindowFromDiagEvents({
-          events,
-          cutoffMs: nowMsForHydrate - retainMs,
-        });
-        counters.watchlist.compactWindow = state.runtime.compactWindow;
-      }
+      counters.watchlist.compactWindow = state.runtime.compactWindow;
     }
   } catch {}
   try {
