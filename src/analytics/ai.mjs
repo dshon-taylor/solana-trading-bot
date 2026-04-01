@@ -1,4 +1,4 @@
-import { safeErr } from './core/logger.mjs';
+import { safeErr } from '../core/logger.mjs';
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));

@@ -6,7 +6,7 @@ import {
   optimizeReplay,
   parseRangeSpec,
   simulateReplayPosition,
-} from '../src/replay_optimizer.mjs';
+} from '../src/analytics/replay_optimizer.mjs';
 
 describe('replay_optimizer', () => {
   it('parses range specs deterministically', () => {

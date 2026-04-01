@@ -5,8 +5,8 @@ import { jupPriceUsd } from '../providers/jupiter/price.mjs';
 import { getTokenPairs, pickBestPair } from '../providers/dexscreener.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
 import { getSolBalanceLamports } from './portfolio.mjs';
-import { simulateStops } from '../track_sim.mjs';
-import { paperOnSample } from '../paper_momentum.mjs';
+import { simulateStops } from '../analytics/track_sim.mjs';
+import { paperOnSample } from '../analytics/paper_momentum.mjs';
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });

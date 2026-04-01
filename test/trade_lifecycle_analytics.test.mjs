@@ -5,7 +5,7 @@ import {
   holdTimeBucket,
   slippageBucket,
   summarizeTradeLifecycle,
-} from '../src/trade_lifecycle_analytics.mjs';
+} from '../src/analytics/trade_lifecycle_analytics.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

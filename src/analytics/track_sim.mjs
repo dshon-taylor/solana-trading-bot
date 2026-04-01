@@ -1,5 +1,5 @@
-import { computeTrailPct } from './signals/trailing.mjs';
-import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
+import { computeTrailPct } from '../signals/trailing.mjs';
+import { computePreTrailStopPrice } from '../signals/stop_policy.mjs';
 
 export function simulateStops({
   entryPrice,

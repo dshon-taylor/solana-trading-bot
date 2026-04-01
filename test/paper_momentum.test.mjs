@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paperOnSample } from '../src/paper_momentum.mjs';
+import { paperOnSample } from '../src/analytics/paper_momentum.mjs';
 
 function mkCfg(overrides = {}) {
   return {
