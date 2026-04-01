@@ -1,4 +1,4 @@
-const TOKENLIST_ALL = 'https://token.jup.ag/all';
+const TOKENLIST_ALL = 'https://cache.jup.ag/tokens';
 
 export async function fetchJupTokenList(url = TOKENLIST_ALL) {
   const res = await fetch(url);
