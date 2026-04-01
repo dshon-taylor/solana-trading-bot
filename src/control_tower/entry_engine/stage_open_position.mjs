@@ -2,7 +2,7 @@ import cache from '../../global_cache.mjs';
 import { getConcentrationMetrics } from '../../rugcheck.mjs';
 import { getTokenSupply } from '../../helius.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from '../../trader.mjs';
-import { appendTradingLog, nowIso } from '../../logger.mjs';
+import { appendTradingLog, nowIso } from '../../core/logger.mjs';
 import { tgSend } from '../../telegram/index.mjs';
 import { appendJsonl } from '../../candidates_ledger.mjs';
 import { resolveEntryAndStopForOpenPosition } from '../../entry_guard.mjs';

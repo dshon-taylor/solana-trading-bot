@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeCounters, formatThroughputSummary, buildRejectBuckets, bumpSourceCounter, snapshotAndReset } from '../src/metrics.mjs';
+import { makeCounters, formatThroughputSummary, buildRejectBuckets, bumpSourceCounter, snapshotAndReset } from '../src/core/metrics.mjs';
 
 describe('metrics throughput summary', () => {
   it('preserves compactWindow history across snapshotAndReset', () => {

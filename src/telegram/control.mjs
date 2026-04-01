@@ -1,4 +1,4 @@
-import { safeErr } from '../logger.mjs';
+import { safeErr } from '../core/logger.mjs';
 import { buildHelpText } from './commands.mjs';
 
 const REPLAY_USAGE =

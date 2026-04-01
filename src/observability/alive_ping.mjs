@@ -1,4 +1,4 @@
-import { safeErr } from '../logger.mjs';
+import { safeErr } from '../core/logger.mjs';
 
 export function ensureAliveState(state) {
   state.alive ||= {};

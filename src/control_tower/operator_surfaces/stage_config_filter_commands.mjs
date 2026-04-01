@@ -1,5 +1,5 @@
 import { getModels } from '../../ai_pipeline.mjs';
-import { nowIso } from '../../logger.mjs';
+import { nowIso } from '../../core/logger.mjs';
 
 export async function handleConfigFilterCommands(ctx) {
   const {

@@ -1,4 +1,4 @@
-import { safeErr } from '../logger.mjs';
+import { safeErr } from '../core/logger.mjs';
 import { TELEGRAM_COMMANDS } from './commands.mjs';
 
 const tgRetryQueue = [];

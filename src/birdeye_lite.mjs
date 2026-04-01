@@ -1,4 +1,4 @@
-import { fetchJsonWithRetry } from './fetch_retry.mjs';
+import { fetchJsonWithRetry } from './core/fetch_retry.mjs';
 import cache from './global_cache.mjs';
 import { fetchJupTokenList } from './jup_tokenlist.mjs';
 

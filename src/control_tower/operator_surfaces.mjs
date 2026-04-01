@@ -7,8 +7,8 @@ import { formatTrackerIngestionSummary } from '../tracker.mjs';
 import { getLastDebug } from '../observability/debug_buffer.mjs';
 import { getModels } from '../ai_pipeline.mjs';
 import { fmtUsd } from './ops_reporting.mjs';
-import { saveState } from '../state.mjs';
-import { nowIso, safeErr } from '../logger.mjs';
+import { saveState } from '../core/state.mjs';
+import { nowIso, safeErr } from '../core/logger.mjs';
 
 /**
  * createOperatorSurfaces – Telegram operator command handlers.

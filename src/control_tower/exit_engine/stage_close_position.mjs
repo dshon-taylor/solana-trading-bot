@@ -1,10 +1,10 @@
 import { getSplBalance } from '../../portfolio.mjs';
 import { getTokenSupply } from '../../helius.mjs';
 import { executeSwap } from '../../trader.mjs';
-import { appendTradingLog, nowIso } from '../../logger.mjs';
+import { appendTradingLog, nowIso } from '../../core/logger.mjs';
 import { tgSend } from '../../telegram/index.mjs';
 import { pushDebug } from '../../observability/debug_buffer.mjs';
-import { saveState } from '../../state.mjs';
+import { saveState } from '../../core/state.mjs';
 import { appendJsonl } from '../../candidates_ledger.mjs';
 import { tokenDisplayName, tokenDisplayWithSymbol } from '../position_policy.mjs';
 import { processExposureQueue } from '../entry_engine.mjs';

@@ -5,7 +5,7 @@ import { jupCooldownRemainingMs } from '../../jup_cooldown.mjs';
 import { formatTrackerIngestionSummary } from '../../tracker.mjs';
 import { getModels } from '../../ai_pipeline.mjs';
 import { fmtUsd } from '../ops_reporting.mjs';
-import { nowIso, safeErr } from '../../logger.mjs';
+import { nowIso, safeErr } from '../../core/logger.mjs';
 
 export async function handleStatusCommands(ctx) {
   const { cfg, state, tgSend, getSolUsdPrice, getLoopState } = ctx;
