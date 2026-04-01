@@ -4,7 +4,7 @@ import cache from '../lib/cache/global_cache.mjs';
 import { getRugcheckReport, isTokenSafe } from '../providers/rugcheck.mjs';
 import { getSolBalanceLamports } from '../portfolio.mjs';
 import { passesBaseFilters, evaluateMomentumSignal } from '../strategy.mjs';
-import { paperComputeMomentumWindows } from '../paper_momentum.mjs';
+import { paperComputeMomentumWindows } from '../analytics/paper_momentum.mjs';
 import { toBaseUnits, DECIMALS } from '../trader.mjs';
 import { nowIso } from '../core/logger.mjs';
 import { bump, bumpWatchlistFunnel } from '../core/metrics.mjs';
