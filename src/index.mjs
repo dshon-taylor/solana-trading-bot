@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { PublicKey } from '@solana/web3.js';
 
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
-import { applyOnchainBalanceToPosition } from './reconcile_positions.mjs';
+import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
 import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './wallet.mjs';
 import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './portfolio.mjs';
 import { getTokenPairs, pickBestPair } from './providers/dexscreener.mjs';
@@ -34,7 +34,7 @@ import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isStopSnapshotUsable, 
 import { hitJup429, isJup429, jupCooldownRemainingMs } from './providers/jupiter/cooldown.mjs';
 import { maybeAlivePing } from './observability/alive_ping.mjs';
 import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './circuit_breaker.mjs';
-import { maybePruneJsonlByAge, maybeRotateBySize } from './ledger_retention.mjs';
+import { maybePruneJsonlByAge, maybeRotateBySize } from './persistence/ledger_retention.mjs';
 import { ensureCapitalGuardrailsState, canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from './capital_guardrails.mjs';
 import { ensurePlaybookState, recordPlaybookRestart, recordPlaybookError, evaluatePlaybook, runSelfRecovery, PLAYBOOK_MODE_DEGRADED } from './observability/incident_playbook.mjs';
 import { createStreamingProvider } from './providers/streaming_provider.mjs';
@@ -962,7 +962,7 @@ async function main() {
   });
 
   // Start RPC probe and heartbeat (writes ./state/heartbeat.json and rate-limited alerts)
-  import('./rpc_probe.mjs').then(({ startRpcProbe }) => {
+  import('./persistence/rpc_probe.mjs').then(({ startRpcProbe }) => {
     try {
       const rpcHealth = startRpcProbe({ cfg, intervalMs: Number(process.env.RPC_PROBE_EVERY_MS || 30000) });
       import('./observability/heartbeat.mjs').then(({ startHeartbeat }) => {

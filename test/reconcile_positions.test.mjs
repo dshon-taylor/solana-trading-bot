@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyOnchainBalanceToPosition } from '../src/reconcile_positions.mjs';
+import { applyOnchainBalanceToPosition } from '../src/persistence/reconcile_positions.mjs';
 
 function mkPos(overrides = {}) {
   return {
