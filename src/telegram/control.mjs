@@ -1,5 +1,5 @@
-import { safeErr } from './logger.mjs';
-import { buildHelpText } from './telegram_commands.mjs';
+import { safeErr } from '../logger.mjs';
+import { buildHelpText } from './commands.mjs';
 
 const REPLAY_USAGE =
   'Usage: /replay [quick|standard|deep] [days 1-30] [windowh=1..168] [activate=0..1] [distance=0..1] [stopbuf=0..0.05]';

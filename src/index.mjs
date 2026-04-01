@@ -17,9 +17,9 @@ import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } fro
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
 import { nowIso, safeErr } from './logger.mjs';
 import { loadState, saveState } from './state.mjs';
-import { tgSend, tgSetMyCommands } from './telegram.mjs';
+import { tgSend, tgSetMyCommands } from './telegram/index.mjs';
 import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './metrics.mjs';
-import { handleTelegramControls } from './telegram_control.mjs';
+import { handleTelegramControls } from './telegram/control.mjs';
 import { trackerMaybeEnqueue, trackerTick } from './tracker.mjs';
 import { pushDebug } from './debug_buffer.mjs';
 import { safeMsg } from './ai.mjs';

@@ -4,7 +4,7 @@ import { loadKeypairFromEnv } from '../src/wallet.mjs';
 import { makeConnection } from '../src/portfolio.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from '../src/trader.mjs';
 import { appendTradingLog, nowIso } from '../src/logger.mjs';
-import { tgSend } from '../src/telegram.mjs';
+import { tgSend } from '../src/telegram/index.mjs';
 import { getTokenPairs, pickBestPair } from '../src/dexscreener.mjs';
 
 async function getSolUsd() {

@@ -6,7 +6,7 @@ import {
   parseLastArg,
   parseSpendArg,
   parseSetFilterArgs,
-} from '../src/telegram_control.mjs';
+} from '../src/telegram/control.mjs';
 
 describe('telegram_control parsing', () => {
   it('parses slash command and args', () => {

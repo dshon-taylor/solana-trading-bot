@@ -1,5 +1,5 @@
-import { safeErr } from './logger.mjs';
-import { TELEGRAM_COMMANDS } from './telegram_commands.mjs';
+import { safeErr } from '../logger.mjs';
+import { TELEGRAM_COMMANDS } from './commands.mjs';
 
 const tgRetryQueue = [];
 let tgRetryTimer = null;

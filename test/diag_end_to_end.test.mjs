@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { makeCounters } from '../src/metrics.mjs';
-import { handleTelegramControls } from '../src/telegram_control.mjs';
+import { handleTelegramControls } from '../src/telegram/control.mjs';
 import { createDiagReporting } from '../src/control_tower/diag_reporting.mjs';
 import { handleDiagReplayCommands } from '../src/control_tower/operator_surfaces/stage_diag_replay_commands.mjs';
 
