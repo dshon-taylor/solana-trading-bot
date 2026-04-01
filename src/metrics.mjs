@@ -226,6 +226,9 @@ export function snapshotAndReset(counters) {
   next.watchlist.funnelCumulative = JSON.parse(JSON.stringify(counters.watchlist?.funnelCumulative || makeWatchlistFunnelCounts()));
   next.watchlist.funnelMinuteKey = counters.watchlist?.funnelMinuteKey ?? null;
   next.watchlist.funnelMinute = JSON.parse(JSON.stringify(counters.watchlist?.funnelMinute || makeWatchlistFunnelCounts()));
+  // Keep compact diagnostic history across throughput/rejection counter resets.
+  // This powers /diag windows like: /diag momentum 12
+  next.watchlist.compactWindow = JSON.parse(JSON.stringify(counters.watchlist?.compactWindow || {}));
   return { snap, next };
 }
 

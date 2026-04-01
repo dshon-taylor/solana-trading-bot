@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { makeCounters, formatThroughputSummary, buildRejectBuckets, bumpSourceCounter } from '../src/metrics.mjs';
+import { makeCounters, formatThroughputSummary, buildRejectBuckets, bumpSourceCounter, snapshotAndReset } from '../src/metrics.mjs';
 
 describe('metrics throughput summary', () => {
+  it('preserves compactWindow history across snapshotAndReset', () => {
+    const c = makeCounters();
+    const t = Date.now();
+    c.watchlist.compactWindow = {
+      momentumRecent: [{ tMs: t - 10_000, mint: 'mintA', liq: 42000, mcap: 150000, final: 'momentum.passed' }],
+      momentumAgeSamples: [{ tMs: t - 10_000, mint: 'mintA', ageMin: 12.3, source: 'cache' }],
+    };
+
+    const { next } = snapshotAndReset(c);
+    expect(Array.isArray(next.watchlist.compactWindow.momentumRecent)).toBe(true);
+    expect(next.watchlist.compactWindow.momentumRecent.length).toBe(1);
+    expect(next.watchlist.compactWindow.momentumRecent[0].mint).toBe('mintA');
+    expect(Array.isArray(next.watchlist.compactWindow.momentumAgeSamples)).toBe(true);
+    expect(next.watchlist.compactWindow.momentumAgeSamples.length).toBe(1);
+  });
+
   it('formats hourly-rate style throughput output with required fields', () => {
     const c = makeCounters();
     c.lastFlushAt = Date.now() - 30 * 60_000; // 0.5h
