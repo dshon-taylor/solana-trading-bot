@@ -1,10 +1,4 @@
 import 'dotenv/config';
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { PublicKey } from '@solana/web3.js';
 
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
@@ -52,9 +46,21 @@ import { appendDiagEvent, getCompactWindowForDiagRequest, getDiagEventsPath } fr
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
-import { createEntryDispatch } from './control_tower/entry_dispatch/index.mjs';
-import { confirmContinuationGate as runConfirmContinuationGate } from './signals/confirm_continuation.mjs';
+import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
 import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
+import { confirmQualityGate, createConfirmContinuationGate, recordConfirmCarryTrace, resolveConfirmTxMetrics } from './control_tower/confirm_helpers.mjs';
+import {
+  createGlobalTimers,
+  clearAllTimers,
+  createSolUsdPriceResolver,
+  startHealthServer,
+  runNodeScriptJson as runNodeScriptJsonCore,
+  resolveMintCreatedAtFromRpc,
+  computeMcapUsd as computeMcapUsdCore,
+  fmtCt,
+  startMemoryMonitors,
+} from './control_tower/runtime_helpers.mjs';
+import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
   JUP_ROUTE_FIRST_ENABLED,
   JUP_SOURCE_PREFLIGHT_ENABLED,
@@ -108,23 +114,7 @@ const wsmgr = require('../../src/services/wsSubscriptionManager.js');
 let runtimeStateRef = null;
 
 // Global timer registry for proper cleanup
-const globalTimers = {
-  birdeyeWsPoll: null,
-  scanLoop: null,
-  positionsLoop: null,
-  heartbeatLoop: null,
-  telegramPoll: null,
-  watchlistCleanup: null,
-};
-
-function clearAllTimers() {
-  for (const [name, timer] of Object.entries(globalTimers)) {
-    if (timer) {
-      clearInterval(timer);
-      globalTimers[name] = null;
-    }
-  }
-}
+const globalTimers = createGlobalTimers();
 
 function loadWallet() {
   const sopsPath = String(process.env.SOPS_WALLET_FILE || '').trim();
@@ -132,312 +122,26 @@ function loadWallet() {
   return loadKeypairFromEnv();
 }
 
-function readLastSolUsdFallback() {
-  try {
-    const p = path.resolve(process.cwd(), 'state/last_sol_price.json');
-    const raw = fs.readFileSync(p, 'utf8');
-    const j = JSON.parse(raw || '{}');
-    const v = Number(j?.solUsd ?? j?.priceUsd ?? 0);
-    return Number.isFinite(v) && v > 0 ? v : null;
-  } catch {
-    return null;
-  }
-}
+const getSolUsdPrice = createSolUsdPriceResolver({ getTokenPairs, pickBestPair });
 
-function writeLastSolUsdFallback(solUsd) {
-  try {
-    const v = Number(solUsd || 0);
-    if (!(Number.isFinite(v) && v > 0)) return;
-    const p = path.resolve(process.cwd(), 'state/last_sol_price.json');
-    fs.writeFileSync(p, JSON.stringify({ solUsd: v, at: Date.now() }));
-  } catch {}
-}
+const confirmContinuationGate = createConfirmContinuationGate({ cacheImpl: cache });
 
-async function getSolUsdPrice() {
-  try {
-    const pairs = await getTokenPairs('So11111111111111111111111111111111111111112');
-    const best = pickBestPair(pairs);
-    const solUsd = Number(best?.priceUsd || 0);
-    if (Number.isFinite(solUsd) && solUsd > 0) {
-      writeLastSolUsdFallback(solUsd);
-      return { solUsd };
-    }
-  } catch {}
-  return { solUsd: readLastSolUsdFallback() };
-}
-
-function startHealthServer({ stateRef, getSnapshot }) {
-  const port = Number(process.env.HEALTH_PORT || 0);
-  if (!Number.isFinite(port) || port <= 0) return null;
-
-  const server = http.createServer((req, res) => {
-    if (req.url !== '/healthz') {
-      res.statusCode = 404;
-      res.end('not found');
-      return;
-    }
-
-    const snapshot = (typeof getSnapshot === 'function') ? getSnapshot() : {};
-    const payload = {
-      ok: true,
-      nowMs: Date.now(),
-      ...snapshot,
-      positions: Object.keys(stateRef?.positions || {}).length,
-    };
-
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify(payload));
-  });
-
-  server.listen(port, '0.0.0.0');
-  return server;
-}
-
-// bind clients/listeners exactly once (prevents duplicate handlers on reconnect/restart cycles)
-if (!globalThis.__WSMGR_BOUND__) {
-  wsmgr.bindClients({ wsClient: birdEyeWs, restClient: { fetchSnapshot: snapshotFromBirdseye } });
-  globalThis.__WSMGR_BOUND__ = true;
-}
-
-if (!globalThis.__BIRDEYE_PRICE_HANDLER_BOUND__) {
-  try {
-    // Primary event handler - processes WS price events instantly (no polling)
-    birdEyeWs.on?.('price', ({ mint, price, ts, volume }) => {
-      try { 
-        wsmgr.onWsEvent(mint, { 
-          price: Number(price), 
-          ts: Number(ts) || Date.now(), 
-          volume 
-        }); 
-      } catch {}
-    });
-    
-    // Fallback: poll cache only if WS events aren't flowing
-    // This provides redundancy if event emitter has issues
-    const FALLBACK_POLL_MS = Math.max(5000, Number(process.env.BIRDEYE_WS_FALLBACK_POLL_MS || 10000));
-    let lastEventTime = Date.now();
-    
-    // Track event flow
-    const originalOnWsEvent = wsmgr.onWsEvent;
-    wsmgr.onWsEvent = function(...args) {
-      lastEventTime = Date.now();
-      return originalOnWsEvent.apply(this, args);
-    };
-    
-    // Fallback polling (only if events stopped)
-    if (!globalTimers.birdeyeWsPoll) {
-      globalTimers.birdeyeWsPoll = setInterval(() => {
-        try {
-          const timeSinceLastEvent = Date.now() - lastEventTime;
-          // Only poll if no events received in last 5 seconds
-          if (timeSinceLastEvent < 5000) return;
-          
-          const subs = Array.from(birdEyeWs.subscribed || []);
-          const now = Date.now();
-          for (const mint of subs) {
-            const p = cache.get(`birdeye:ws:price:${mint}`) || null;
-            if (p && p.priceUsd != null) {
-              wsmgr.onWsEvent(mint, { price: Number(p.priceUsd), ts: Number(p.tsMs) || now });
-            }
-          }
-        } catch {}
-      }, FALLBACK_POLL_MS);
-    }
-    
-    globalThis.__BIRDEYE_PRICE_HANDLER_BOUND__ = true;
-  } catch {}
-}
-
-if (!globalThis.__WSMGR_SUB_EVENTS_BOUND__) {
-  wsmgr.on('subscribe', ({ mint }) => {
-    try { cache.set(`birdeye:sub:${mint}`, true, Math.ceil((process.env.BIRDEYE_LITE_CACHE_TTL_MS || 45000) / 1000)); } catch {}
-  });
-  wsmgr.on('unsubscribe', ({ mint }) => {
-    try { cache.delete && cache.delete(`birdeye:sub:${mint}`); } catch {}
-  });
-  globalThis.__WSMGR_SUB_EVENTS_BOUND__ = true;
-}
-
-
-
-const execFileAsync = promisify(execFile);
-
-const CT_FORMATTER = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/Chicago',
-  year: 'numeric', month: '2-digit', day: '2-digit',
-  hour: 'numeric', minute: '2-digit', second: '2-digit',
-  hour12: true,
+const resolveConfirmTxMetricsWithFallback = (args) => resolveConfirmTxMetrics({
+  ...args,
+  snapshotFromBirdseye,
 });
-const fmtCt = (ms) => {
-  const n = Number(ms || 0);
-  if (!Number.isFinite(n) || n <= 0) return 'n/a';
-  return `${CT_FORMATTER.format(new Date(n)).replace(',', '')} CT`;
-};
 
-function confirmQualityGate({ cfg, sigReasons, snapshot }) {
-  if (!cfg.CONFIRM_REQUIRE_TX_ACCEL_AND_BUY_DOM) return { ok: true };
-  const buySellRatio = Number(sigReasons?.buySellRatio || 0);
-  const tx1m = Number(sigReasons?.tx_1m || 0);
-  const tx5mAvg = Number(sigReasons?.tx_5m_avg || 0);
-  const txMetricsMissing = !(Number.isFinite(tx1m) && Number.isFinite(tx5mAvg) && tx1m > 0 && tx5mAvg > 0);
-  if (txMetricsMissing) return { ok: false, reason: 'txMetricMissing' };
-  const confirmBuySellMin = Number(cfg?.CONFIRM_BUY_SELL_MIN || 1.2);
-  if (!(buySellRatio > confirmBuySellMin)) return { ok: false, reason: 'confirmWeakBuyDominance' };
-  const txAccelMin = Number(cfg?.CONFIRM_TX_ACCEL_MIN || 1.0);
-  if (!((tx1m / Math.max(1, tx5mAvg)) > txAccelMin)) return { ok: false, reason: 'confirmNoTxAcceleration' };
+const computeMcapUsd = (cfg, pair, rpcUrl) => computeMcapUsdCore(cfg, pair, rpcUrl, { getTokenSupply });
 
-  const freshnessMs = Number(snapshot?.freshnessMs ?? Infinity);
-  if (!Number.isFinite(freshnessMs) || freshnessMs > Number(cfg.CONFIRM_SNAPSHOT_MAX_AGE_MS || 5000)) {
-    return { ok: false, reason: 'confirmStaleSnapshot' };
-  }
-  return { ok: true };
-}
+const runNodeScriptJson = (scriptPath, args, timeoutMs = 90_000) => runNodeScriptJsonCore(scriptPath, args, { timeoutMs, safeErr });
 
-async function confirmContinuationGate({ cfg, mint, row, snapshot, pair, confirmMinLiqUsd, confirmPriceImpactPct, confirmStartLiqUsd = null }) {
-  return runConfirmContinuationGate({
-    cfg,
-    mint,
-    row,
-    snapshot,
-    pair,
-    confirmMinLiqUsd,
-    confirmPriceImpactPct,
-    confirmStartLiqUsd,
-    cacheImpl: cache,
-  });
-}
-
-function recordConfirmCarryTrace(state, mint, stage, payload = {}) {
-  state.runtime ||= {};
-  state.runtime.confirmCarryTrace ||= [];
-  const ev = { tMs: Date.now(), mint: String(mint || 'unknown'), stage, ...payload };
-  state.runtime.confirmCarryTrace.push(ev);
-  if (state.runtime.confirmCarryTrace.length > 100) state.runtime.confirmCarryTrace = state.runtime.confirmCarryTrace.slice(-100);
-}
-
-async function resolveConfirmTxMetrics({ state, row, snapshot, pair, mint, birdseye = null }) {
-  const stateRowCarry = state?.watchlist?.mints?.[mint]?.meta?.confirmTxCarry || null;
-  const carryByMint = state?.runtime?.confirmTxCarryByMint?.[mint] || null;
-  const carryTx1m = Number(carryByMint?.tx1m ?? row?.meta?.confirmTxCarry?.tx1m ?? stateRowCarry?.tx1m ?? 0);
-  const carryTx5mAvg = Number(carryByMint?.tx5mAvg ?? row?.meta?.confirmTxCarry?.tx5mAvg ?? stateRowCarry?.tx5mAvg ?? 0);
-  const carryTx30mAvg = Number(carryByMint?.tx30mAvg ?? row?.meta?.confirmTxCarry?.tx30mAvg ?? stateRowCarry?.tx30mAvg ?? 0);
-  const carryBsr = Number(carryByMint?.buySellRatio ?? row?.meta?.confirmTxCarry?.buySellRatio ?? stateRowCarry?.buySellRatio ?? 0);
-  if (carryTx1m > 0 || carryTx5mAvg > 0 || carryTx30mAvg > 0 || carryBsr > 0) {
-    return { tx1m: carryTx1m, tx5mAvg: carryTx5mAvg, tx30mAvg: carryTx30mAvg, buySellRatio: carryBsr, source: 'momentum.carried' };
-  }
-
-  const latestTx1m = Number(row?.latest?.tx1m || 0);
-  const latestTx5mAvg = Number(row?.latest?.tx5mAvg || 0);
-  const latestTx30mAvg = Number(row?.latest?.tx30mAvg || 0);
-  const latestBsr = Number(row?.latest?.buySellRatio || 0);
-  if (latestTx1m > 0 || latestTx5mAvg > 0 || latestTx30mAvg > 0 || latestBsr > 0) {
-    return { tx1m: latestTx1m, tx5mAvg: latestTx5mAvg, tx30mAvg: latestTx30mAvg, buySellRatio: latestBsr, source: 'row.latest' };
-  }
-
-  const snapTx1m = Number(snapshot?.tx_1m ?? snapshot?.pair?.birdeye?.tx_1m ?? 0);
-  const snapTx5mAvg = Number(snapshot?.tx_5m_avg ?? snapshot?.pair?.birdeye?.tx_5m_avg ?? 0);
-  const snapTx30mAvg = Number(snapshot?.tx_30m_avg ?? snapshot?.pair?.birdeye?.tx_30m_avg ?? 0);
-  const snapBsr = Number(snapshot?.buySellRatio ?? snapshot?.pair?.birdeye?.buySellRatio ?? 0);
-  if (snapTx1m > 0 || snapTx5mAvg > 0 || snapTx30mAvg > 0 || snapBsr > 0) {
-    return { tx1m: snapTx1m, tx5mAvg: snapTx5mAvg, tx30mAvg: snapTx30mAvg, buySellRatio: snapBsr, source: 'snapshot' };
-  }
-
-  const pairTx1m = Number(pair?.wsCache?.birdeye?.tx_1m ?? pair?.birdeye?.tx_1m ?? 0);
-  const pairTx5mAvg = Number(pair?.wsCache?.birdeye?.tx_5m_avg ?? pair?.birdeye?.tx_5m_avg ?? 0);
-  const pairTx30mAvg = Number(pair?.wsCache?.birdeye?.tx_30m_avg ?? pair?.birdeye?.tx_30m_avg ?? 0);
-  const pairBsr = Number(pair?.wsCache?.birdeye?.buySellRatio ?? pair?.birdeye?.buySellRatio ?? 0);
-  if (pairTx1m > 0 || pairTx5mAvg > 0 || pairTx30mAvg > 0 || pairBsr > 0) {
-    return { tx1m: pairTx1m, tx5mAvg: pairTx5mAvg, tx30mAvg: pairTx30mAvg, buySellRatio: pairBsr, source: 'pair.ws' };
-  }
-
-  if (birdseye?.enabled && typeof birdseye?.getTokenSnapshot === 'function' && mint) {
-    try {
-      const lite = await birdseye.getTokenSnapshot(mint);
-      const liteSnapshot = snapshotFromBirdseye(lite, Date.now());
-      const beTx1m = Number(liteSnapshot?.tx_1m ?? lite?.tx_1m ?? lite?.pair?.birdeye?.tx_1m ?? 0);
-      const beTx5mAvg = Number(liteSnapshot?.tx_5m_avg ?? lite?.tx_5m_avg ?? lite?.pair?.birdeye?.tx_5m_avg ?? 0);
-      const beTx30mAvg = Number(liteSnapshot?.tx_30m_avg ?? lite?.tx_30m_avg ?? lite?.pair?.birdeye?.tx_30m_avg ?? 0);
-      const beBsr = Number(liteSnapshot?.buySellRatio ?? lite?.buySellRatio ?? lite?.pair?.birdeye?.buySellRatio ?? 0);
-      if (beTx1m > 0 || beTx5mAvg > 0 || beTx30mAvg > 0 || beBsr > 0) {
-        return { tx1m: beTx1m, tx5mAvg: beTx5mAvg, tx30mAvg: beTx30mAvg, buySellRatio: beBsr, source: 'birdeyeFallback.normalized' };
-      }
-    } catch {}
-  }
-
-  return { tx1m: 0, tx5mAvg: 0, tx30mAvg: 0, buySellRatio: 0, source: 'unknown' };
-}
-
-async function runNodeScriptJson(scriptPath, args, timeoutMs = 90_000) {
-  const maxBuffer = Math.max(512 * 1024, Number(process.env.RUN_SCRIPT_MAX_BUFFER_BYTES || (2 * 1024 * 1024)));
-  const parseLimitBytes = Math.max(64 * 1024, Number(process.env.RUN_SCRIPT_PARSE_LIMIT_BYTES || (512 * 1024)));
-  const { stdout } = await execFileAsync(process.execPath, [scriptPath, ...args], {
-    cwd: process.cwd(),
-    timeout: timeoutMs,
-    maxBuffer,
-    env: process.env,
-  });
-  const stdoutText = String(stdout || '').trim();
-  const outBytes = Buffer.byteLength(stdoutText, 'utf8');
-  console.log('[runNodeScriptJson]', { script: scriptPath, stdoutBytes: outBytes, parseLimitBytes, maxBuffer });
-  if (outBytes > parseLimitBytes) {
-    throw new Error(`script stdout too large for JSON parse path (${outBytes} > ${parseLimitBytes})`);
-  }
-
-  const lines = stdoutText
-    .split(/\r?\n/g)
-    .map((s) => String(s || '').trim())
-    .filter(Boolean);
-  const lastLine = lines.length ? lines[lines.length - 1] : '';
-  const looksLikeJson = lastLine.startsWith('{') || lastLine.startsWith('[');
-  if (!looksLikeJson) {
-    const preview = lastLine.slice(0, 240).replace(/\s+/g, ' ').trim();
-    throw new Error(`script JSON parse failed: last non-empty stdout line is not JSON; preview="${preview}"`);
-  }
-
-  try {
-    return JSON.parse(lastLine);
-  } catch (e) {
-    const preview = lastLine.slice(0, 240).replace(/\s+/g, ' ').trim();
-    throw new Error(`script JSON parse failed (${safeErr(e).message}); stdoutBytes=${outBytes}; lastLinePreview="${preview}"`);
-  }
-}
-
-async function resolveMintCreatedAtFromRpc({ state, conn, mint, nowMs, maxPages = 3 }) {
-  if (!conn || !mint) return { createdAtMs: null, source: 'rpc.mintSignatures.missingInput' };
-  state.runtime ||= {};
-  state.runtime.mintCreatedAtCache ||= {};
-  const cache = state.runtime.mintCreatedAtCache;
-  const cached = cache[mint] || null;
-  if (cached && Number(cached?.checkedAtMs || 0) > (nowMs - (60 * 60_000))) {
-    return { createdAtMs: Number(cached?.createdAtMs || 0) || null, source: String(cached?.source || 'rpc.mintSignatures.cache') };
-  }
-
-  let before = null;
-  let oldestBlockTimeSec = null;
-  try {
-    const pk = new PublicKey(mint);
-    for (let i = 0; i < Math.max(1, Number(maxPages || 1)); i += 1) {
-      const sigs = await conn.getSignaturesForAddress(pk, before ? { before, limit: 1000 } : { limit: 1000 });
-      if (!Array.isArray(sigs) || !sigs.length) break;
-      const withTime = sigs.filter((x) => Number.isFinite(Number(x?.blockTime)) && Number(x.blockTime) > 0);
-      if (withTime.length) {
-        const localOldest = withTime.reduce((min, x) => Math.min(min, Number(x.blockTime)), Number.POSITIVE_INFINITY);
-        if (Number.isFinite(localOldest) && localOldest > 0) {
-          oldestBlockTimeSec = oldestBlockTimeSec == null ? localOldest : Math.min(oldestBlockTimeSec, localOldest);
-        }
-      }
-      before = sigs[sigs.length - 1]?.signature || null;
-      if (!before || sigs.length < 1000) break;
-    }
-  } catch {
-    cache[mint] = { createdAtMs: null, checkedAtMs: nowMs, source: 'rpc.mintSignatures.error' };
-    return { createdAtMs: null, source: 'rpc.mintSignatures.error' };
-  }
-
-  const createdAtMs = oldestBlockTimeSec ? (Math.round(oldestBlockTimeSec * 1000)) : null;
-  cache[mint] = { createdAtMs: createdAtMs || null, checkedAtMs: nowMs, source: createdAtMs ? 'rpc.mintSignatures.blockTime' : 'rpc.mintSignatures.missingBlockTime' };
-  return { createdAtMs: createdAtMs || null, source: createdAtMs ? 'rpc.mintSignatures.blockTime' : 'rpc.mintSignatures.missingBlockTime' };
-}
+setupBirdEyeWsGlue({
+  wsmgr,
+  birdEyeWs,
+  cache,
+  snapshotFromBirdseye,
+  globalTimers,
+});
 
 
 const {
@@ -448,7 +152,7 @@ const {
   confirmQualityGate,
   confirmContinuationGate,
   recordConfirmCarryTrace,
-  resolveConfirmTxMetrics,
+  resolveConfirmTxMetrics: resolveConfirmTxMetricsWithFallback,
   resolveMintCreatedAtFromRpc,
   computeMcapUsd,
   openPosition,
@@ -461,60 +165,6 @@ const {
 } = createExitEngine({
   getSolUsdPrice: (...args) => (typeof getSolUsdPrice === 'function' ? getSolUsdPrice(...args) : { solUsd: null }),
 });
-
-async function computeMcapUsd(cfg, pair, rpcUrl) {
-  const priceUsd = Number(pair?.priceUsd || 0);
-  if (!priceUsd) return { ok: false, reason: 'missing priceUsd', mcapUsd: null, decimals: null };
-
-  const mint = pair?.baseToken?.address;
-  if (!mint) return { ok: false, reason: 'missing base token mint', mcapUsd: null, decimals: null };
-
-  const supply = await getTokenSupply(rpcUrl, mint);
-  const uiAmount = supply?.value?.uiAmount;
-  const decimals = supply?.value?.decimals;
-  if (typeof uiAmount !== 'number') return { ok: false, reason: 'missing uiAmount supply', mcapUsd: null, decimals: null };
-  if (typeof decimals !== 'number') return { ok: false, reason: 'missing decimals', mcapUsd: null, decimals: null };
-
-  const mcapUsd = uiAmount * priceUsd;
-  // Note: do NOT apply any threshold here; thresholds belong in the scan loop
-  // so state overrides (/setfilter mcap) work consistently.
-  return { ok: true, reason: 'ok', mcapUsd, decimals };
-}
-
-function initBirdEyeRuntimeListeners(state) {
-  if (globalThis.__BIRDEYE_RUNTIME_LISTENERS_BOUND__) return;
-
-  birdEyeWs.on?.('open', () => {
-    for (const mint of Object.keys(state?.positions || {})) {
-      if (wsmgr.diag && wsmgr.diag[mint]) wsmgr.diag[mint].ws_connected = true;
-    }
-    const priceListeners = typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('price') : 'n/a';
-    const openListeners = typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('open') : 'n/a';
-    const closeListeners = typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('close') : 'n/a';
-    const errorListeners = typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('error') : 'n/a';
-    console.log('[birdeye-ws] connected', { priceListeners, openListeners, closeListeners, errorListeners, wsmgrBound: !!globalThis.__WSMGR_BOUND__ });
-  });
-
-  birdEyeWs.on?.('close', () => {
-    for (const mint of Object.keys(state?.positions || {})) {
-      if (wsmgr.diag && wsmgr.diag[mint]) wsmgr.diag[mint].ws_connected = false;
-    }
-    console.warn('[birdeye-ws] closed');
-  });
-
-  birdEyeWs.on?.('error', (e) => {
-    console.warn('[birdeye-ws] error', safeErr(e).message);
-  });
-
-  globalThis.__BIRDEYE_RUNTIME_LISTENERS_BOUND__ = true;
-
-  console.log('[birdeye-ws] listeners', {
-    price: typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('price') : 'n/a',
-    open: typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('open') : 'n/a',
-    close: typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('close') : 'n/a',
-    error: typeof birdEyeWs?.listenerCount === 'function' ? birdEyeWs.listenerCount('error') : 'n/a',
-  });
-}
 
 async function main() {
   const cfg = getConfig();
@@ -537,85 +187,23 @@ async function main() {
 
   // BirdEye websocket (real-time updates) + dynamic subscriptions from cache birdeye:sub:<mint>
   try {
-    initBirdEyeRuntimeListeners(state);
+    initBirdEyeRuntimeListeners({ state, wsmgr, birdEyeWs, safeErr });
     birdEyeWs.start();
   } catch (e) {
     console.warn('[birdeye-ws] start failed', safeErr(e).message);
   }
 
-  // manager exit -> closePosition (immediate). Manager marks diag fields itself.
-  wsmgr.on('exit', async ({mint, price, reason, chunked})=>{
-    try{
-      const pair = state.positions[mint] ? { priceUsd: state.positions[mint].lastSeenPriceUsd } : null;
-      // If manager suggested chunked exit, attempt 2-3 quick chunks before falling back to full close
-      if (chunked) {
-        try{
-          const pos = state.positions[mint];
-          const bal = await getSplBalance(conn, wallet.publicKey.toBase58(), mint);
-          const amountRaw = Number(bal.amount || 0);
-          if (amountRaw > 0) {
-            const chunks = [0.35, 0.35, 0.30]; // attempt up to 3 quick chunks
-            let remaining = amountRaw;
-            const startMs = Date.now();
-            let anySuccess = false;
-            for (let i=0;i<chunks.length;i++){
-              if (remaining <= 0) break;
-              const take = Math.max(1, Math.round(amountRaw * chunks[i]));
-              const submitMs = Date.now();
-              try{
-                const res = await executeSwap({ conn, wallet, inputMint: mint, outputMint: cfg.SOL_MINT, inAmountBaseUnits: take, slippageBps: cfg.DEFAULT_SLIPPAGE_BPS });
-                // update diagnostics if available
-                try{
-                  const d = wsmgr.diag && wsmgr.diag[mint];
-                  if (d && d.triggerAtMs) d.trigger_to_order_ms = (submitMs - d.triggerAtMs);
-                  if (d) {
-                    d.order_to_fill_ms = Date.now() - submitMs;
-                    const triggerP = Number(d.trigger_price || 0) || price || null;
-                    const soldTokens = Number(res?.fill?.inAmountRaw || 0) / (10 ** (res?.fill?.inDecimals || pos?.decimals || 0) );
-                    const outSolRaw = Number(res?.fill?.outAmountRaw || 0);
-                    const outSol = outSolRaw > 0 ? (outSolRaw / 1e9) : null;
-                    const solUsd = (await getSolUsdPrice()).solUsd || null;
-                    if (triggerP && soldTokens && outSol && solUsd) {
-                      const exitPriceUsd = (outSol * solUsd) / soldTokens;
-                      d.slippage_vs_trigger_price_pct = ((exitPriceUsd - triggerP) / triggerP) * 100;
-                    }
-                  }
-                }catch{}
-                anySuccess = true;
-                remaining = Math.max(0, remaining - take);
-                // small, fast pause between chunks
-                await new Promise(r=>setTimeout(r, 80));
-                // if process is taking too long, abort chunking
-                if (Date.now() - startMs > 1000) break;
-              }catch{
-                // stop attempting further chunks on first error
-                break;
-              }
-            }
-            if (!anySuccess || (Date.now() - startMs) > 1000) {
-              // fallback to single full exit (do not delay)
-              await closePosition(cfg, conn, wallet, state, mint, pair, `ws_exit:${reason?.rule||'auto'}:fallback`);
-            } else {
-              // mark closed if balance consumed, else delegate to closePosition to finish
-              const finalBal = await getSplBalance(conn, wallet.publicKey.toBase58(), mint);
-              if (!finalBal || Number(finalBal.amount||0) <= 0) {
-                // create minimal bookkeeping similar to closePosition by marking closed and saving state
-                try{ state.positions[mint].status='closed'; state.positions[mint].exitAt = new Date().toISOString(); }catch{}
-              } else {
-                // still tokens remain — call closePosition to finish with full amount
-                await closePosition(cfg, conn, wallet, state, mint, pair, `ws_exit:${reason?.rule||'auto'}:post_chunks`);
-              }
-            }
-            saveState(cfg.STATE_PATH, state);
-            return;
-          }
-        }catch(e){ console.warn('[wsmgr glue] chunked exit attempt failed', safeErr(e)); }
-        // fallthrough to full exit
-      }
-
-      await closePosition(cfg, conn, wallet, state, mint, pair, `ws_exit:${reason?.rule||'auto'}${chunked?':chunked':''}`);
-      saveState(cfg.STATE_PATH, state);
-    }catch(e){ console.error('[wsmgr glue] exit handler err', safeErr(e)); }
+  bindWsManagerExitHandler({
+    wsmgr,
+    state,
+    cfg,
+    conn,
+    wallet,
+    getSplBalance,
+    executeSwap,
+    getSolUsdPrice,
+    closePosition,
+    safeErr,
   });
 
   // detect stale live mints and trigger restResync once-per-incident
@@ -985,7 +573,7 @@ async function main() {
     if (_shuttingDown) return;
     _shuttingDown = true;
     console.warn('[shutdown] signal=' + signal);
-    try { clearAllTimers(); } catch {}
+    try { clearAllTimers(globalTimers); } catch {}
     try { saveState(cfg.STATE_PATH, state); } catch {}
     try { streamingProvider?.stop?.(); } catch {}
     try { birdEyeWs?.stop?.(); } catch {}
@@ -2193,79 +1781,10 @@ main().catch(async (e) => {
   if (cfg) await tgSend(cfg, `❌ Bot crashed: ${safeErr(e).message}`);
   process.exit(1);
 });
-
-function pruneRuntimeMaps() {
-  try {
-    const runtime = runtimeStateRef?.runtime;
-    if (!runtime) return;
-    const now = Date.now();
-    const maxAgeMs = Math.max(5 * 60_000, Number(process.env.RUNTIME_MAP_MAX_AGE_MS || (6 * 60 * 60_000)));
-    const maxSize = Math.max(200, Number(process.env.RUNTIME_MAP_MAX_SIZE || 5000));
-
-    const pruneObjectMap = (obj, tsKey = 'atMs') => {
-      if (!obj || typeof obj !== 'object') return 0;
-      let removed = 0;
-      for (const [k, v] of Object.entries(obj)) {
-        const t = Number(v?.[tsKey] ?? v?.tsMs ?? v?.checkedAtMs ?? 0);
-        if (t > 0 && (now - t) > maxAgeMs) { delete obj[k]; removed += 1; }
-      }
-      const keys = Object.keys(obj);
-      if (keys.length > maxSize) {
-        keys
-          .sort((a, b) => Number(obj?.[a]?.[tsKey] ?? obj?.[a]?.tsMs ?? obj?.[a]?.checkedAtMs ?? 0) - Number(obj?.[b]?.[tsKey] ?? obj?.[b]?.tsMs ?? obj?.[b]?.checkedAtMs ?? 0))
-          .slice(0, keys.length - maxSize)
-          .forEach((k) => { delete obj[k]; removed += 1; });
-      }
-      return removed;
-    };
-
-    const removed = {
-      mintCreatedAtCache: pruneObjectMap(runtime.mintCreatedAtCache, 'checkedAtMs'),
-      confirmTxCarryByMint: pruneObjectMap(runtime.confirmTxCarryByMint, 'atMs'),
-      confirmLiqTrack: pruneObjectMap(runtime.confirmLiqTrack, 'tsMs'),
-      wsmgrDiag: pruneObjectMap(wsmgr?.diag, 'atMs'),
-      momentumRepeatFail: pruneObjectMap(runtime.momentumRepeatFail, 'tMs'),
-    };
-
-    if (Object.values(removed).some((n) => n > 0)) {
-      console.log('[mem-prune]', { removed, maxAgeMs, maxSize });
-    }
-  } catch (e) {
-    console.log('[mem-prune] failed', safeErr(e).message);
-  }
-}
-
-if (!globalTimers.memoryMonitor) {
-  globalTimers.memoryMonitor = setInterval(() => {
-    const m = process.memoryUsage();
-
-    console.log("[memory]", {
-      rss_mb: Math.round(m.rss / 1024 / 1024),
-      heap_used_mb: Math.round(m.heapUsed / 1024 / 1024),
-    heap_total_mb: Math.round(m.heapTotal / 1024 / 1024),
-    external_mb: Math.round(m.external / 1024 / 1024),
-  });
-
-}, 60000);
-setInterval(() => {
-  try {
-    pruneRuntimeMaps();
-    const runtime = runtimeStateRef?.runtime || {};
-    const watchlist = runtimeStateRef?.watchlist || {};
-
-    console.log("[mem-debug]", {
-      trackedMints: Object.keys(watchlist.mints || {}).length,
-      hotQueue: Array.isArray(watchlist.hotQueue) ? watchlist.hotQueue.length : 0,
-      routeCache: Object.keys(watchlist.routeCache || {}).length,
-      mintCreatedAtCache: Object.keys(runtime.mintCreatedAtCache || {}).length,
-      confirmTxCarryByMint: Object.keys(runtime.confirmTxCarryByMint || {}).length,
-      confirmLiqTrack: Object.keys(runtime.confirmLiqTrack || {}).length,
-      momentumRepeatFail: Object.keys(runtime.momentumRepeatFail || {}).length,
-      wsmgrDiag: Object.keys(wsmgr?.diag || {}).length,
-      birdEyeSubscribed: birdEyeWs?.subscribed ? Array.from(birdEyeWs.subscribed).length : 0
-    });
-  } catch (e) {
-    console.log("[mem-debug] failed", e?.message || e);
-  }
-  }, 60000);
-}
+startMemoryMonitors({
+  globalTimers,
+  getRuntimeStateRef: () => runtimeStateRef,
+  wsmgr,
+  birdEyeWs,
+  safeErr,
+});

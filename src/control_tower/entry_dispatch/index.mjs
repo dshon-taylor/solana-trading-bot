@@ -1,5 +1,6 @@
 import { handleWatchlistTriggerMode } from './stage_watchlist_mode.mjs';
 import { processProbeShortlistEntries } from './stage_candidate_entries.mjs';
+export { bindWsManagerExitHandler } from './stage_ws_manager_exit.mjs';
 
 export function createEntryDispatch(deps) {
   async function runEntryDispatch({
