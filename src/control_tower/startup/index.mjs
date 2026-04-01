@@ -1,4 +1,5 @@
 import { saveState } from '../../core/state.mjs';
+export { announceBootStatus } from './stage_boot_announce.mjs';
 
 export async function seedOpenPositionsOnBoot({ state, cfg, wsmgr, cache, birdseye, closePosition, conn, wallet }) {
   try {

@@ -8,6 +8,7 @@ export { registerGracefulShutdown } from './stage_graceful_shutdown.mjs';
 export { startRpcProbeAndHeartbeat } from './stage_start_rpc_heartbeat.mjs';
 export { initializeTimescaleDbIfEnabled } from './stage_init_timescaledb.mjs';
 export { initializeRuntimeState } from './stage_init_runtime_state.mjs';
+export { createMainLoopState } from './stage_loop_state.mjs';
 
 const execFileAsync = promisify(execFile);
 

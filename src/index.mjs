@@ -12,7 +12,7 @@ import { executeSwap, toBaseUnits, DECIMALS } from './trading/trader.mjs';
 import { nowIso, safeErr } from './observability/logger.mjs';
 import { loadState, saveState } from './persistence/state.mjs';
 import { tgSend, tgSetMyCommands } from './telegram/index.mjs';
-import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './observability/metrics.mjs';
+import { bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './observability/metrics.mjs';
 import { handleTelegramControls } from './telegram/control.mjs';
 import { trackerMaybeEnqueue, trackerTick } from './trading/tracker.mjs';
 import { pushDebug } from './observability/debug_buffer.mjs';
@@ -41,15 +41,15 @@ import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
-import { createDiagReporting } from './control_tower/diag_reporting.mjs';
+import { createDiagReporting, initializeDiagCounters } from './control_tower/diag_reporting.mjs';
 import { appendDiagEvent, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createScanCompactEventPusher } from './control_tower/diag_reporting/stage_scan_compact_events.mjs';
 import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stage_boot_compact_window.mjs';
 import { createCandidatePipeline, bootstrapStreamingCandidateSources } from './control_tower/candidate_pipeline.mjs';
-import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
+import { createOperatorSurfaces, bootstrapOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
-import { seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
+import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
 import { runJupiterPreflight } from './control_tower/route_control/stage_jupiter_preflight.mjs';
 import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
 import { confirmQualityGate, createConfirmContinuationGate, recordConfirmCarryTrace, resolveConfirmTxMetrics } from './control_tower/confirm_helpers.mjs';
@@ -67,6 +67,7 @@ import {
   startRpcProbeAndHeartbeat,
   initializeTimescaleDbIfEnabled,
   initializeRuntimeState,
+  createMainLoopState,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -235,18 +236,12 @@ async function main() {
     wallet,
   });
 
-  console.log(`[wallet] publicKey=${pub}`);
-  console.log(
-    `[boot] data_capture=${cfg.DATA_CAPTURE_ENABLED} execution=${cfg.EXECUTION_ENABLED} sim_tracking=${cfg.SIM_TRACKING_ENABLED} ` +
-      `live_momo=${cfg.LIVE_MOMO_ENABLED} scanner_entries=${cfg.SCANNER_ENTRIES_ENABLED} scanner_tracking=${cfg.SCANNER_TRACKING_ENABLED} ` +
-      `stopAtEntry=${cfg.LIVE_MOMO_STOP_AT_ENTRY} bufferPct=${cfg.LIVE_MOMO_STOP_AT_ENTRY_BUFFER_PCT} ` +
-      `trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`,
-  );
-
-  await tgSend(cfg, `🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`);
-
-  // Register command menu in Telegram UI (best-effort; must not block online ping)
-  void tgSetMyCommands(cfg);
+  await announceBootStatus({
+    cfg,
+    pub,
+    tgSend,
+    tgSetMyCommands,
+  });
 
   const solUsd = await resolveBootSolUsdWithRetry({
     getSolUsdPrice,
@@ -276,27 +271,23 @@ async function main() {
     safeErr,
   });
 
-  let lastScan = 0;
-  let nextScanDelayMs = cfg.SCAN_EVERY_MS;
-  const lastPosRef = { value: 0 };
-  let lastHb = 0;
-  let lastRej = 0;
-  let lastTgPoll = 0;
-  let lastAutoTune = 0;
-  let lastHourlyDiag = 0;
-  let lastWatchlistEval = 0;
-  let lastExposureQueueDrainAt = 0;
-
-  // loop timing (for /healthz)
-  let _loopPrevAtMs = Date.now();
-  let _loopDtMs = 0;
+  let {
+    lastScan,
+    nextScanDelayMs,
+    lastPosRef,
+    lastHb,
+    lastRej,
+    lastTgPoll,
+    lastAutoTune,
+    lastHourlyDiag,
+    lastWatchlistEval,
+    lastExposureQueueDrainAt,
+    loopPrevAtMs: _loopPrevAtMs,
+    loopDtMs: _loopDtMs,
+  } = createMainLoopState({ cfg });
 
   // Use persisted diagnostic counters as single source of truth across restarts.
-  state.runtime ||= {};
-  let counters = (state.runtime.diagCounters && typeof state.runtime.diagCounters === 'object')
-    ? state.runtime.diagCounters
-    : makeCounters();
-  state.runtime.diagCounters = counters;
+  let counters = initializeDiagCounters({ state });
 
   bootstrapCompactWindowState({ state, counters, cfg });
 
@@ -365,22 +356,12 @@ async function main() {
     saveState,
   });
 
-  // Cached spend summaries to keep /spend off the hot loop path.
-  const SPEND_CACHE_TTL_MS = Math.max(60_000, Number(process.env.SPEND_CACHE_TTL_MS || 5 * 60_000));
   const {
+    processOperatorCommands,
     spendSummaryCache,
     refreshSpendSummaryCacheAsync,
-  } = createSpendSummaryCache({
-    cfg,
-    parseRange,
-    readLedger,
-    summarize,
-    safeErr,
-  });
-
-
-  // Operator surfaces (Telegram state.flags.* handlers) extracted to operator_surfaces.mjs.
-  const { processOperatorCommands } = createOperatorSurfaces({
+    SPEND_CACHE_TTL_MS,
+  } = bootstrapOperatorSurfaces({
     cfg,
     state,
     conn,
@@ -388,14 +369,15 @@ async function main() {
     tgSend,
     tgSendChunked,
     getDiagSnapshotMessage,
-    spendSummaryCache,
-    refreshSpendSummaryCacheAsync,
-    SPEND_CACHE_TTL_MS,
+    createSpendSummaryCache,
+    parseRange,
+    readLedger,
+    summarize,
+    safeErr,
     runNodeScriptJson,
-    appendLearningNote: undefined,
-    getSolUsdPrice: undefined,
     sendPositionsReport,
     getLoopState: () => ({ dexCooldownUntil, lastScan, lastSolUsdAt }),
+    createOperatorSurfaces,
   });
 
   const runtimeInit = initializeRuntimeState({

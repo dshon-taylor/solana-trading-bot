@@ -1,6 +1,7 @@
 import { createRefreshDiagSnapshot, initializeDiagSnapshotState } from './stage_diag_snapshot.mjs';
 import { createGetDiagSnapshotMessage } from './stage_get_diag_message.mjs';
 import { createMaybeRefreshDiagSnapshot } from './stage_maybe_refresh.mjs';
+export { initializeDiagCounters } from './stage_boot_counters.mjs';
 
 export function createDiagReporting({
   state,

@@ -3,6 +3,7 @@ import { handlePositionsCommands } from './stage_positions_commands.mjs';
 import { handleStatusCommands } from './stage_status_commands.mjs';
 import { handleConfigFilterCommands } from './stage_config_filter_commands.mjs';
 import { handleDiagReplayCommands } from './stage_diag_replay_commands.mjs';
+export { bootstrapOperatorSurfaces } from './stage_bootstrap.mjs';
 
 export function createOperatorSurfaces(context) {
   async function processOperatorCommands(t) {
