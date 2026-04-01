@@ -1195,6 +1195,12 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
             buyers1m,
             buyers5mAvg,
             walletSrc,
+            freshnessMs: Number.isFinite(Number(sourceEvent?.freshnessMs)) ? Number(sourceEvent.freshnessMs) : null,
+            wsFreshnessMs: Number.isFinite(Number(sourceEvent?.wsFreshnessMs)) ? Number(sourceEvent.wsFreshnessMs) : null,
+            freshnessForMicroGateMs: Number.isFinite(Number(sourceEvent?.freshnessForMicroGateMs)) ? Number(sourceEvent.freshnessForMicroGateMs) : null,
+            freshnessSourceForMicroGate: String(sourceEvent?.freshnessSourceForMicroGate || 'unknown'),
+            snapshotLagOverWsMs: Number.isFinite(Number(sourceEvent?.snapshotLagOverWsMs)) ? Number(sourceEvent.snapshotLagOverWsMs) : null,
+            effectiveMicroMaxAgeMs: Number.isFinite(Number(sourceEvent?.effectiveMicroMaxAgeMs)) ? Number(sourceEvent.effectiveMicroMaxAgeMs) : null,
           };
         };
         const momentumCandidates = inWindowObj(compactWindow.momentumRecent || []).map(buildMomentumCandidate);
@@ -1221,6 +1227,27 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const chokeCount = Number(chokeEntry?.[1] || 0);
         const chokePct = cumEvaluated > 0 ? ((chokeCount / cumEvaluated) * 100) : 0;
         const repeatSuppressed = Number(counters?.watchlist?.momentumRepeatFailSuppressed||0);
+        const freshnessSourceCounts = { ws: 0, snapshot: 0, unknown: 0 };
+        const freshnessGateValues = [];
+        const snapshotLagValues = [];
+        for (const c of momentumCandidates) {
+          const fs = String(c?.freshnessSourceForMicroGate || 'unknown');
+          if (fs === 'ws') freshnessSourceCounts.ws += 1;
+          else if (fs === 'snapshot') freshnessSourceCounts.snapshot += 1;
+          else freshnessSourceCounts.unknown += 1;
+          const fg = Number(c?.freshnessForMicroGateMs ?? NaN);
+          if (Number.isFinite(fg) && fg >= 0) freshnessGateValues.push(fg);
+          const sl = Number(c?.snapshotLagOverWsMs ?? NaN);
+          if (Number.isFinite(sl) && sl >= 0) snapshotLagValues.push(sl);
+        }
+        const medianLocalNum = (arr) => {
+          if (!arr.length) return null;
+          const s = arr.slice().sort((a,b)=>a-b);
+          const m = Math.floor(s.length / 2);
+          return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+        };
+        const medianFreshnessForGateMs = medianLocalNum(freshnessGateValues);
+        const medianSnapshotLagOverWsMs = medianLocalNum(snapshotLagValues);
 
         const top3ScoringFailReasons = Object.entries(failCheckCountsWin)
           .filter(([k]) => !String(k).startsWith('hardGuard.'))
@@ -1296,6 +1323,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           strongestFailedMomentumRows,
           strongestPassedMomentumRows,
           liqBandM,
+          freshnessSourceCounts,
+          medianFreshnessForGateMs,
+          medianSnapshotLagOverWsMs,
           repeatSuppressed,
           repeatMintsTop,
           repeatReasonTop,

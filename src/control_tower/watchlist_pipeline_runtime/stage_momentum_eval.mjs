@@ -168,10 +168,21 @@ export async function runMomentumEvalStage(ctx) {
     const freshnessForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
       ? Math.min(wsFreshnessMsForMicro, snapshotFreshnessMs)
       : snapshotFreshnessMs;
+    const freshnessSourceForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
+      ? (wsFreshnessMsForMicro <= snapshotFreshnessMs ? 'ws' : 'snapshot')
+      : 'snapshot';
+    const snapshotLagOverWsMs = Number.isFinite(snapshotFreshnessMs) && Number.isFinite(wsFreshnessMsForMicro)
+      ? Math.max(0, snapshotFreshnessMs - wsFreshnessMsForMicro)
+      : null;
+    const baseMicroMaxAgeMs = Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000);
+    const providerLagToleranceMs = Math.max(0, Number(process.env.MOMENTUM_MICRO_PROVIDER_LAG_TOLERANCE_MS || 20_000));
+    const effectiveMicroMaxAgeMs = freshnessSourceForMicroGate === 'snapshot'
+      ? (baseMicroMaxAgeMs + providerLagToleranceMs)
+      : baseMicroMaxAgeMs;
     const microFreshGate = isMicroFreshEnough({
       microPresentCount: ctx.momentumMicroPresent,
       freshnessMs: freshnessForMicroGate,
-      maxAgeMs: Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000),
+      maxAgeMs: effectiveMicroMaxAgeMs,
       requireFreshMicro: !!cfg.MOMENTUM_REQUIRE_FRESH_MICRO,
       minPresentForGate: Number(cfg.MOMENTUM_MICRO_MIN_PRESENT_FOR_GATE || 3),
     });
@@ -225,6 +236,11 @@ export async function runMomentumEvalStage(ctx) {
         liquidityUsd: liqUsd,
         mcapValueSeenByHot: ctx.mcapHot,
         freshnessMs: Number(row?.latest?.marketDataFreshnessMs ?? ctx.snapshot?.freshnessMs ?? null),
+        wsFreshnessMs: Number.isFinite(wsFreshnessMsForMicro) ? Number(wsFreshnessMsForMicro) : null,
+        freshnessForMicroGateMs: Number.isFinite(freshnessForMicroGate) ? Number(freshnessForMicroGate) : null,
+        freshnessSourceForMicroGate,
+        snapshotLagOverWsMs: Number.isFinite(Number(snapshotLagOverWsMs)) ? Number(snapshotLagOverWsMs) : null,
+        effectiveMicroMaxAgeMs,
         tokenAgeMinutes: Number.isFinite(tokenAgeMinutes) ? Number(tokenAgeMinutes.toFixed(2)) : null,
         earlyTokenMode,
         breakoutBranchUsed,
@@ -293,6 +309,12 @@ export async function runMomentumEvalStage(ctx) {
         mcap: Number(ctx.mcapHot || 0),
         ageMin: tokenAgeMinutes,
         agePresent,
+        freshnessMs: Number.isFinite(snapshotFreshnessMs) ? Number(snapshotFreshnessMs) : null,
+        wsFreshnessMs: Number.isFinite(wsFreshnessMsForMicro) ? Number(wsFreshnessMsForMicro) : null,
+        freshnessForMicroGateMs: Number.isFinite(freshnessForMicroGate) ? Number(freshnessForMicroGate) : null,
+        freshnessSourceForMicroGate,
+        snapshotLagOverWsMs: Number.isFinite(Number(snapshotLagOverWsMs)) ? Number(snapshotLagOverWsMs) : null,
+        effectiveMicroMaxAgeMs,
         early: earlyTokenMode,
         branch: breakoutBranchUsed,
         v5: Number(sig?.reasons?.volume_5m || 0) || null,
@@ -377,6 +399,12 @@ export async function runMomentumEvalStage(ctx) {
           freshnessGate: {
             ok: !!microFreshGate.ok,
             reason: String(microFreshGate.reason || 'unknown'),
+            source: freshnessSourceForMicroGate,
+            freshnessMs: Number.isFinite(freshnessForMicroGate) ? Number(freshnessForMicroGate) : null,
+            wsFreshnessMs: Number.isFinite(wsFreshnessMsForMicro) ? Number(wsFreshnessMsForMicro) : null,
+            snapshotFreshnessMs: Number.isFinite(snapshotFreshnessMs) ? Number(snapshotFreshnessMs) : null,
+            snapshotLagOverWsMs: Number.isFinite(Number(snapshotLagOverWsMs)) ? Number(snapshotLagOverWsMs) : null,
+            maxAgeMs: Number(effectiveMicroMaxAgeMs || 0),
           },
           hysteresis: {
             required: Number(hysteresis.required || 1),
@@ -420,6 +448,12 @@ export async function runMomentumEvalStage(ctx) {
           freshnessGate: {
             ok: !!microFreshGate.ok,
             reason: String(microFreshGate.reason || 'unknown'),
+            source: freshnessSourceForMicroGate,
+            freshnessMs: Number.isFinite(freshnessForMicroGate) ? Number(freshnessForMicroGate) : null,
+            wsFreshnessMs: Number.isFinite(wsFreshnessMsForMicro) ? Number(wsFreshnessMsForMicro) : null,
+            snapshotFreshnessMs: Number.isFinite(snapshotFreshnessMs) ? Number(snapshotFreshnessMs) : null,
+            snapshotLagOverWsMs: Number.isFinite(Number(snapshotLagOverWsMs)) ? Number(snapshotLagOverWsMs) : null,
+            maxAgeMs: Number(effectiveMicroMaxAgeMs || 0),
           },
           hysteresis: {
             required: Number(hysteresis.required || 1),
