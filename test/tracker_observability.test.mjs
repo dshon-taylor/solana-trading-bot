@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateTrackerIngestionHealth, formatTrackerIngestionSummary, trackerSamplingBreakdown } from '../src/tracker.mjs';
+import { evaluateTrackerIngestionHealth, formatTrackerIngestionSummary, trackerSamplingBreakdown } from '../src/trading/tracker.mjs';
 
 describe('tracker observability guardrail', () => {
   const cfg = {

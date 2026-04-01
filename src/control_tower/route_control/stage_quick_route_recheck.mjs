@@ -1,4 +1,4 @@
-import { toBaseUnits, DECIMALS } from '../../trader.mjs';
+import { toBaseUnits, DECIMALS } from '../../trading/trader.mjs';
 import { getRouteQuoteWithFallback } from './stage_route_quote_fallback.mjs';
 
 export async function quickRouteRecheck({ cfg, mint, solUsdNow, slippageBps, attempts, delayMs, passes = 1, passDelayMs = 80 }) {

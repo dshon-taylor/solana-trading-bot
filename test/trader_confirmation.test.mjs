@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { confirmSignatureRobust } from '../src/trader.mjs';
+import { confirmSignatureRobust } from '../src/trading/trader.mjs';
 
 describe('confirmSignatureRobust', () => {
   it('falls back to HTTP status polling when websocket confirm times out', async () => {

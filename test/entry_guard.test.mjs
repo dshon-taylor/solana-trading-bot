@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { resolveEntryAndStopForOpenPosition } from '../src/entry_guard.mjs';
+import { resolveEntryAndStopForOpenPosition } from '../src/trading/entry_guard.mjs';
 
 describe('entry_guard', () => {
   it('blocks when entry price is missing and no Birdseye fallback', async () => {

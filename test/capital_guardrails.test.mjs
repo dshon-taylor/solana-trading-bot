@@ -4,7 +4,7 @@ import {
   canOpenNewEntry,
   recordEntryOpened,
   applySoftReserveToUsdTarget,
-} from '../src/capital_guardrails.mjs';
+} from '../src/trading/capital_guardrails.mjs';
 
 describe('capital guardrails', () => {
   it('enforces optional max-new-entries-per-hour throttle', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateMomentumSignal, canUseMomentumFallback } from '../src/strategy.mjs';
+import { evaluateMomentumSignal, canUseMomentumFallback } from '../src/trading/strategy.mjs';
 
 describe('strategy momentum profiles', () => {
   const pair = {

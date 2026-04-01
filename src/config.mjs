@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getPaperRulesFromMomentumRules } from './rules.mjs';
+import { getPaperRulesFromMomentumRules } from './trading/rules.mjs';
 
 function assertFiniteNumber(x, msg) {
   if (!Number.isFinite(Number(x))) throw new Error(msg);

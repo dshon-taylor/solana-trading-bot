@@ -1,4 +1,4 @@
-import { snapshotFromBirdseye } from './market_data_router.mjs';
+import { snapshotFromBirdseye } from '../market_data_router.mjs';
 
 function isFinitePositive(n) {
   return Number.isFinite(Number(n)) && Number(n) > 0;

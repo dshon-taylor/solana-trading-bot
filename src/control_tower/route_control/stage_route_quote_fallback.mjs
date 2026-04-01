@@ -1,7 +1,7 @@
 import { jupQuote } from '../../providers/jupiter/client.mjs';
 import { getTokenPairs, pickBestPair } from '../../providers/dexscreener.mjs';
 import { getRaydiumPools, pickBestRaydiumPool } from '../../providers/raydium.mjs';
-import { isDexScreener429 } from '../../dex_cooldown.mjs';
+import { isDexScreener429 } from '../../trading/dex_cooldown.mjs';
 import { isJup429 } from '../../providers/jupiter/cooldown.mjs';
 
 export function parseJupQuoteFailure(err) {

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { appendTrackSample, buildTrackSampleRow } from '../src/tracker.mjs';
+import { appendTrackSample, buildTrackSampleRow } from '../src/trading/tracker.mjs';
 
 describe('tracker sample serialization', () => {
   it('falls back to entry price when live source is missing', () => {

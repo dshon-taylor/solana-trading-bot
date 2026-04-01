@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { didEntryFill } from '../src/entry_reliability.mjs';
+import { didEntryFill } from '../src/trading/entry_reliability.mjs';
 
 describe('didEntryFill', () => {
   it('treats modern swap result signature as a fill', () => {

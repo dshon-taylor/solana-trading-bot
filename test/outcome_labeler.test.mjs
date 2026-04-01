@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { buildOutcomeLabels, writeOutcomeLabels } from '../src/outcome_labeler.mjs';
+import { buildOutcomeLabels, writeOutcomeLabels } from '../src/trading/outcome_labeler.mjs';
 
 function mkTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'carl-labels-'));

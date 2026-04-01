@@ -1,7 +1,7 @@
 import { formatThroughputSummary } from '../../core/metrics.mjs';
 import { formatMarketDataProviderSummary } from '../../market_data_router.mjs';
 import { formatWatchlistSummary } from '../watchlist_control.mjs';
-import { formatTrackerIngestionSummary, formatTrackerSamplingBreakdown } from '../../tracker.mjs';
+import { formatTrackerIngestionSummary, formatTrackerSamplingBreakdown } from '../../trading/tracker.mjs';
 
 export function initializeDiagSnapshotState({ state }) {
   const DIAG_SNAPSHOT_EVERY_MS = Math.max(1_000, Number(process.env.DIAG_SNAPSHOT_EVERY_MS || 5_000));

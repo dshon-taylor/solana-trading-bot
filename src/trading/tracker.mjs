@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { jupPriceUsd } from './providers/jupiter/price.mjs';
-import { getTokenPairs, pickBestPair } from './providers/dexscreener.mjs';
+import { jupPriceUsd } from '../providers/jupiter/price.mjs';
+import { getTokenPairs, pickBestPair } from '../providers/dexscreener.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
 import { getSolBalanceLamports } from './portfolio.mjs';
-import { simulateStops } from './track_sim.mjs';
-import { paperOnSample } from './paper_momentum.mjs';
+import { simulateStops } from '../track_sim.mjs';
+import { paperOnSample } from '../paper_momentum.mjs';
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -73,7 +73,7 @@ export function appendTrackSample(fp, row) {
   return true;
 }
 
-import { memoizeTTL, tokenBucket } from './cache.mjs';
+import { memoizeTTL, tokenBucket } from '../cache.mjs';
 
 const jupPriceMemo = memoizeTTL(async (mint) => await jupPriceUsd(mint), 15_000);
 const dexscreenerMemo = memoizeTTL(async (mint) => {

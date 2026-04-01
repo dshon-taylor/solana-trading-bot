@@ -1,4 +1,4 @@
-import { toBaseUnits, DECIMALS } from '../../trader.mjs';
+import { toBaseUnits, DECIMALS } from '../../trading/trader.mjs';
 import { getRouteQuoteWithFallback } from '../route_control.mjs';
 
 export function ensureWatchlistState(state) {
