@@ -3,6 +3,7 @@ import { buildPairFetchQueue } from './stage_route_prefilter.mjs';
 import { runPairFetchStage } from './stage_pair_fetch.mjs';
 import { buildShortlistAndGates } from './stage_shortlist.mjs';
 export { createScanCycleState } from './stage_scan_cycle_telemetry.mjs';
+export { runScanCycle } from './stage_run_scan_cycle.mjs';
 
 export function createScanPipeline(deps) {
   async function runScanPipeline({

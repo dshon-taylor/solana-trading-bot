@@ -10,6 +10,9 @@ export { initializeTimescaleDbIfEnabled } from './stage_init_timescaledb.mjs';
 export { initializeRuntimeState } from './stage_init_runtime_state.mjs';
 export { createMainLoopState } from './stage_loop_state.mjs';
 export { runMaintenanceChores } from './stage_run_maintenance_chores.mjs';
+export { runLoopHousekeeping } from './stage_loop_housekeeping.mjs';
+export { runOpsCycle } from './stage_ops_cycle.mjs';
+export { runLoopTail } from './stage_loop_tail.mjs';
 
 const execFileAsync = promisify(execFile);
 

@@ -37,7 +37,7 @@ import { didEntryFill } from './trading/entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
-import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions, enforcePortfolioStopGate } from './control_tower/portfolio_control.mjs';
+import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions, runPortfolioRiskCycle } from './control_tower/portfolio_control.mjs';
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
@@ -48,7 +48,7 @@ import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stag
 import { createCandidatePipeline, bootstrapStreamingCandidateSources } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces, bootstrapOperatorSurfaces, pollTelegramControls } from './control_tower/operator_surfaces.mjs';
 import { runWatchlistTriggerLane } from './control_tower/watchlist_pipeline_runtime.mjs';
-import { createScanPipeline, createScanCycleState } from './control_tower/scan_pipeline.mjs';
+import { createScanPipeline, createScanCycleState, runScanCycle } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
 import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
 import { runJupiterPreflight } from './control_tower/route_control/stage_jupiter_preflight.mjs';
@@ -70,6 +70,9 @@ import {
   initializeRuntimeState,
   createMainLoopState,
   runMaintenanceChores,
+  runLoopHousekeeping,
+  runOpsCycle,
+  runLoopTail,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -571,82 +574,41 @@ async function main() {
 
     maybeRefreshDiagSnapshot(t);
 
-    if ((t - lastExposureQueueDrainAt) >= Math.max(2_000, Number(process.env.EXPOSURE_QUEUE_EVERY_MS || 7_500))) {
-      lastExposureQueueDrainAt = t;
-      try {
-        syncExposureStateWithPositions({ cfg, state });
-        if (Array.isArray(state.exposure?.queue) && state.exposure.queue.length > 0) {
-          await processExposureQueue(cfg, conn, wallet, state);
-        }
-      } catch (e) {
-        console.warn('[exposure] periodic queue drain failed', safeErr(e).message);
-      }
-    }
+    const housekeeping = await runLoopHousekeeping({
+      t,
+      cfg,
+      state,
+      conn,
+      wallet,
+      lastExposureQueueDrainAt,
+      lastStreamingHealthAt,
+      spendSummaryCache,
+      SPEND_CACHE_TTL_MS,
+      refreshSpendSummaryCacheAsync,
+      streamingProvider,
+      syncExposureStateWithPositions,
+      processExposureQueue,
+      safeErr,
+    });
+    lastExposureQueueDrainAt = housekeeping.lastExposureQueueDrainAt;
+    lastStreamingHealthAt = housekeeping.lastStreamingHealthAt;
 
-    if (!spendSummaryCache.inFlight && (t - Number(spendSummaryCache.loadedAtMs || 0) >= SPEND_CACHE_TTL_MS)) {
-      refreshSpendSummaryCacheAsync();
-    }
-
-    if (t - lastStreamingHealthAt > 60_000) {
-      lastStreamingHealthAt = t;
-      state.streaming ||= {};
-      state.streaming.health = streamingProvider?.getHealth?.(t) || null;
-      state.streaming.metrics = streamingProvider?.getMetrics?.() || null;
-    }
-
-    // Incident playbook: degraded-mode transitions + autonomous reopen when stable.
-    if (cfg.PLAYBOOK_ENABLED) {
-      const pb = evaluatePlaybook({
-        state,
-        cfg,
-        nowMs: t,
-        circuitOpen: !circuitOkForEntries({ state, nowMs: t }),
-      });
-
-      if (pb.transition === 'enter_degraded') {
-        state.tradingEnabled = false;
-        state.flags ||= {};
-        state.flags.playbookDegraded = true;
-
-        // Self-recovery: clear transient backoffs so we can re-test health quickly.
-        state.marketDataReliability = { dex: { failures: 0, backoffUntilMs: 0 } };
-        state.dexCooldown = { level: 0, cooldownUntilMs: 0, lastHitMs: 0, reason: null };
-        runSelfRecovery({ state, nowMs: t, note: 'reset_backoffs_and_pause_entries' });
-
-        await tgSend(cfg, `🚧 Playbook degraded mode ON (${pb.reason}). Entries paused; running self-recovery.`);
-        console.warn(`[playbook] enter_degraded reason=${pb.reason} restarts=${pb.recentRestarts} errors=${pb.recentErrors}`);
-        saveState(cfg.STATE_PATH, state);
-      } else if (pb.transition === 'exit_degraded') {
-        state.tradingEnabled = cfg.EXECUTION_ENABLED && cfg.FORCE_TRADING_ENABLED;
-        state.flags ||= {};
-        state.flags.playbookDegraded = false;
-        await tgSend(cfg, '✅ Playbook recovered to normal mode. Re-opening execution gate.');
-        console.warn(`[playbook] exit_degraded reason=${pb.reason}`);
-        saveState(cfg.STATE_PATH, state);
-      }
-    }
-
-    // Heartbeat
-    if (t - lastHb >= cfg.HEARTBEAT_EVERY_MS) {
-      lastHb = t;
-      const pc = positionCount(state);
-      console.log(`[hb] ${new Date(t).toISOString()} open_positions=${pc}`);
-      saveState(cfg.STATE_PATH, state);
-    }
-
-    // Daily alive ping (optional; requires ALIVE_PING_URL). Best-effort + rate-limited.
-    if (t - lastAlivePingCheckAt > 60_000) {
-      lastAlivePingCheckAt = t;
-      try {
-        await maybeAlivePing({
-          cfg,
-          state,
-          nowMs: t,
-          reason: `open_positions=${positionCount(state)}`,
-          persist: () => saveState(cfg.STATE_PATH, state),
-        });
-      } catch {}
-    }
+    const opsCycle = await runOpsCycle({
+      t,
+      cfg,
+      state,
+      lastHb,
+      lastAlivePingCheckAt,
+      evaluatePlaybook,
+      circuitOkForEntries,
+      runSelfRecovery,
+      tgSend,
+      saveState,
+      positionCount,
+      maybeAlivePing,
+    });
+    lastHb = opsCycle.lastHb;
+    lastAlivePingCheckAt = opsCycle.lastAlivePingCheckAt;
 
     // Manual force-close latch (handled early so scan-lane continues can't starve it).
     await runManualForceClose(t);
@@ -748,22 +710,12 @@ async function main() {
     lastRej = rejectionSummary.lastRej;
     counters = rejectionSummary.counters;
 
-    // SOLUSD refresh periodically
-    let solPrice;
-    try {
-      solPrice = (await getSolUsdPrice()).solUsd;
-    } catch {
-      solPrice = null;
-    }
-
-    // Portfolio stop checks (RPC can be flaky; never crash on transient failure)
-    const portfolioGate = await enforcePortfolioStopGate({
+    const risk = await runPortfolioRiskCycle({
+      t,
       cfg,
       conn,
       pub,
       state,
-      solPrice,
-      nowMs: t,
       nowIso,
       tgSend,
       shouldStopPortfolio,
@@ -773,203 +725,59 @@ async function main() {
       saveState,
       safeErr,
       lastRpcAlertRef,
+      getSolUsdPrice,
     });
-    if (portfolioGate.halted) continue;
+    if (risk.halted) continue;
 
-    // Scan for entries
-    if (t - lastScan >= nextScanDelayMs) {
-      lastScan = t;
-      counters.scanCycles += 1;
-      const scanCycleStartedAtMs = Date.now();
-      const prevScanAtMs = Number(counters.scanLastAtMs || 0);
-      const scanIntervalMs = prevScanAtMs > 0 ? Math.max(0, t - prevScanAtMs) : null;
-      counters.scanLastAtMs = t;
-      const scanWatchlistIngestStart = Number(counters?.watchlist?.ingested || 0);
-      const scanPairFetchStart = Number(counters?.pairFetch?.started || 0);
-      const scanRateLimitedStart = Number(counters?.pairFetch?.rateLimited || 0) + Number(counters?.reject?.noPairReasons?.rateLimited || 0);
-      const scanBirdeyeReqStart = Number(state?.marketData?.providers?.birdeye?.requests || 0);
-      const scanCycle = createScanCycleState({
-        cfg,
-        counters,
-        state,
-        scanWatchlistIngestStart,
-        scanPairFetchStart,
-        scanBirdeyeReqStart,
-      });
-      const scanPhase = scanCycle.scanPhase;
-      nextScanDelayMs = computeAdaptiveScanDelayMs({
-        state,
-        nowMs: t,
-        baseScanMs: cfg.SCAN_EVERY_MS,
-        maxScanMs: cfg.SCAN_BACKOFF_MAX_MS,
-      });
+    const scan = await runScanCycle({
+      t,
+      cfg,
+      state,
+      conn,
+      pub,
+      counters,
+      lastScan,
+      nextScanDelayMs,
+      lastSolUsd,
+      lastSolUsdAt,
+      lastLowSolAlertAt,
+      dexCooldownUntil,
+      birdseye,
+      nowIso,
+      tgSend,
+      appendJsonl,
+      appendDiagEvent,
+      saveState,
+      safeMsg,
+      pushDebug,
+      bump,
+      getSolUsdPrice,
+      getSolBalanceLamports,
+      hitDex429,
+      computeAdaptiveScanDelayMs,
+      createScanCompactEventPusher,
+      createScanCycleState,
+      fetchCandidateSources,
+      runScanPipeline,
+      runEntryDispatch,
+      sleepMs: (ms) => new Promise((r) => setTimeout(r, ms)),
+    });
+    lastScan = scan.lastScan;
+    nextScanDelayMs = scan.nextScanDelayMs;
+    lastSolUsd = scan.lastSolUsd;
+    lastSolUsdAt = scan.lastSolUsdAt;
+    lastLowSolAlertAt = scan.lastLowSolAlertAt;
+    dexCooldownUntil = scan.dexCooldownUntil;
+    counters = scan.counters;
+    if (scan.continueLoop) continue;
 
-      const pushScanCompactEvent = createScanCompactEventPusher({
-        counters,
-        cfg,
-        appendJsonl,
-      });
-
-      try {
-      // BirdEye CU guard: if projected CU budget exceeded, slow scan cadence
-      try {
-        if (birdseye && typeof birdseye.getStats === 'function') {
-          const bs = birdseye.getStats(t) || {};
-          if (bs.cuGuardEnabled && bs.cuBudgetExceeded) {
-            const oldDelay = nextScanDelayMs;
-            nextScanDelayMs = Math.min(cfg.SCAN_BACKOFF_MAX_MS || (5 * 60_000), Math.max(nextScanDelayMs * 2, nextScanDelayMs + cfg.SCAN_EVERY_MS));
-            pushDebug(state, { t: nowIso(), reason: 'birdeye_cu_guard', oldDelay, newDelay: nextScanDelayMs });
-            console.warn(`[scan] BirdEye CU budget exceeded -> slowing scans ${oldDelay}ms -> ${nextScanDelayMs}ms (projectedDailyCu=${bs.projectedDailyCu})`);
-          }
-        }
-      } catch {
-        // ignore getStats errors
-      }
-
-      if (!cfg.DATA_CAPTURE_ENABLED) {
-        // Data capture disabled explicitly.
-      } else if (!cfg.SCANNER_TRACKING_ENABLED && !cfg.SCANNER_ENTRIES_ENABLED) {
-        // Scanner fully disabled.
-      } else {
-        // If DexScreener is rate-limiting, cool down instead of hammering.
-        if (t < dexCooldownUntil) {
-          await new Promise(r => setTimeout(r, 250));
-          continue;
-        }
-
-        // SOLUSD: cache for a few minutes to reduce DexScreener calls.
-        let solUsdNow;
-        const SOLUSD_TTL_MS = 5 * 60_000;
-        if (lastSolUsd && (t - lastSolUsdAt) < SOLUSD_TTL_MS) {
-          solUsdNow = lastSolUsd;
-        } else {
-          try {
-            const _tSol = Date.now();
-            solUsdNow = (await getSolUsdPrice()).solUsd;
-            scanCycle.markCallDuration(_tSol);
-            lastSolUsd = solUsdNow;
-            lastSolUsdAt = t;
-          } catch (e) {
-            // DexScreener can rate-limit; use cached value if we have it.
-            pushDebug(state, { t: nowIso(), mint: 'SOL', symbol: 'SOL', reason: `solUsdFetch(${safeMsg(e)})` });
-            if (lastSolUsd) {
-              solUsdNow = lastSolUsd;
-              await tgSend(cfg, '⚠️ SOLUSD fetch rate-limited. Using cached SOLUSD and continuing.');
-            } else {
-              await tgSend(cfg, '⚠️ SOLUSD fetch failed (DexScreener rate limit). Cooling down before retry.');
-              const { cooldownUntilMs } = hitDex429({
-                state,
-                nowMs: t,
-                baseMs: 2 * 60_000,
-                reason: 'solUsdFetch(DEXSCREENER_429?)',
-                persist: () => saveState(cfg.STATE_PATH, state),
-              });
-              dexCooldownUntil = cooldownUntilMs;
-              continue;
-            }
-          }
-        }
-
-        // Ensure we keep some SOL for fees
-        const _tBal = Date.now();
-        scanCycle.scanRpcCalls += 1;
-        const solLam = await getSolBalanceLamports(conn, pub);
-        scanCycle.markCallDuration(_tBal, 'rpc');
-        const sol = solLam / 1e9;
-        state.flags ||= {};
-        if (sol < cfg.MIN_SOL_FOR_FEES) {
-          state.flags.lowSolPauseEntries = true;
-          bump(counters, 'reject.lowSolFees');
-          // Rate-limit low-SOL pause alerts (avoid spam)
-          if (t - lastLowSolAlertAt > 30 * 60_000) {
-            lastLowSolAlertAt = t;
-            await tgSend(cfg, `⚠️ Low SOL balance for fees: ${sol.toFixed(4)} SOL (< ${cfg.MIN_SOL_FOR_FEES.toFixed(4)} SOL reserve). Pausing new entries until balance recovers.`);
-          }
-        } else {
-          if (state.flags.lowSolPauseEntries) {
-            state.flags.lowSolPauseEntries = false;
-            await tgSend(cfg, `✅ SOL fee reserve recovered (${sol.toFixed(4)} SOL). New entries resumed.`);
-          }
-          // Candidate source ingestion extracted to candidate_pipeline.mjs
-          const {
-            boostedRaw,
-            boosted,
-            newDexCooldownUntil,
-          } = await fetchCandidateSources({ t, scanPhase, solUsdNow, counters });
-          if (newDexCooldownUntil != null) dexCooldownUntil = newDexCooldownUntil;
-
-
-          const scanPipelineResult = await runScanPipeline({
-            t,
-            solUsdNow,
-            boostedRaw,
-            boosted,
-            counters,
-            scanPhase,
-            scanRateLimitedStart,
-            scanState: {
-              scanCandidatesFound: scanCycle.scanCandidatesFound,
-              scanPairFetchConcurrency: scanCycle.scanPairFetchConcurrency,
-              scanJupCooldownActive: scanCycle.scanJupCooldownActive,
-              scanJupCooldownRemainingMs: scanCycle.scanJupCooldownRemainingMs,
-              scanRoutePrefilterDegraded: scanCycle.scanRoutePrefilterDegraded,
-              scanUsableSnapshotWithoutPairCount: scanCycle.scanUsableSnapshotWithoutPairCount,
-              scanNoPairTempActiveCount: scanCycle.scanNoPairTempActiveCount,
-              scanNoPairTempRevisitCount: scanCycle.scanNoPairTempRevisitCount,
-            },
-            pushScanCompactEvent,
-          });
-
-          if (scanPipelineResult?.scanState) {
-            scanCycle.applyScanState(scanPipelineResult.scanState);
-          }
-
-          if (scanPipelineResult?.skipCycle) {
-            continue;
-          }
-
-          const {
-            probeEnabled,
-            probeShortlist,
-            executionAllowed,
-            executionAllowedReason,
-            routeAvailableImmediateRows,
-          } = scanPipelineResult;
-
-          const entryDispatchResult = await runEntryDispatch({
-            t,
-            solUsdNow,
-            sol,
-            counters,
-            scanPhase,
-            probeShortlist,
-            probeEnabled,
-            executionAllowed,
-            executionAllowedReason,
-            routeAvailableImmediateRows,
-          });
-          if (entryDispatchResult?.continueCycle) continue;
-        }
-      }
-      } finally {
-        scanCycle.finalize({
-          scanCycleStartedAtMs,
-          scanIntervalMs,
-          nextScanDelayMs,
-          appendDiagEvent,
-          appendJsonl,
-        });
-      }
-    }
-
-    await processOperatorCommands(t);
-
-    // Re-check positions after operator commands when due.
-    if (t - lastPosRef.value >= cfg.POSITIONS_EVERY_MS) {
-      await runPositionsLoop(t);
-    }
-
-    await new Promise(r => setTimeout(r, 250));
+    await runLoopTail({
+      t,
+      cfg,
+      lastPosRef,
+      runPositionsLoop,
+      processOperatorCommands,
+    });
   }
 }
 
