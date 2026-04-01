@@ -1,6 +1,6 @@
-import { jupPriceUsd } from './providers/jupiter/price.mjs';
-import { validateSnapshot, computeConfidence as validatorComputeConfidence } from './lib/snapshot/validators.mjs';
-import cache from './lib/cache/global_cache.mjs';
+import { jupPriceUsd } from '../providers/jupiter/price.mjs';
+import { validateSnapshot, computeConfidence as validatorComputeConfidence } from '../lib/snapshot/validators.mjs';
+import cache from '../lib/cache/global_cache.mjs';
 
 const PROVIDERS = {
   bird: 'birdeye',

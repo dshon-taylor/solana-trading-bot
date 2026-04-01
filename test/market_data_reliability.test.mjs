@@ -3,7 +3,7 @@ import {
   ensureMarketDataState,
   getPairWithFallback,
   computeAdaptiveScanDelayMs,
-} from '../src/market_data_reliability.mjs';
+} from '../src/market_data/reliability.mjs';
 
 describe('market data reliability', () => {
   it('falls back to cached pair when live fetch fails', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMarketSnapshot, isEntrySnapshotSafe, isStopSnapshotUsable, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../src/market_data_router.mjs';
+import { getMarketSnapshot, isEntrySnapshotSafe, isStopSnapshotUsable, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../src/market_data/router.mjs';
 
 describe('market data router', () => {
   it('uses Birdseye first when enabled, then Jupiter, then Dex, then bounded cache', async () => {

@@ -13,7 +13,7 @@ import { safeMsg } from '../ai.mjs';
 import { appendJsonl } from '../candidates_ledger.mjs';
 import { jupQuote } from '../providers/jupiter/client.mjs';
 import { saveState } from '../core/state.mjs';
-import { getSnapshotStatus, isEntrySnapshotSafe, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../market_data_router.mjs';
+import { getSnapshotStatus, isEntrySnapshotSafe, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../market_data/router.mjs';
 import { canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from '../capital_guardrails.mjs';
 import { promoteRouteAvailableCandidateToImmediate } from './watchlist_pipeline/route_available_watchlist.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from '../lib/momentum_gate_controls.mjs';
