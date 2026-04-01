@@ -1,4 +1,4 @@
-import { computePreTrailStopPrice } from '../../lib/stop_policy.mjs';
+import { computePreTrailStopPrice } from '../../signals/stop_policy.mjs';
 
 export function applyMomentumDefaultsToPosition(cfg, pos) {
   if (!pos || pos.status !== 'open') return;

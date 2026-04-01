@@ -1,6 +1,6 @@
-import { getTokenHoldingsByMint } from '../../portfolio.mjs';
+import { getTokenHoldingsByMint } from '../../trading/portfolio.mjs';
 import { getLastDebug } from '../../observability/debug_buffer.mjs';
-import { nowIso, safeErr } from '../../core/logger.mjs';
+import { nowIso, safeErr } from '../../observability/logger.mjs';
 
 export async function handlePositionsCommands(ctx) {
   const { cfg, state, conn, pub, tgSend, sendPositionsReport } = ctx;

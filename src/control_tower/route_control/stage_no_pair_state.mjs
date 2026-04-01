@@ -1,4 +1,4 @@
-import { bump, bumpSourceCounter } from '../../core/metrics.mjs';
+import { bump, bumpSourceCounter } from '../../observability/metrics.mjs';
 import {
   NO_PAIR_RETRY_BASE_MS,
   NO_PAIR_RETRY_MAX_BACKOFF_MS,

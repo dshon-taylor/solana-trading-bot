@@ -1,4 +1,4 @@
-import { formatThroughputSummary } from '../../core/metrics.mjs';
+import { formatThroughputSummary } from '../../observability/metrics.mjs';
 import { formatMarketDataProviderSummary } from '../../market_data/router.mjs';
 import { formatWatchlistSummary } from '../watchlist_control.mjs';
 import { formatTrackerIngestionSummary, formatTrackerSamplingBreakdown } from '../../trading/tracker.mjs';

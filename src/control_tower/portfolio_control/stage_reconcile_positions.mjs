@@ -1,5 +1,5 @@
-import { getTokenHoldingsByMint } from '../../portfolio.mjs';
-import { nowIso } from '../../core/logger.mjs';
+import { getTokenHoldingsByMint } from '../../trading/portfolio.mjs';
+import { nowIso } from '../../observability/logger.mjs';
 import { applyMomentumDefaultsToPosition } from '../position_policy.mjs';
 import { syncExposureStateWithPositions } from './stage_exposure_sync.mjs';
 

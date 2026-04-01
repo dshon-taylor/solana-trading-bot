@@ -1,5 +1,5 @@
-import { saveState } from '../../core/state.mjs';
-import { safeErr } from '../../core/logger.mjs';
+import { saveState } from '../../persistence/state.mjs';
+import { safeErr } from '../../observability/logger.mjs';
 
 export async function handleDiagReplayCommands(ctx) {
   const {

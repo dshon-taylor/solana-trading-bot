@@ -8,38 +8,38 @@ import { PublicKey } from '@solana/web3.js';
 
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
-import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './wallet.mjs';
-import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './portfolio.mjs';
+import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './trading/wallet.mjs';
+import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './trading/portfolio.mjs';
 import { getTokenPairs, pickBestPair } from './providers/dexscreener.mjs';
 import { getRugcheckReport, isTokenSafe } from './providers/rugcheck.mjs';
 import { getTokenSupply } from './providers/helius.mjs';
-import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } from './strategy.mjs';
-import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
-import { nowIso, safeErr } from './core/logger.mjs';
-import { loadState, saveState } from './core/state.mjs';
+import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } from './trading/strategy.mjs';
+import { executeSwap, toBaseUnits, DECIMALS } from './trading/trader.mjs';
+import { nowIso, safeErr } from './observability/logger.mjs';
+import { loadState, saveState } from './persistence/state.mjs';
 import { tgSend, tgSetMyCommands } from './telegram/index.mjs';
-import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './core/metrics.mjs';
+import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './observability/metrics.mjs';
 import { handleTelegramControls } from './telegram/control.mjs';
-import { trackerMaybeEnqueue, trackerTick } from './tracker.mjs';
+import { trackerMaybeEnqueue, trackerTick } from './trading/tracker.mjs';
 import { pushDebug } from './observability/debug_buffer.mjs';
-import { safeMsg } from './ai.mjs';
-import { getModels, preprocessCandidate, analyzeTrade, gatekeep } from './ai_pipeline.mjs';
-import { appendCost, estimateCostUsd, parseRange, readLedger, summarize } from './cost.mjs';
+import { safeMsg } from './analytics/ai.mjs';
+import { getModels, preprocessCandidate, analyzeTrade, gatekeep } from './analytics/ai_pipeline.mjs';
+import { appendCost, estimateCostUsd, parseRange, readLedger, summarize } from './trading/cost.mjs';
 import { jupQuote } from './providers/jupiter/client.mjs';
-import { autoTuneFilters } from './autotune.mjs';
-import { logCandidateDaily, appendJsonl } from './candidates_ledger.mjs';
-import { ensureDexState, getDexCooldownUntilMs, hitDex429, isDexScreener429 } from './dex_cooldown.mjs';
+import { autoTuneFilters } from './analytics/autotune.mjs';
+import { logCandidateDaily, appendJsonl } from './trading/candidates_ledger.mjs';
+import { ensureDexState, getDexCooldownUntilMs, hitDex429, isDexScreener429 } from './trading/dex_cooldown.mjs';
 import { ensureMarketDataState, computeAdaptiveScanDelayMs, getCachedPairSnapshot } from './market_data/reliability.mjs';
 import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isStopSnapshotUsable, getSnapshotStatus, snapshotFromBirdseye, formatMarketDataProviderSummary, markMarketDataRejectImpact } from './market_data/router.mjs';
 import { hitJup429, isJup429, jupCooldownRemainingMs } from './providers/jupiter/cooldown.mjs';
 import { maybeAlivePing } from './observability/alive_ping.mjs';
-import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './circuit_breaker.mjs';
+import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './trading/circuit_breaker.mjs';
 import { maybePruneJsonlByAge, maybeRotateBySize } from './persistence/ledger_retention.mjs';
-import { ensureCapitalGuardrailsState, canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from './capital_guardrails.mjs';
+import { ensureCapitalGuardrailsState, canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from './trading/capital_guardrails.mjs';
 import { ensurePlaybookState, recordPlaybookRestart, recordPlaybookError, evaluatePlaybook, runSelfRecovery, PLAYBOOK_MODE_DEGRADED } from './observability/incident_playbook.mjs';
 import { createStreamingProvider } from './providers/streaming_provider.mjs';
 import { createBirdseyeLiteClient } from './providers/birdeye/http_client.mjs';
-import { didEntryFill } from './entry_reliability.mjs';
+import { didEntryFill } from './trading/entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
@@ -53,8 +53,8 @@ import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs'
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch } from './control_tower/entry_dispatch/index.mjs';
-import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
-import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
+import { confirmContinuationGate as runConfirmContinuationGate } from './signals/confirm_continuation.mjs';
+import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
 import {
   JUP_ROUTE_FIRST_ENABLED,
   JUP_SOURCE_PREFLIGHT_ENABLED,
@@ -990,7 +990,7 @@ async function main() {
     try { streamingProvider?.stop?.(); } catch {}
     try { birdEyeWs?.stop?.(); } catch {}
     try { healthServer?.close(); } catch {}
-    try { const { closeTimescaleDB } = await import('./timeseries_db.mjs'); await closeTimescaleDB(); } catch {}
+    try { const { closeTimescaleDB } = await import('./analytics/timeseries_db.mjs'); await closeTimescaleDB(); } catch {}
     // Allow a brief tick for any in-flight I/O, then exit.
     setTimeout(() => process.exit(0), 250).unref();
   }
@@ -1010,7 +1010,7 @@ async function main() {
 
   // Initialize TimescaleDB for historical data persistence
   if (process.env.TIMESCALE_ENABLED === 'true') {
-    import('./timeseries_db.mjs').then(({ initializeTimescaleDB }) => {
+    import('./analytics/timeseries_db.mjs').then(({ initializeTimescaleDB }) => {
       initializeTimescaleDB().catch(err => {
         console.warn('[TimescaleDB] Failed to initialize (bot will continue without it):', err.message);
       });

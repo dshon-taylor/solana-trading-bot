@@ -1,6 +1,6 @@
-import { nowIso } from '../../core/logger.mjs';
-import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../../lib/trailing.mjs';
-import { computePreTrailStopPrice } from '../../lib/stop_policy.mjs';
+import { nowIso } from '../../observability/logger.mjs';
+import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../../signals/trailing.mjs';
+import { computePreTrailStopPrice } from '../../signals/stop_policy.mjs';
 
 export async function updateStops({ cfg, state, mint, priceUsd }) {
   const pos = state.positions[mint];

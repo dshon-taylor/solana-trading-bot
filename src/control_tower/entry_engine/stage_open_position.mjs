@@ -1,12 +1,12 @@
 import cache from '../../lib/cache/global_cache.mjs';
 import { getConcentrationMetrics } from '../../providers/rugcheck.mjs';
 import { getTokenSupply } from '../../providers/helius.mjs';
-import { executeSwap, toBaseUnits, DECIMALS } from '../../trader.mjs';
-import { appendTradingLog, nowIso } from '../../core/logger.mjs';
+import { executeSwap, toBaseUnits, DECIMALS } from '../../trading/trader.mjs';
+import { appendTradingLog, nowIso } from '../../observability/logger.mjs';
 import { tgSend } from '../../telegram/index.mjs';
-import { appendJsonl } from '../../candidates_ledger.mjs';
-import { resolveEntryAndStopForOpenPosition } from '../../entry_guard.mjs';
-import { computePreTrailStopPrice } from '../../lib/stop_policy.mjs';
+import { appendJsonl } from '../../trading/candidates_ledger.mjs';
+import { resolveEntryAndStopForOpenPosition } from '../../trading/entry_guard.mjs';
+import { computePreTrailStopPrice } from '../../signals/stop_policy.mjs';
 import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { tokenDisplayName, tokenDisplayWithSymbol } from '../position_policy.mjs';
 

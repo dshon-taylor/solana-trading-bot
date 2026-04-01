@@ -1,4 +1,4 @@
-import { getSolBalanceLamports, getSplBalance } from '../../portfolio.mjs';
+import { getSolBalanceLamports, getSplBalance } from '../../trading/portfolio.mjs';
 import { getTokenPairs, pickBestPair } from '../../providers/dexscreener.mjs';
 
 export async function estimateEquityUsd(cfg, conn, owner, state, solUsd) {

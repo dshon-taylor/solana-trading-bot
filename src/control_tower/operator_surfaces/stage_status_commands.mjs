@@ -2,10 +2,10 @@ import { estimateEquityUsd } from '../portfolio_control.mjs';
 import { positionCount } from '../position_policy.mjs';
 import { isPaperModeActive } from '../route_control.mjs';
 import { jupCooldownRemainingMs } from '../../providers/jupiter/cooldown.mjs';
-import { formatTrackerIngestionSummary } from '../../tracker.mjs';
-import { getModels } from '../../ai_pipeline.mjs';
+import { formatTrackerIngestionSummary } from '../../trading/tracker.mjs';
+import { getModels } from '../../analytics/ai_pipeline.mjs';
 import { fmtUsd } from '../ops_reporting.mjs';
-import { nowIso, safeErr } from '../../core/logger.mjs';
+import { nowIso, safeErr } from '../../observability/logger.mjs';
 
 export async function handleStatusCommands(ctx) {
   const { cfg, state, tgSend, getSolUsdPrice, getLoopState } = ctx;

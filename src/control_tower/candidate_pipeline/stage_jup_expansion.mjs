@@ -1,6 +1,6 @@
 import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { safeMsg } from '../../analytics/ai.mjs';
-import { nowIso } from '../../core/logger.mjs';
+import { nowIso } from '../../observability/logger.mjs';
 
 export async function runJupExpansionStage({
   cfg,

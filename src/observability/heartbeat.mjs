@@ -1,6 +1,6 @@
 import fs from 'fs';
-import { nowIso } from '../core/logger.mjs';
-import { evaluateTrackerIngestionHealth, formatTrackerIngestionSummary } from '../tracker.mjs';
+import { nowIso } from '../observability/logger.mjs';
+import { evaluateTrackerIngestionHealth, formatTrackerIngestionSummary } from '../trading/tracker.mjs';
 
 export async function startHeartbeat({ cfg, state, _conn, walletPub, tgSend, rpcHealth }) {
   const enabled = String(process.env.HEARTBEAT_ENABLED ?? 'true') !== 'false';
