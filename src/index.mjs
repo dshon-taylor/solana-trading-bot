@@ -66,6 +66,7 @@ import {
   registerGracefulShutdown,
   startRpcProbeAndHeartbeat,
   initializeTimescaleDbIfEnabled,
+  initializeRuntimeState,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -397,18 +398,20 @@ async function main() {
     getLoopState: () => ({ dexCooldownUntil, lastScan, lastSolUsdAt }),
   });
 
-  // DexScreener rate-limit handling (centralized module)
-  ensureDexState(state);
-  ensureMarketDataState(state);
-  ensureCircuitState(state);
-  ensureCapitalGuardrailsState(state);
-  ensurePlaybookState(state);
-  ensureForceAttemptPolicyState(state);
-  const bootNowMs = Date.now();
-  if (cfg.PLAYBOOK_ENABLED) {
-    recordPlaybookRestart({ state, nowMs: bootNowMs });
-  }
-  let dexCooldownUntil = getDexCooldownUntilMs(state);
+  const runtimeInit = initializeRuntimeState({
+    cfg,
+    state,
+    ensureDexState,
+    ensureMarketDataState,
+    ensureCircuitState,
+    ensureCapitalGuardrailsState,
+    ensurePlaybookState,
+    ensureForceAttemptPolicyState,
+    recordPlaybookRestart,
+    getDexCooldownUntilMs,
+  });
+
+  let dexCooldownUntil = runtimeInit.dexCooldownUntil;
   let lastSolUsd = null;
   let lastSolUsdAt = 0;
 
@@ -446,15 +449,6 @@ async function main() {
   });
 
   // Candidate source feed caches are owned by createCandidatePipeline below.
-
-  // Execution gate: explicit config + runtime toggle.
-  // Backward-compatible: FORCE_TRADING_ENABLED can seed runtime enabled state.
-  state.tradingEnabled = state.tradingEnabled ?? (cfg.EXECUTION_ENABLED && cfg.FORCE_TRADING_ENABLED);
-  state.debug ||= {};
-  state.debug.last ||= [];
-  state.flags ||= {};
-  state.filterOverrides ||= state.filterOverrides || null;
-  state.modelOverrides ||= state.modelOverrides || null;
 
   // Initialize TimescaleDB for historical data persistence
   initializeTimescaleDbIfEnabled();
