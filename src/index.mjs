@@ -64,6 +64,8 @@ import {
   fmtCt,
   startMemoryMonitors,
   registerGracefulShutdown,
+  startRpcProbeAndHeartbeat,
+  initializeTimescaleDbIfEnabled,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -427,20 +429,7 @@ async function main() {
   });
 
   // Start RPC probe and heartbeat (writes ./state/heartbeat.json and rate-limited alerts)
-  import('./persistence/rpc_probe.mjs').then(({ startRpcProbe }) => {
-    try {
-      const rpcHealth = startRpcProbe({ cfg, intervalMs: Number(process.env.RPC_PROBE_EVERY_MS || 30000) });
-      import('./observability/heartbeat.mjs').then(({ startHeartbeat }) => {
-        try {
-          startHeartbeat({ cfg, state, conn, walletPub: pub, tgSend, rpcHealth });
-        } catch (e) {
-          console.warn('[heartbeat] failed to start', e?.message || e);
-        }
-      }).catch(e => console.warn('[heartbeat] import failed', e?.message || e));
-    } catch (e) {
-      console.warn('[rpc_probe] failed to start', e?.message || e);
-    }
-  }).catch(e => console.warn('[rpc_probe] import failed', e?.message || e));
+  startRpcProbeAndHeartbeat({ cfg, state, conn, pub, tgSend });
 
   // Graceful shutdown: persist state and close the local health listener so PM2 reloads
   // don't leave stale state or lingering sockets.
@@ -468,15 +457,7 @@ async function main() {
   state.modelOverrides ||= state.modelOverrides || null;
 
   // Initialize TimescaleDB for historical data persistence
-  if (process.env.TIMESCALE_ENABLED === 'true') {
-    import('./analytics/timeseries_db.mjs').then(({ initializeTimescaleDB }) => {
-      initializeTimescaleDB().catch(err => {
-        console.warn('[TimescaleDB] Failed to initialize (bot will continue without it):', err.message);
-      });
-    }).catch(err => {
-      console.warn('[TimescaleDB] Import failed:', err.message);
-    });
-  }
+  initializeTimescaleDbIfEnabled();
 
   let lastRpcAlertAt = 0;
   let lastLowSolAlertAt = 0;

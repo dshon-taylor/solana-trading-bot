@@ -5,6 +5,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PublicKey } from '@solana/web3.js';
 export { registerGracefulShutdown } from './stage_graceful_shutdown.mjs';
+export { startRpcProbeAndHeartbeat } from './stage_start_rpc_heartbeat.mjs';
+export { initializeTimescaleDbIfEnabled } from './stage_init_timescaledb.mjs';
 
 const execFileAsync = promisify(execFile);
 
