@@ -15,7 +15,7 @@ import { jupQuote } from '../providers/jupiter/client.mjs';
 import { saveState } from '../core/state.mjs';
 import { getSnapshotStatus, isEntrySnapshotSafe, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../market_data_router.mjs';
 import { canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from '../capital_guardrails.mjs';
-import { promoteRouteAvailableCandidateToImmediate } from '../route_available_watchlist.mjs';
+import { promoteRouteAvailableCandidateToImmediate } from './watchlist_pipeline/route_available_watchlist.mjs';
 import { isMicroFreshEnough, applyMomentumPassHysteresis, getCachedMintCreatedAt, scheduleMintCreatedAtLookup } from '../lib/momentum_gate_controls.mjs';
 import {
   CORE_MOMO_CHECKS,
@@ -27,7 +27,7 @@ import {
   applySnapshotToLatest,
   buildNormalizedMomentumInput,
   pruneMomentumRepeatFailMap,
-} from '../watchlist_eval_helpers.mjs';
+} from './watchlist_pipeline/watchlist_eval_helpers.mjs';
 import {
   ensureWatchlistState,
   readPct,

@@ -5,7 +5,7 @@ import {
   applySnapshotToLatest,
   buildNormalizedMomentumInput,
   pruneMomentumRepeatFailMap,
-} from '../src/watchlist_eval_helpers.mjs';
+} from '../src/control_tower/watchlist_pipeline/watchlist_eval_helpers.mjs';
 
 const REQUIRED_ENV = {
   HELIUS_API_KEY: 'x',

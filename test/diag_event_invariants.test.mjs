@@ -3,7 +3,7 @@ import {
   resolveConfirmTxMetricsFromDiagEvent,
   validateDiagEventNumericIntegrity,
   validateDiagEventBatch,
-} from '../src/diag_event_invariants.mjs';
+} from '../src/control_tower/diag_reporting/diag_event_invariants.mjs';
 
 describe('diag_event_invariants', () => {
   it('resolves confirm tx metrics from evaluation-time event only', () => {

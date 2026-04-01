@@ -1,4 +1,4 @@
-import { resolveConfirmTxMetricsFromDiagEvent } from '../../diag_event_invariants.mjs';
+import { resolveConfirmTxMetricsFromDiagEvent } from './diag_event_invariants.mjs';
 import { getCompactWindowForDiagRequest } from './diag_event_store.mjs';
 import { buildExecutionDiagMessage } from './messages/execution_message.mjs';
 import { buildScannerDiagMessage } from './messages/scanner_message.mjs';

@@ -26,7 +26,7 @@ import {
   applySnapshotToLatest,
   buildNormalizedMomentumInput,
   pruneMomentumRepeatFailMap,
-} from '../../watchlist_eval_helpers.mjs';
+} from './watchlist_eval_helpers.mjs';
 import {
   ensureWatchlistState,
   readPct,

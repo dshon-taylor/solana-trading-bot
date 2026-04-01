@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { promoteRouteAvailableCandidateToImmediate } from '../src/route_available_watchlist.mjs';
+import { promoteRouteAvailableCandidateToImmediate } from '../src/control_tower/watchlist_pipeline/route_available_watchlist.mjs';
 
 describe('routeAvailable watchlist immediate promotion', () => {
   it('promotes routeAvailable candidate into immediate rows for same-cycle evaluation', () => {

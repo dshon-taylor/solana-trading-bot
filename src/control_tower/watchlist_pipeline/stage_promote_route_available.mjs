@@ -1,4 +1,4 @@
-import { promoteRouteAvailableCandidateToImmediate } from '../../route_available_watchlist.mjs';
+import { promoteRouteAvailableCandidateToImmediate } from './route_available_watchlist.mjs';
 import { resolvePairCreatedAtGlobal } from '../watchlist_control.mjs';
 
 function bumpRouteAvailableDropped(counters, reason) {
