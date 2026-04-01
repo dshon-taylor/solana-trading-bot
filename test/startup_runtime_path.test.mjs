@@ -36,6 +36,7 @@ describe('startup runtime path', () => {
       path.resolve('src/control_tower/startup/stage_boot_announce.mjs'),
       path.resolve('src/control_tower/startup/stage_boot_runtime_context.mjs'),
       path.resolve('src/control_tower/entry_dispatch/stage_ws_manager_exit.mjs'),
+      path.resolve('src/control_tower/confirm_helpers/index.mjs'),
     ];
 
     for (const file of files) {

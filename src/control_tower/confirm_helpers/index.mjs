@@ -1,4 +1,4 @@
-import { confirmContinuationGate as runConfirmContinuationGate } from '../signals/confirm_continuation.mjs';
+import { confirmContinuationGate as runConfirmContinuationGate } from '../../signals/confirm_continuation.mjs';
 
 export function confirmQualityGate({ cfg, sigReasons, snapshot }) {
   if (!cfg.CONFIRM_REQUIRE_TX_ACCEL_AND_BUY_DOM) return { ok: true };
