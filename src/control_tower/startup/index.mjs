@@ -1,4 +1,4 @@
-import { saveState } from '../../core/state.mjs';
+import { saveState } from '../../persistence/state.mjs';
 export { announceBootStatus } from './stage_boot_announce.mjs';
 export { bootRuntimeContext } from './stage_boot_runtime_context.mjs';
 

@@ -5,6 +5,24 @@ function assertFiniteNumber(x, msg) {
   if (!Number.isFinite(Number(x))) throw new Error(msg);
 }
 
+function assertEndpointUrl(name, value, allowedProtocols, { optional = false } = {}) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    if (optional) return;
+    throw new Error(`${name} must be a non-empty URL`);
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  const proto = String(parsed.protocol || '').toLowerCase();
+  if (!allowedProtocols.includes(proto)) {
+    throw new Error(`${name} must use one of: ${allowedProtocols.join(', ')}`);
+  }
+}
+
 function validateConfig(cfg) {
   // Catch the most common production foot-guns early.
   assert(cfg.HELIUS_API_KEY, 'Missing HELIUS_API_KEY');
@@ -122,6 +140,13 @@ function validateConfig(cfg) {
   if (cfg.PLAYBOOK_RESTART_THRESHOLD < 0 || cfg.PLAYBOOK_ERROR_THRESHOLD < 0) throw new Error('PLAYBOOK thresholds must be >= 0');
   if (cfg.PLAYBOOK_RESTART_WINDOW_MS <= 0 || cfg.PLAYBOOK_ERROR_WINDOW_MS <= 0) throw new Error('PLAYBOOK windows must be > 0');
   if (cfg.PLAYBOOK_STABLE_RECOVERY_MS <= 0) throw new Error('PLAYBOOK_STABLE_RECOVERY_MS must be > 0');
+
+  // Endpoint sanity (startup/runtime critical paths).
+  assertEndpointUrl('SOLANA_RPC_URL', cfg.SOLANA_RPC_URL, ['http:', 'https:']);
+  assertEndpointUrl('LASERSTREAM_DEVNET_RPC_URL', cfg.LASERSTREAM_DEVNET_RPC_URL, ['http:', 'https:']);
+  assertEndpointUrl('LASERSTREAM_DEVNET_WS_URL', cfg.LASERSTREAM_DEVNET_WS_URL, ['ws:', 'wss:']);
+  assertEndpointUrl('JUP_TOKENLIST_URL', cfg.JUP_TOKENLIST_URL, ['http:', 'https:']);
+  assertEndpointUrl('ALIVE_PING_URL', cfg.ALIVE_PING_URL, ['http:', 'https:'], { optional: true });
 
   return cfg;
 }
