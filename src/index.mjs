@@ -47,7 +47,7 @@ import { createScanCompactEventPusher } from './control_tower/diag_reporting/sta
 import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stage_boot_compact_window.mjs';
 import { createCandidatePipeline, bootstrapStreamingCandidateSources } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces, bootstrapOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
-import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
+import { createScanPipeline, createScanCycleState } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
 import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
 import { runJupiterPreflight } from './control_tower/route_control/stage_jupiter_preflight.mjs';
@@ -1099,61 +1099,15 @@ async function main() {
       const scanPairFetchStart = Number(counters?.pairFetch?.started || 0);
       const scanRateLimitedStart = Number(counters?.pairFetch?.rateLimited || 0) + Number(counters?.reject?.noPairReasons?.rateLimited || 0);
       const scanBirdeyeReqStart = Number(state?.marketData?.providers?.birdeye?.requests || 0);
-      let scanCandidatesFound = 0;
-      let scanPairFetchCalls = 0;
-      let scanBirdeyeCalls = 0;
-      let scanRpcCalls = 0;
-      let scanPairFetchConcurrency = Math.max(1, Math.min(8, Number(cfg.PAIR_FETCH_CONCURRENCY || 1)));
-      let scanJupCooldownActive = false;
-      let scanJupCooldownRemainingMs = 0;
-      let scanRoutePrefilterDegraded = false;
-      let scanUsableSnapshotWithoutPairCount = 0;
-      let scanNoPairTempActiveCount = 0;
-      let scanNoPairTempRevisitCount = 0;
-      let scanMaxSingleCallDurationMs = 0;
-      const scanPhase = {
-        candidateDiscoveryMs: 0,
-        candidateSourcePollingMs: 0,
-        candidateSourceMergingMs: 0,
-        candidateSourceTransformsMs: 0,
-        candidateStreamDrainMs: 0,
-        candidateTokenlistFetchMs: 0,
-        candidateTokenlistPoolBuildMs: 0,
-        candidateTokenlistSamplingMs: 0,
-        candidateTokenlistQuoteabilityChecksMs: 0,
-        tokenlistCandidatesFilteredByLiquidity: 0,
-        tokenlistQuoteChecksPerformed: 0,
-        tokenlistQuoteChecksSkipped: 0,
-        candidateDedupeMs: 0,
-        candidateIterationMs: 0,
-        candidateStateLookupMs: 0,
-        candidateCacheReadsMs: 0,
-        candidateCacheWritesMs: 0,
-        candidateFilterLoopsMs: 0,
-        candidateAsyncWaitUnclassifiedMs: 0,
-        candidateCooldownFilteringMs: 0,
-        candidateShortlistPrefilterMs: 0,
-        candidateRouteabilityChecksMs: 0,
-        candidateOtherMs: 0,
-        routePrepMs: 0,
-        pairFetchMs: 0,
-        birdeyeMs: 0,
-        rpcMs: 0,
-        snapshotBuildMs: 0,
-        snapshotBirdseyeFetchMs: 0,
-        snapshotPairEnrichmentMs: 0,
-        snapshotLiqMcapNormalizationMs: 0,
-        snapshotValidationMs: 0,
-        snapshotWatchlistRowConstructionMs: 0,
-        snapshotOtherMs: 0,
-        shortlistMs: 0,
-        watchlistWriteMs: 0,
-      };
-      const markCallDuration = (startedAtMs, kind = null) => {
-        const d = Math.max(0, Date.now() - Number(startedAtMs || Date.now()));
-        if (d > scanMaxSingleCallDurationMs) scanMaxSingleCallDurationMs = d;
-        if (kind === 'rpc') scanPhase.rpcMs += d;
-      };
+      const scanCycle = createScanCycleState({
+        cfg,
+        counters,
+        state,
+        scanWatchlistIngestStart,
+        scanPairFetchStart,
+        scanBirdeyeReqStart,
+      });
+      const scanPhase = scanCycle.scanPhase;
       nextScanDelayMs = computeAdaptiveScanDelayMs({
         state,
         nowMs: t,
@@ -1166,127 +1120,6 @@ async function main() {
         cfg,
         appendJsonl,
       });
-
-      const finalizeScanTelemetry = () => {
-        const scanDurationMs = Math.max(0, Date.now() - scanCycleStartedAtMs);
-        const watchlistIngestPerScan = Math.max(0, Number(counters?.watchlist?.ingested || 0) - scanWatchlistIngestStart);
-        scanPairFetchCalls = Math.max(0, Number(counters?.pairFetch?.started || 0) - scanPairFetchStart);
-        scanBirdeyeCalls = Math.max(0, Number(state?.marketData?.providers?.birdeye?.requests || 0) - scanBirdeyeReqStart);
-        counters.scanDurationMsTotal = Number(counters.scanDurationMsTotal || 0) + scanDurationMs;
-        counters.scanDurationSamples = Number(counters.scanDurationSamples || 0) + 1;
-        counters.scanCandidatesFoundTotal = Number(counters.scanCandidatesFoundTotal || 0) + Number(scanCandidatesFound || 0);
-        counters.scanWatchlistIngestTotal = Number(counters.scanWatchlistIngestTotal || 0) + watchlistIngestPerScan;
-
-        counters.watchlist ||= {};
-        counters.watchlist.compactWindow ||= {};
-        const w = counters.watchlist.compactWindow;
-        if (!Array.isArray(w.scanCycles)) w.scanCycles = [];
-        const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-        const cutoff = Date.now() - retainMs;
-        scanPhase.candidateOtherMs = Math.max(0,
-          Number(scanPhase.candidateDiscoveryMs || 0)
-          - Number(scanPhase.candidateSourcePollingMs || 0)
-          - Number(scanPhase.candidateSourceMergingMs || 0)
-          - Number(scanPhase.candidateSourceTransformsMs || 0)
-          - Number(scanPhase.candidateStreamDrainMs || 0)
-          - Number(scanPhase.candidateTokenlistFetchMs || 0)
-          - Number(scanPhase.candidateTokenlistPoolBuildMs || 0)
-          - Number(scanPhase.candidateTokenlistSamplingMs || 0)
-          - Number(scanPhase.candidateTokenlistQuoteabilityChecksMs || 0)
-          - Number(scanPhase.candidateDedupeMs || 0)
-          - Number(scanPhase.candidateIterationMs || 0)
-          - Number(scanPhase.candidateStateLookupMs || 0)
-          - Number(scanPhase.candidateCacheReadsMs || 0)
-          - Number(scanPhase.candidateCacheWritesMs || 0)
-          - Number(scanPhase.candidateFilterLoopsMs || 0)
-          - Number(scanPhase.candidateAsyncWaitUnclassifiedMs || 0)
-          - Number(scanPhase.candidateCooldownFilteringMs || 0)
-          - Number(scanPhase.candidateShortlistPrefilterMs || 0)
-          - Number(scanPhase.candidateRouteabilityChecksMs || 0));
-        scanPhase.snapshotOtherMs = Math.max(0,
-          Number(scanPhase.snapshotBuildMs || 0)
-          - Number(scanPhase.snapshotBirdseyeFetchMs || 0)
-          - Number(scanPhase.snapshotPairEnrichmentMs || 0)
-          - Number(scanPhase.snapshotLiqMcapNormalizationMs || 0)
-          - Number(scanPhase.snapshotValidationMs || 0)
-          - Number(scanPhase.snapshotWatchlistRowConstructionMs || 0));
-        const totalWorkMs = Number(scanPhase.candidateDiscoveryMs || 0)
-          + Number(scanPhase.routePrepMs || 0)
-          + Number(scanPhase.pairFetchMs || 0)
-          + Number(scanPhase.birdeyeMs || 0)
-          + Number(scanPhase.rpcMs || 0)
-          + Number(scanPhase.snapshotBuildMs || 0)
-          + Number(scanPhase.shortlistMs || 0)
-          + Number(scanPhase.watchlistWriteMs || 0);
-        const scanCycleEvent = {
-          tMs: Date.now(),
-          intervalMs: Number.isFinite(Number(scanIntervalMs)) ? Number(scanIntervalMs) : null,
-          durationMs: scanDurationMs,
-          candidatesFound: Number(scanCandidatesFound || 0),
-          watchlistIngest: watchlistIngestPerScan,
-          pairFetchCalls: Number(scanPairFetchCalls || 0),
-          pairFetchConcurrency: Number(scanPairFetchConcurrency || 1),
-          birdeyeCalls: Number(scanBirdeyeCalls || 0),
-          rpcCalls: Number(scanRpcCalls || 0),
-          jupCooldownActive: !!scanJupCooldownActive,
-          jupCooldownRemainingMs: Number(scanJupCooldownRemainingMs || 0),
-          degradedRoutePrefilterMode: !!scanRoutePrefilterDegraded,
-          usableSnapshotWithoutPairCount: Number(scanUsableSnapshotWithoutPairCount || 0),
-          noPairTempActiveCount: Number(scanNoPairTempActiveCount || 0),
-          noPairTempRevisitCount: Number(scanNoPairTempRevisitCount || 0),
-          maxSingleCallDurationMs: Number(scanMaxSingleCallDurationMs || 0),
-          candidateDiscoveryMs: Number(scanPhase.candidateDiscoveryMs || 0),
-          candidateSourcePollingMs: Number(scanPhase.candidateSourcePollingMs || 0),
-          candidateSourceMergingMs: Number(scanPhase.candidateSourceMergingMs || 0),
-          candidateSourceTransformsMs: Number(scanPhase.candidateSourceTransformsMs || 0),
-          candidateStreamDrainMs: Number(scanPhase.candidateStreamDrainMs || 0),
-          candidateTokenlistFetchMs: Number(scanPhase.candidateTokenlistFetchMs || 0),
-          candidateTokenlistPoolBuildMs: Number(scanPhase.candidateTokenlistPoolBuildMs || 0),
-          candidateTokenlistSamplingMs: Number(scanPhase.candidateTokenlistSamplingMs || 0),
-          candidateTokenlistQuoteabilityChecksMs: Number(scanPhase.candidateTokenlistQuoteabilityChecksMs || 0),
-          tokenlistCandidatesFilteredByLiquidity: Number(scanPhase.tokenlistCandidatesFilteredByLiquidity || 0),
-          tokenlistQuoteChecksPerformed: Number(scanPhase.tokenlistQuoteChecksPerformed || 0),
-          tokenlistQuoteChecksSkipped: Number(scanPhase.tokenlistQuoteChecksSkipped || 0),
-          candidateDedupeMs: Number(scanPhase.candidateDedupeMs || 0),
-          candidateIterationMs: Number(scanPhase.candidateIterationMs || 0),
-          candidateStateLookupMs: Number(scanPhase.candidateStateLookupMs || 0),
-          candidateCacheReadsMs: Number(scanPhase.candidateCacheReadsMs || 0),
-          candidateCacheWritesMs: Number(scanPhase.candidateCacheWritesMs || 0),
-          candidateFilterLoopsMs: Number(scanPhase.candidateFilterLoopsMs || 0),
-          candidateAsyncWaitUnclassifiedMs: Number(scanPhase.candidateAsyncWaitUnclassifiedMs || 0),
-          candidateCooldownFilteringMs: Number(scanPhase.candidateCooldownFilteringMs || 0),
-          candidateShortlistPrefilterMs: Number(scanPhase.candidateShortlistPrefilterMs || 0),
-          candidateRouteabilityChecksMs: Number(scanPhase.candidateRouteabilityChecksMs || 0),
-          candidateOtherMs: Number(scanPhase.candidateOtherMs || 0),
-          routePrepMs: Number(scanPhase.routePrepMs || 0),
-          pairFetchMs: Number(scanPhase.pairFetchMs || 0),
-          birdeyeMs: Number(scanPhase.birdeyeMs || 0),
-          rpcMs: Number(scanPhase.rpcMs || 0),
-          snapshotBuildMs: Number(scanPhase.snapshotBuildMs || 0),
-          snapshotBirdseyeFetchMs: Number(scanPhase.snapshotBirdseyeFetchMs || 0),
-          snapshotPairEnrichmentMs: Number(scanPhase.snapshotPairEnrichmentMs || 0),
-          snapshotLiqMcapNormalizationMs: Number(scanPhase.snapshotLiqMcapNormalizationMs || 0),
-          snapshotValidationMs: Number(scanPhase.snapshotValidationMs || 0),
-          snapshotWatchlistRowConstructionMs: Number(scanPhase.snapshotWatchlistRowConstructionMs || 0),
-          snapshotOtherMs: Number(scanPhase.snapshotOtherMs || 0),
-          shortlistMs: Number(scanPhase.shortlistMs || 0),
-          watchlistWriteMs: Number(scanPhase.watchlistWriteMs || 0),
-          adaptiveDelayMs: Number(nextScanDelayMs || 0),
-          totalWorkMs: Number(totalWorkMs || 0),
-          totalCycleMs: Number(scanDurationMs || 0),
-          scanAggregateTaskMs: Number(totalWorkMs || 0),
-          scanWallClockMs: Number(scanDurationMs || 0),
-        };
-        w.scanCycles.push(scanCycleEvent);
-        while (w.scanCycles.length && Number(w.scanCycles[0]?.tMs || 0) < cutoff) w.scanCycles.shift();
-        try {
-          appendDiagEvent({
-            appendJsonl,
-            statePath: cfg.STATE_PATH,
-            event: { tMs: Number(scanCycleEvent.tMs || Date.now()), kind: 'scanCycle', reason: null, extra: { ...scanCycleEvent } },
-          });
-        } catch {}
-      };
 
       try {
       // BirdEye CU guard: if projected CU budget exceeded, slow scan cadence
@@ -1324,7 +1157,7 @@ async function main() {
           try {
             const _tSol = Date.now();
             solUsdNow = (await getSolUsdPrice()).solUsd;
-            markCallDuration(_tSol);
+            scanCycle.markCallDuration(_tSol);
             lastSolUsd = solUsdNow;
             lastSolUsdAt = t;
           } catch (e) {
@@ -1350,9 +1183,9 @@ async function main() {
 
         // Ensure we keep some SOL for fees
         const _tBal = Date.now();
-        scanRpcCalls += 1;
+        scanCycle.scanRpcCalls += 1;
         const solLam = await getSolBalanceLamports(conn, pub);
-        markCallDuration(_tBal, 'rpc');
+        scanCycle.markCallDuration(_tBal, 'rpc');
         const sol = solLam / 1e9;
         state.flags ||= {};
         if (sol < cfg.MIN_SOL_FOR_FEES) {
@@ -1386,29 +1219,20 @@ async function main() {
             scanPhase,
             scanRateLimitedStart,
             scanState: {
-              scanCandidatesFound,
-              scanPairFetchConcurrency,
-              scanJupCooldownActive,
-              scanJupCooldownRemainingMs,
-              scanRoutePrefilterDegraded,
-              scanUsableSnapshotWithoutPairCount,
-              scanNoPairTempActiveCount,
-              scanNoPairTempRevisitCount,
+              scanCandidatesFound: scanCycle.scanCandidatesFound,
+              scanPairFetchConcurrency: scanCycle.scanPairFetchConcurrency,
+              scanJupCooldownActive: scanCycle.scanJupCooldownActive,
+              scanJupCooldownRemainingMs: scanCycle.scanJupCooldownRemainingMs,
+              scanRoutePrefilterDegraded: scanCycle.scanRoutePrefilterDegraded,
+              scanUsableSnapshotWithoutPairCount: scanCycle.scanUsableSnapshotWithoutPairCount,
+              scanNoPairTempActiveCount: scanCycle.scanNoPairTempActiveCount,
+              scanNoPairTempRevisitCount: scanCycle.scanNoPairTempRevisitCount,
             },
             pushScanCompactEvent,
           });
 
           if (scanPipelineResult?.scanState) {
-            ({
-              scanCandidatesFound,
-              scanPairFetchConcurrency,
-              scanJupCooldownActive,
-              scanJupCooldownRemainingMs,
-              scanRoutePrefilterDegraded,
-              scanUsableSnapshotWithoutPairCount,
-              scanNoPairTempActiveCount,
-              scanNoPairTempRevisitCount,
-            } = scanPipelineResult.scanState);
+            scanCycle.applyScanState(scanPipelineResult.scanState);
           }
 
           if (scanPipelineResult?.skipCycle) {
@@ -1439,7 +1263,13 @@ async function main() {
         }
       }
       } finally {
-        finalizeScanTelemetry();
+        scanCycle.finalize({
+          scanCycleStartedAtMs,
+          scanIntervalMs,
+          nextScanDelayMs,
+          appendDiagEvent,
+          appendJsonl,
+        });
       }
     }
 
