@@ -13,6 +13,9 @@ export { runMaintenanceChores } from './stage_run_maintenance_chores.mjs';
 export { runLoopHousekeeping } from './stage_loop_housekeeping.mjs';
 export { runOpsCycle } from './stage_ops_cycle.mjs';
 export { runLoopTail } from './stage_loop_tail.mjs';
+export { createRuntimeAdapters } from './stage_runtime_adapters.mjs';
+export { buildRuntimePipelines } from './stage_build_runtime_pipelines.mjs';
+export { runMainWithFatalReporting } from './stage_run_main_with_fatal_reporting.mjs';
 
 const execFileAsync = promisify(execFile);
 

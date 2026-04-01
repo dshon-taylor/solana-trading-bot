@@ -50,7 +50,7 @@ import { createOperatorSurfaces, bootstrapOperatorSurfaces, pollTelegramControls
 import { runWatchlistTriggerLane } from './control_tower/watchlist_pipeline_runtime.mjs';
 import { createScanPipeline, createScanCycleState, runScanCycle } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
-import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
+import { announceBootStatus, seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState, bootRuntimeContext } from './control_tower/startup.mjs';
 import { runJupiterPreflight } from './control_tower/route_control/stage_jupiter_preflight.mjs';
 import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
 import { confirmQualityGate, createConfirmContinuationGate, recordConfirmCarryTrace, resolveConfirmTxMetrics } from './control_tower/confirm_helpers.mjs';
@@ -73,6 +73,9 @@ import {
   runLoopHousekeeping,
   runOpsCycle,
   runLoopTail,
+  createRuntimeAdapters,
+  buildRuntimePipelines,
+  runMainWithFatalReporting,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -139,15 +142,18 @@ function loadWallet() {
 const getSolUsdPrice = createSolUsdPriceResolver({ getTokenPairs, pickBestPair });
 
 const confirmContinuationGate = createConfirmContinuationGate({ cacheImpl: cache });
-
-const resolveConfirmTxMetricsWithFallback = (args) => resolveConfirmTxMetrics({
-  ...args,
+const {
+  resolveConfirmTxMetricsWithFallback,
+  computeMcapUsd,
+  runNodeScriptJson,
+} = createRuntimeAdapters({
+  resolveConfirmTxMetrics,
   snapshotFromBirdseye,
+  computeMcapUsdCore,
+  getTokenSupply,
+  runNodeScriptJsonCore,
+  safeErr,
 });
-
-const computeMcapUsd = (cfg, pair, rpcUrl) => computeMcapUsdCore(cfg, pair, rpcUrl, { getTokenSupply });
-
-const runNodeScriptJson = (scriptPath, args, timeoutMs = 90_000) => runNodeScriptJsonCore(scriptPath, args, { timeoutMs, safeErr });
 
 setupBirdEyeWsGlue({
   wsmgr,
@@ -181,115 +187,63 @@ const {
 });
 
 async function main() {
-  const cfg = getConfig();
-  console.log(summarizeConfigForBoot(cfg));
-
-  const wallet = loadWallet();
-  const pub = getPublicKeyBase58(wallet);
-
-  const conn = makeConnection(cfg.SOLANA_RPC_URL);
-  const state = loadState(cfg.STATE_PATH);
-  runtimeStateRef = state;
-  const birdseye = createBirdseyeLiteClient({
-    enabled: cfg.BIRDEYE_LITE_ENABLED,
-    apiKey: cfg.BIRDEYE_API_KEY,
-    chain: cfg.BIRDEYE_LITE_CHAIN,
-    maxRps: cfg.BIRDEYE_LITE_MAX_RPS,
-    cacheTtlMs: cfg.BIRDEYE_LITE_CACHE_TTL_MS,
-    perMintMinIntervalMs: cfg.BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS,
-  });
-
-  // BirdEye websocket (real-time updates) + dynamic subscriptions from cache birdeye:sub:<mint>
-  try {
-    initBirdEyeRuntimeListeners({ state, wsmgr, birdEyeWs, safeErr });
-    birdEyeWs.start();
-  } catch (e) {
-    console.warn('[birdeye-ws] start failed', safeErr(e).message);
-  }
-
-  bindWsManagerExitHandler({
-    wsmgr,
-    state,
+  const {
     cfg,
-    conn,
     wallet,
+    pub,
+    conn,
+    state,
+    birdseye,
+    solUsd,
+  } = await bootRuntimeContext({
+    getConfig,
+    summarizeConfigForBoot,
+    loadWallet,
+    getPublicKeyBase58,
+    makeConnection,
+    loadState,
+    createBirdseyeLiteClient,
+    initBirdEyeRuntimeListeners,
+    wsmgr,
+    birdEyeWs,
+    safeErr,
+    bindWsManagerExitHandler,
     getSplBalance,
     executeSwap,
     getSolUsdPrice,
     closePosition,
-    safeErr,
-  });
-
-  // detect stale live mints and trigger restResync once-per-incident
-  startWatchlistCleanupTimer({ globalTimers, cfg, wsmgr });
-
-  state.positions ||= {};
-  state.portfolio ||= { maxEquityUsd: cfg.STARTING_CAPITAL_USDC };
-  state.paperAttempts ||= [];
-  state.runtime ||= {};
-  state.runtime.botStartTimeMs = Date.now();
-  ensureWatchlistState(state);
-
-  await seedOpenPositionsOnBoot({
-    state,
-    cfg,
-    wsmgr,
+    startWatchlistCleanupTimer,
+    globalTimers,
+    ensureWatchlistState,
+    seedOpenPositionsOnBoot,
     cache,
-    birdseye,
-    closePosition,
-    conn,
-    wallet,
-  });
-
-  await announceBootStatus({
-    cfg,
-    pub,
+    announceBootStatus,
     tgSend,
     tgSetMyCommands,
-  });
-
-  const solUsd = await resolveBootSolUsdWithRetry({
-    getSolUsdPrice,
-    tgSend,
-    cfg,
+    resolveBootSolUsdWithRetry,
     safeMsg,
-  });
-
-  await sendBootBalancesMessage({
-    cfg,
-    conn,
-    pub,
-    solUsd,
+    sendBootBalancesMessage,
     getSolBalanceLamports,
-    tgSend,
     fmtUsd,
-  });
-
-  await reconcileStartupState({
-    cfg,
-    conn,
-    pub,
-    state,
+    reconcileStartupState,
     reconcilePositions,
     positionCount,
     syncExposureStateWithPositions,
-    safeErr,
   });
 
-  let {
-    lastScan,
-    nextScanDelayMs,
-    lastPosRef,
-    lastHb,
-    lastRej,
-    lastTgPoll,
-    lastAutoTune,
-    lastHourlyDiag,
-    lastWatchlistEval,
-    lastExposureQueueDrainAt,
-    loopPrevAtMs: _loopPrevAtMs,
-    loopDtMs: _loopDtMs,
-  } = createMainLoopState({ cfg });
+  runtimeStateRef = state;
+
+  const loopState = {
+    ...createMainLoopState({ cfg }),
+    lastAlivePingCheckAt: 0,
+    lastLedgerPruneAt: 0,
+    lastReconcileAt: 0,
+    lastLowSolAlertAt: 0,
+    lastStreamingHealthAt: 0,
+    lastRpcAlertRef: { value: 0 },
+    lastSolUsd: null,
+    lastSolUsdAt: 0,
+  };
 
   // Use persisted diagnostic counters as single source of truth across restarts.
   let counters = initializeDiagCounters({ state });
@@ -310,6 +264,7 @@ async function main() {
 
   // Positions enforcement must not be starved by long scan lanes.
   // runPositionsLoop is extracted to positions_loop.mjs; lastPosRef shared across all positions check blocks.
+  const lastPosRef = loopState.lastPosRef;
   const { runPositionsLoop, runManualForceClose } = createPositionsLoop({
     cfg, state, cache, conn, wallet, birdseye,
     lastPosRef,
@@ -381,7 +336,11 @@ async function main() {
     safeErr,
     runNodeScriptJson,
     sendPositionsReport,
-    getLoopState: () => ({ dexCooldownUntil, lastScan, lastSolUsdAt }),
+    getLoopState: () => ({
+      dexCooldownUntil: loopState.dexCooldownUntil,
+      lastScan: loopState.lastScan,
+      lastSolUsdAt: loopState.lastSolUsdAt,
+    }),
     createOperatorSurfaces,
   });
 
@@ -398,23 +357,17 @@ async function main() {
     getDexCooldownUntilMs,
   });
 
-  let dexCooldownUntil = runtimeInit.dexCooldownUntil;
-  let lastSolUsd = null;
-  let lastSolUsdAt = 0;
-
-  // Ops hygiene timers
-  let lastAlivePingCheckAt = 0;
-  let lastLedgerPruneAt = 0;
+  loopState.dexCooldownUntil = runtimeInit.dexCooldownUntil;
 
   // Health endpoint (local only)
   const healthServer = startHealthServer({
     stateRef: state,
     getSnapshot: () => ({
       openPositions: positionCount(state),
-      lastScanAtMs: lastScan || null,
+      lastScanAtMs: loopState.lastScan || null,
       lastPositionsLoopAtMs: lastPosRef.value || null,
-      dexCooldownUntilMs: dexCooldownUntil || null,
-      loopDtMs: _loopDtMs,
+      dexCooldownUntilMs: loopState.dexCooldownUntil || null,
+      loopDtMs: loopState.loopDtMs,
     }),
   });
 
@@ -440,10 +393,6 @@ async function main() {
   // Initialize TimescaleDB for historical data persistence
   initializeTimescaleDbIfEnabled();
 
-  const lastRpcAlertRef = { value: 0 };
-  let lastLowSolAlertAt = 0;
-  let lastReconcileAt = 0;
-
   const streamingBoot = bootstrapStreamingCandidateSources({
     cfg,
     state,
@@ -454,123 +403,126 @@ async function main() {
     createCandidatePipeline,
   });
   streamingProvider = streamingBoot.streamingProvider;
-  let lastStreamingHealthAt = streamingBoot.lastStreamingHealthAt;
+  loopState.lastStreamingHealthAt = streamingBoot.lastStreamingHealthAt;
   const fetchCandidateSources = streamingBoot.fetchCandidateSources;
 
-  const { runScanPipeline } = createScanPipeline({
-    cfg,
-    state,
-    tgSend,
-    nowIso,
-    pushDebug,
-    saveState,
-    jupCooldownRemainingMs,
-    ensureNoPairTemporaryState,
-    ensureNoPairDeadMintState,
-    normalizeCandidateSource,
-    bumpSourceCounter,
-    bumpRouteCounter,
-    bumpNoPairReason,
-    recordNonTradableMint,
-    shouldSkipNoPairTemporary,
-    setNoPairTemporary,
-    getCachedPairSnapshot,
-    shouldApplyEarlyShortlistPrefilter,
-    getBoostUsd,
-    logCandidateDaily,
-    getFreshRouteCacheEntry,
-    cacheRouteReadyMint,
-    toBaseUnits,
-    DECIMALS,
-    getRouteQuoteWithFallback,
-    quickRouteRecheck,
-    circuitHit,
-    hitJup429,
-    JUP_ROUTE_FIRST_ENABLED,
-    JUP_SOURCE_PREFLIGHT_ENABLED,
-    getMarketSnapshot,
-    getTokenPairs,
-    pickBestPair,
-    birdseye,
-    mapWithConcurrency,
-    effectiveNoPairRetryAttempts,
-    NO_PAIR_RETRY_TOTAL_BUDGET_MS,
-    NO_PAIR_RETRY_BASE_MS,
-    NO_PAIR_RETRY_MAX_BACKOFF_MS,
-    jitter,
-    parseJupQuoteFailure,
-    isJup429,
-    isDexScreener429,
-    promoteRouteAvailableCandidate,
-    classifyNoPairReason,
-    NO_PAIR_DEAD_MINT_STRIKES,
-    NO_PAIR_DEAD_MINT_TTL_MS,
-    NO_PAIR_NON_TRADABLE_TTL_MS,
-    getSnapshotStatus,
-    trackerMaybeEnqueue,
-    circuitOkForEntries,
-    entryCapacityAvailable,
-    isPaperModeActive,
-    PLAYBOOK_MODE_DEGRADED,
-  });
-
-  const { runEntryDispatch } = createEntryDispatch({
-    cfg,
-    state,
-    upsertWatchlistMint,
-    evictWatchlist,
-    evaluateWatchlistRows,
-    pushDebug,
-    nowIso,
-    saveState,
-    conn,
-    pub,
-    wallet,
-    birdseye,
-    normalizeCandidateSource,
-    bumpSourceCounter,
-    entryCapacityAvailable,
-    bump,
-    logCandidateDaily,
-    getEntrySnapshotUnsafeReason,
-    markMarketDataRejectImpact,
-    holdersGateCheck,
-    passesBaseFilters,
-    getRugcheckReport,
-    isTokenSafe,
-    computeMcapUsd,
-    evaluateMomentumSignal,
-    canUseMomentumFallback,
-    toBaseUnits,
-    DECIMALS,
-    getRouteQuoteWithFallback,
-    getModels,
-    preprocessCandidate,
-    appendCost,
-    estimateCostUsd,
-    analyzeTrade,
-    jupQuote,
-    gatekeep,
-    canOpenNewEntry,
-    applySoftReserveToUsdTarget,
-    confirmQualityGate,
-    ensureWatchlistState,
-    bumpWatchlistFunnel,
-    enforceEntryCapacityGate,
-    openPosition,
-    didEntryFill,
-    recordEntryOpened,
-    safeMsg,
-    recordPlaybookError,
-    isPaperModeActive,
+  const { runScanPipeline, runEntryDispatch } = buildRuntimePipelines({
+    createScanPipeline,
+    createEntryDispatch,
+    scanPipelineArgs: {
+      cfg,
+      state,
+      tgSend,
+      nowIso,
+      pushDebug,
+      saveState,
+      jupCooldownRemainingMs,
+      ensureNoPairTemporaryState,
+      ensureNoPairDeadMintState,
+      normalizeCandidateSource,
+      bumpSourceCounter,
+      bumpRouteCounter,
+      bumpNoPairReason,
+      recordNonTradableMint,
+      shouldSkipNoPairTemporary,
+      setNoPairTemporary,
+      getCachedPairSnapshot,
+      shouldApplyEarlyShortlistPrefilter,
+      getBoostUsd,
+      logCandidateDaily,
+      getFreshRouteCacheEntry,
+      cacheRouteReadyMint,
+      toBaseUnits,
+      DECIMALS,
+      getRouteQuoteWithFallback,
+      quickRouteRecheck,
+      circuitHit,
+      hitJup429,
+      JUP_ROUTE_FIRST_ENABLED,
+      JUP_SOURCE_PREFLIGHT_ENABLED,
+      getMarketSnapshot,
+      getTokenPairs,
+      pickBestPair,
+      birdseye,
+      mapWithConcurrency,
+      effectiveNoPairRetryAttempts,
+      NO_PAIR_RETRY_TOTAL_BUDGET_MS,
+      NO_PAIR_RETRY_BASE_MS,
+      NO_PAIR_RETRY_MAX_BACKOFF_MS,
+      jitter,
+      parseJupQuoteFailure,
+      isJup429,
+      isDexScreener429,
+      promoteRouteAvailableCandidate,
+      classifyNoPairReason,
+      NO_PAIR_DEAD_MINT_STRIKES,
+      NO_PAIR_DEAD_MINT_TTL_MS,
+      NO_PAIR_NON_TRADABLE_TTL_MS,
+      getSnapshotStatus,
+      trackerMaybeEnqueue,
+      circuitOkForEntries,
+      entryCapacityAvailable,
+      isPaperModeActive,
+      PLAYBOOK_MODE_DEGRADED,
+    },
+    entryDispatchArgs: {
+      cfg,
+      state,
+      upsertWatchlistMint,
+      evictWatchlist,
+      evaluateWatchlistRows,
+      pushDebug,
+      nowIso,
+      saveState,
+      conn,
+      pub,
+      wallet,
+      birdseye,
+      normalizeCandidateSource,
+      bumpSourceCounter,
+      entryCapacityAvailable,
+      bump,
+      logCandidateDaily,
+      getEntrySnapshotUnsafeReason,
+      markMarketDataRejectImpact,
+      holdersGateCheck,
+      passesBaseFilters,
+      getRugcheckReport,
+      isTokenSafe,
+      computeMcapUsd,
+      evaluateMomentumSignal,
+      canUseMomentumFallback,
+      toBaseUnits,
+      DECIMALS,
+      getRouteQuoteWithFallback,
+      getModels,
+      preprocessCandidate,
+      appendCost,
+      estimateCostUsd,
+      analyzeTrade,
+      jupQuote,
+      gatekeep,
+      canOpenNewEntry,
+      applySoftReserveToUsdTarget,
+      confirmQualityGate,
+      ensureWatchlistState,
+      bumpWatchlistFunnel,
+      enforceEntryCapacityGate,
+      openPosition,
+      didEntryFill,
+      recordEntryOpened,
+      safeMsg,
+      recordPlaybookError,
+      isPaperModeActive,
+    },
   });
 
   while (true) {
     const t = Date.now();
     rollWatchlistMinuteWindow(counters, t);
 
-    _loopDtMs = t - _loopPrevAtMs;
-    _loopPrevAtMs = t;
+    loopState.loopDtMs = t - loopState.loopPrevAtMs;
+    loopState.loopPrevAtMs = t;
 
     maybeRefreshDiagSnapshot(t);
 
@@ -580,8 +532,8 @@ async function main() {
       state,
       conn,
       wallet,
-      lastExposureQueueDrainAt,
-      lastStreamingHealthAt,
+      lastExposureQueueDrainAt: loopState.lastExposureQueueDrainAt,
+      lastStreamingHealthAt: loopState.lastStreamingHealthAt,
       spendSummaryCache,
       SPEND_CACHE_TTL_MS,
       refreshSpendSummaryCacheAsync,
@@ -590,15 +542,15 @@ async function main() {
       processExposureQueue,
       safeErr,
     });
-    lastExposureQueueDrainAt = housekeeping.lastExposureQueueDrainAt;
-    lastStreamingHealthAt = housekeeping.lastStreamingHealthAt;
+    loopState.lastExposureQueueDrainAt = housekeeping.lastExposureQueueDrainAt;
+    loopState.lastStreamingHealthAt = housekeeping.lastStreamingHealthAt;
 
     const opsCycle = await runOpsCycle({
       t,
       cfg,
       state,
-      lastHb,
-      lastAlivePingCheckAt,
+      lastHb: loopState.lastHb,
+      lastAlivePingCheckAt: loopState.lastAlivePingCheckAt,
       evaluatePlaybook,
       circuitOkForEntries,
       runSelfRecovery,
@@ -607,8 +559,8 @@ async function main() {
       positionCount,
       maybeAlivePing,
     });
-    lastHb = opsCycle.lastHb;
-    lastAlivePingCheckAt = opsCycle.lastAlivePingCheckAt;
+    loopState.lastHb = opsCycle.lastHb;
+    loopState.lastAlivePingCheckAt = opsCycle.lastAlivePingCheckAt;
 
     // Manual force-close latch (handled early so scan-lane continues can't starve it).
     await runManualForceClose(t);
@@ -625,10 +577,10 @@ async function main() {
       conn,
       pub,
       counters,
-      lastLedgerPruneAt,
-      lastReconcileAt,
-      lastAutoTune,
-      lastHourlyDiag,
+      lastLedgerPruneAt: loopState.lastLedgerPruneAt,
+      lastReconcileAt: loopState.lastReconcileAt,
+      lastAutoTune: loopState.lastAutoTune,
+      lastHourlyDiag: loopState.lastHourlyDiag,
       nowIso,
       saveState,
       tgSend,
@@ -644,10 +596,10 @@ async function main() {
       formatThroughputSummary,
       formatMarketDataProviderSummary,
     });
-    lastLedgerPruneAt = maintenance.lastLedgerPruneAt;
-    lastReconcileAt = maintenance.lastReconcileAt;
-    lastAutoTune = maintenance.lastAutoTune;
-    lastHourlyDiag = maintenance.lastHourlyDiag;
+    loopState.lastLedgerPruneAt = maintenance.lastLedgerPruneAt;
+    loopState.lastReconcileAt = maintenance.lastReconcileAt;
+    loopState.lastAutoTune = maintenance.lastAutoTune;
+    loopState.lastHourlyDiag = maintenance.lastHourlyDiag;
     counters = maintenance.counters;
 
     const tgPoll = await pollTelegramControls({
@@ -655,7 +607,7 @@ async function main() {
       cfg,
       state,
       counters,
-      lastTgPoll,
+      lastTgPoll: loopState.lastTgPoll,
       handleTelegramControls,
       tgSend,
       nowIso,
@@ -664,11 +616,11 @@ async function main() {
       sendPositionsReport,
       safeErr,
     });
-    lastTgPoll = tgPoll.lastTgPoll;
+    loopState.lastTgPoll = tgPoll.lastTgPoll;
 
     // Forward tracking tick ("what would have happened")
     try {
-      await trackerTick({ cfg, state, send: tgSend, nowIso, conn, wallet, solUsd: lastSolUsd || solUsd || null, birdseye });
+      await trackerTick({ cfg, state, send: tgSend, nowIso, conn, wallet, solUsd: loopState.lastSolUsd || solUsd || null, birdseye });
     } catch {}
 
     const watchlistEval = await runWatchlistTriggerLane({
@@ -680,9 +632,9 @@ async function main() {
       pub,
       wallet,
       birdseye,
-      lastWatchlistEval,
-      lastSolUsd,
-      lastSolUsdAt,
+      lastWatchlistEval: loopState.lastWatchlistEval,
+      lastSolUsd: loopState.lastSolUsd,
+      lastSolUsdAt: loopState.lastSolUsdAt,
       solUsdFallback: solUsd,
       ensureWatchlistState,
       evictWatchlist,
@@ -694,20 +646,20 @@ async function main() {
       getSolUsdPrice,
       evaluateWatchlistRows,
     });
-    lastWatchlistEval = watchlistEval.lastWatchlistEval;
-    lastSolUsd = watchlistEval.lastSolUsd;
-    lastSolUsdAt = watchlistEval.lastSolUsdAt;
+    loopState.lastWatchlistEval = watchlistEval.lastWatchlistEval;
+    loopState.lastSolUsd = watchlistEval.lastSolUsd;
+    loopState.lastSolUsdAt = watchlistEval.lastSolUsdAt;
 
     const rejectionSummary = await runRejectionSummary({
       t,
       cfg,
       state,
       counters,
-      lastRej,
+      lastRej: loopState.lastRej,
       snapshotAndReset,
       tgSend,
     });
-    lastRej = rejectionSummary.lastRej;
+    loopState.lastRej = rejectionSummary.lastRej;
     counters = rejectionSummary.counters;
 
     const risk = await runPortfolioRiskCycle({
@@ -724,7 +676,7 @@ async function main() {
       recordPlaybookError,
       saveState,
       safeErr,
-      lastRpcAlertRef,
+      lastRpcAlertRef: loopState.lastRpcAlertRef,
       getSolUsdPrice,
     });
     if (risk.halted) continue;
@@ -736,12 +688,12 @@ async function main() {
       conn,
       pub,
       counters,
-      lastScan,
-      nextScanDelayMs,
-      lastSolUsd,
-      lastSolUsdAt,
-      lastLowSolAlertAt,
-      dexCooldownUntil,
+      lastScan: loopState.lastScan,
+      nextScanDelayMs: loopState.nextScanDelayMs,
+      lastSolUsd: loopState.lastSolUsd,
+      lastSolUsdAt: loopState.lastSolUsdAt,
+      lastLowSolAlertAt: loopState.lastLowSolAlertAt,
+      dexCooldownUntil: loopState.dexCooldownUntil,
       birdseye,
       nowIso,
       tgSend,
@@ -762,12 +714,12 @@ async function main() {
       runEntryDispatch,
       sleepMs: (ms) => new Promise((r) => setTimeout(r, ms)),
     });
-    lastScan = scan.lastScan;
-    nextScanDelayMs = scan.nextScanDelayMs;
-    lastSolUsd = scan.lastSolUsd;
-    lastSolUsdAt = scan.lastSolUsdAt;
-    lastLowSolAlertAt = scan.lastLowSolAlertAt;
-    dexCooldownUntil = scan.dexCooldownUntil;
+    loopState.lastScan = scan.lastScan;
+    loopState.nextScanDelayMs = scan.nextScanDelayMs;
+    loopState.lastSolUsd = scan.lastSolUsd;
+    loopState.lastSolUsdAt = scan.lastSolUsdAt;
+    loopState.lastLowSolAlertAt = scan.lastLowSolAlertAt;
+    loopState.dexCooldownUntil = scan.dexCooldownUntil;
     counters = scan.counters;
     if (scan.continueLoop) continue;
 
@@ -781,13 +733,11 @@ async function main() {
   }
 }
 
-main().catch(async (e) => {
-  const cfg = (() => {
-    try { return getConfig(); } catch { return null; }
-  })();
-  console.error('[fatal]', safeErr(e));
-  if (cfg) await tgSend(cfg, `❌ Bot crashed: ${safeErr(e).message}`);
-  process.exit(1);
+runMainWithFatalReporting({
+  main,
+  getConfig,
+  safeErr,
+  tgSend,
 });
 startMemoryMonitors({
   globalTimers,
