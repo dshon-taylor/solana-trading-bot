@@ -139,6 +139,25 @@ export async function runMomentumEvalStage(ctx) {
   counters.watchlist.momentumPathUsage.tx[txBucket] = Number(counters.watchlist.momentumPathUsage.tx[txBucket] || 0) + 1;
   counters.watchlist.momentumPathUsage.volume[volumeBucket] = Number(counters.watchlist.momentumPathUsage.volume[volumeBucket] || 0) + 1;
 
+  const snapshotFreshnessMs = Number(row?.latest?.marketDataFreshnessMs ?? ctx.snapshot?.freshnessMs ?? NaN);
+  const wsPxForMicro = cache.get(`birdeye:ws:price:${mint}`) || null;
+  const wsTsForMicro = Number(wsPxForMicro?.tsMs || 0);
+  const wsFreshnessMsForMicro = wsTsForMicro > 0 ? Math.max(0, nowMs - wsTsForMicro) : NaN;
+  const freshnessForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
+    ? Math.min(wsFreshnessMsForMicro, snapshotFreshnessMs)
+    : snapshotFreshnessMs;
+  const freshnessSourceForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
+    ? (wsFreshnessMsForMicro <= snapshotFreshnessMs ? 'ws' : 'snapshot')
+    : 'snapshot';
+  const snapshotLagOverWsMs = Number.isFinite(snapshotFreshnessMs) && Number.isFinite(wsFreshnessMsForMicro)
+    ? Math.max(0, snapshotFreshnessMs - wsFreshnessMsForMicro)
+    : null;
+  const baseMicroMaxAgeMs = Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000);
+  const providerLagToleranceMs = Math.max(0, Number(process.env.MOMENTUM_MICRO_PROVIDER_LAG_TOLERANCE_MS || 20_000));
+  const effectiveMicroMaxAgeMs = freshnessSourceForMicroGate === 'snapshot'
+    ? (baseMicroMaxAgeMs + providerLagToleranceMs)
+    : baseMicroMaxAgeMs;
+
   if (canaryBypassActive) {
     canaryLog('momentum', 'bypassed');
   } else {
@@ -161,24 +180,6 @@ export async function runMomentumEvalStage(ctx) {
     else if (paperWin.ret5 < paperThresholds.ret5) paperFailed.push('ret5Low');
     if (Number(paperWin.greensLast5 || 0) < Number(paperThresholds.greensLast5 || 0)) paperFailed.push('greensLow');
 
-    const snapshotFreshnessMs = Number(row?.latest?.marketDataFreshnessMs ?? ctx.snapshot?.freshnessMs ?? NaN);
-    const wsPxForMicro = cache.get(`birdeye:ws:price:${mint}`) || null;
-    const wsTsForMicro = Number(wsPxForMicro?.tsMs || 0);
-    const wsFreshnessMsForMicro = wsTsForMicro > 0 ? Math.max(0, nowMs - wsTsForMicro) : NaN;
-    const freshnessForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
-      ? Math.min(wsFreshnessMsForMicro, snapshotFreshnessMs)
-      : snapshotFreshnessMs;
-    const freshnessSourceForMicroGate = Number.isFinite(wsFreshnessMsForMicro)
-      ? (wsFreshnessMsForMicro <= snapshotFreshnessMs ? 'ws' : 'snapshot')
-      : 'snapshot';
-    const snapshotLagOverWsMs = Number.isFinite(snapshotFreshnessMs) && Number.isFinite(wsFreshnessMsForMicro)
-      ? Math.max(0, snapshotFreshnessMs - wsFreshnessMsForMicro)
-      : null;
-    const baseMicroMaxAgeMs = Number(cfg.MOMENTUM_MICRO_MAX_AGE_MS || 10_000);
-    const providerLagToleranceMs = Math.max(0, Number(process.env.MOMENTUM_MICRO_PROVIDER_LAG_TOLERANCE_MS || 20_000));
-    const effectiveMicroMaxAgeMs = freshnessSourceForMicroGate === 'snapshot'
-      ? (baseMicroMaxAgeMs + providerLagToleranceMs)
-      : baseMicroMaxAgeMs;
     const microFreshGate = isMicroFreshEnough({
       microPresentCount: ctx.momentumMicroPresent,
       freshnessMs: freshnessForMicroGate,
@@ -497,6 +498,7 @@ export async function runMomentumEvalStage(ctx) {
       return 'continue';
     }
   }
+
   runtimeDeps.bumpWatchlistFunnel(counters, 'momentumPassed', { nowMs });
   pushCompactWindowEvent('momentumPassed');
 
