@@ -42,13 +42,15 @@ import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_t
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
 import { createDiagReporting } from './control_tower/diag_reporting.mjs';
-import { appendDiagEvent, getCompactWindowForDiagRequest, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
+import { appendDiagEvent, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createScanCompactEventPusher } from './control_tower/diag_reporting/stage_scan_compact_events.mjs';
+import { bootstrapCompactWindowState } from './control_tower/diag_reporting/stage_boot_compact_window.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch, bindWsManagerExitHandler } from './control_tower/entry_dispatch/index.mjs';
 import { seedOpenPositionsOnBoot, resolveBootSolUsdWithRetry, sendBootBalancesMessage, reconcileStartupState } from './control_tower/startup.mjs';
+import { runJupiterPreflight } from './control_tower/route_control/stage_jupiter_preflight.mjs';
 import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
 import { confirmQualityGate, createConfirmContinuationGate, recordConfirmCarryTrace, resolveConfirmTxMetrics } from './control_tower/confirm_helpers.mjs';
 import {
@@ -61,6 +63,7 @@ import {
   computeMcapUsd as computeMcapUsdCore,
   fmtCt,
   startMemoryMonitors,
+  registerGracefulShutdown,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -292,104 +295,18 @@ async function main() {
     : makeCounters();
   state.runtime.diagCounters = counters;
 
-  // Hydrate confirm carry runtime cache from persisted watchlist state on boot.
-  state.runtime.compactWindow ||= {};
-  counters.watchlist ||= {};
-  counters.watchlist.compactWindow = state.runtime.compactWindow;
-  state.runtime.confirmTxCarryByMint ||= {};
-  const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
-    state.runtime.compactWindow ||= {};
-    const cw = state.runtime.compactWindow;
-    const tMs = Number(opts?.tMs || Date.now());
-    const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-    const cutoff = tMs - retainMs;
-    const ensureArr = (k) => {
-      cw[k] ||= [];
-      return cw[k];
-    };
-    const pushTs = (k) => {
-      const arr = ensureArr(k);
-      arr.push(tMs);
-      while (arr.length && Number(arr[0] || 0) < cutoff) arr.shift();
-    };
-    const pushObj = (k, obj) => {
-      const arr = ensureArr(k);
-      arr.push({ tMs, ...(obj || {}) });
-      while (arr.length && Number(arr[0]?.tMs || 0) < cutoff) arr.shift();
-    };
+  bootstrapCompactWindowState({ state, counters, cfg });
 
-    const tsKinds = new Set(['watchlistSeen', 'watchlistEvaluated', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill']);
-    if (tsKinds.has(kind)) return pushTs(kind);
-
-    if (kind === 'blocker') return pushObj('blockers', { reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') });
-    if (kind === 'momentumFailChecks') return pushObj('momentumFailChecks', { checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') });
-    if (kind === 'momentumLiq') return pushObj('momentumLiqValues', { liqUsd: Number(extra?.liqUsd || 0) });
-    if (kind === 'stalkableSeen') return pushObj('stalkableSeen', { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
-    if (kind === 'candidateSeen') return pushObj('candidateSeen', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-    if (kind === 'candidateRouteable') return pushObj('candidateRouteable', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
-    if (kind === 'candidateLiquiditySeen') return pushObj('candidateLiquiditySeen', { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
-    if (kind === 'scanCycle') return pushObj('scanCycles', extra || {});
-    if (kind === 'repeatSuppressed') return pushObj('repeatSuppressed', { mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
-    if (kind === 'momentumRecent') return pushObj('momentumRecent', extra || {});
-    if (kind === 'momentumScoreSample') return pushObj('momentumScoreSamples', extra || {});
-    if (kind === 'momentumInputSample') return pushObj('momentumInputSamples', extra || {});
-    if (kind === 'momentumAgeSample') return pushObj('momentumAgeSamples', extra || {});
-    if (kind === 'postMomentumFlow') return pushObj('postMomentumFlow', extra || {});
-  };
-
-  // Hydrate compact diagnostic window from durable diag events log for retro windows across restarts.
-  // Single source of truth: replay retained events from canonical diag stream (family logs are mirrors).
-  try {
-    const compactHasData = Array.isArray(counters?.watchlist?.compactWindow?.momentumAgeSamples)
-      && counters.watchlist.compactWindow.momentumAgeSamples.length > 0;
-    if (!compactHasData) {
-      const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-      const nowMsForHydrate = Date.now();
-      state.runtime.compactWindow = getCompactWindowForDiagRequest({
-        statePath: cfg.STATE_PATH,
-        mode: 'compact',
-        nowMs: nowMsForHydrate,
-        windowStartMs: nowMsForHydrate - retainMs,
-        retainMs,
-      });
-      counters.watchlist.compactWindow = state.runtime.compactWindow;
-    }
-  } catch {}
-  try {
-    const wlMints = state?.watchlist?.mints && typeof state.watchlist.mints === 'object' ? state.watchlist.mints : {};
-    for (const [mint, row] of Object.entries(wlMints)) {
-      const c = row?.meta?.confirmTxCarry || null;
-      if (c && Number(c?.atMs || 0) > 0) state.runtime.confirmTxCarryByMint[mint] = { ...c };
-    }
-  } catch {}
-
-  // Jupiter preflight: verify we can reach JUP and headers are accepted. If preflight fails
-  // mark Jupiter as unhealthy and hit the circuit so we avoid attempts that will fail.
-  if (JUP_SOURCE_PREFLIGHT_ENABLED) {
-    try {
-      const { jupiterPreflight } = await import('./providers/jupiter/client.mjs');
-      const pref = await jupiterPreflight();
-      state.marketData ||= {};
-      state.marketData.providers ||= {};
-      state.marketData.providers.jupiter ||= {};
-      if (!pref || !pref.ok) {
-        state.marketData.providers.jupiter.status = 'unhealthy';
-        const prefReason = String(pref?.reason || 'unknown');
-        pushDebug(state, { t: nowIso(), reason: `jupPreflightFailed(${safeMsg(prefReason)})` });
-        const parsed = parseJupQuoteFailure({ message: prefReason });
-        // Non-tradable token errors are candidate-quality issues, not system-risk circuit triggers.
-        if (parsed !== 'nonTradableMint') {
-          // hit circuit for Jupiter to avoid repeated failing attempts; use a short base cooldown.
-          circuitHit({ state, nowMs: Date.now(), dep: 'jup', note: `preflight(${prefReason})`, persist: () => saveState(cfg.STATE_PATH, state) });
-        }
-      } else {
-        state.marketData.providers.jupiter.status = 'ok';
-      }
-    } catch (e) {
-      pushDebug(state, { t: nowIso(), reason: `jupPreflightException(${safeMsg(e)})` });
-      circuitHit({ state, nowMs: Date.now(), dep: 'jup', note: `preflightException(${safeMsg(e)})`, persist: () => saveState(cfg.STATE_PATH, state) });
-    }
-  }
+  await runJupiterPreflight({
+    enabled: JUP_SOURCE_PREFLIGHT_ENABLED,
+    state,
+    nowIso,
+    safeMsg,
+    pushDebug,
+    parseJupQuoteFailure,
+    circuitHit,
+    persist: () => saveState(cfg.STATE_PATH, state),
+  });
 
 
   // Positions enforcement must not be starved by long scan lanes.
@@ -528,22 +445,16 @@ async function main() {
   // Graceful shutdown: persist state and close the local health listener so PM2 reloads
   // don't leave stale state or lingering sockets.
   let streamingProvider = null;
-  let _shuttingDown = false;
-  async function _shutdown(signal) {
-    if (_shuttingDown) return;
-    _shuttingDown = true;
-    console.warn('[shutdown] signal=' + signal);
-    try { clearAllTimers(globalTimers); } catch {}
-    try { saveState(cfg.STATE_PATH, state); } catch {}
-    try { streamingProvider?.stop?.(); } catch {}
-    try { birdEyeWs?.stop?.(); } catch {}
-    try { healthServer?.close(); } catch {}
-    try { const { closeTimescaleDB } = await import('./analytics/timeseries_db.mjs'); await closeTimescaleDB(); } catch {}
-    // Allow a brief tick for any in-flight I/O, then exit.
-    setTimeout(() => process.exit(0), 250).unref();
-  }
-  process.on('SIGTERM', () => { _shutdown('SIGTERM'); });
-  process.on('SIGINT', () => { _shutdown('SIGINT'); });
+  registerGracefulShutdown({
+    cfg,
+    state,
+    globalTimers,
+    clearAllTimers,
+    saveState,
+    birdEyeWs,
+    healthServer,
+    getStreamingProvider: () => streamingProvider,
+  });
 
   // Candidate source feed caches are owned by createCandidatePipeline below.
 

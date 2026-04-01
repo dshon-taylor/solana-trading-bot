@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PublicKey } from '@solana/web3.js';
+export { registerGracefulShutdown } from './stage_graceful_shutdown.mjs';
 
 const execFileAsync = promisify(execFile);
 
