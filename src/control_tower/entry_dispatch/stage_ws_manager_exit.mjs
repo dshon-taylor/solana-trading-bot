@@ -1,4 +1,4 @@
-import { saveState } from '../../core/state.mjs';
+import { saveState } from '../../persistence/state.mjs';
 
 export function bindWsManagerExitHandler({
   wsmgr,

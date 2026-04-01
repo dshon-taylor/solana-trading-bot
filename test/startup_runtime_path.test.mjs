@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { announceBootStatus, bootRuntimeContext } from '../src/control_tower/startup.mjs';
 
@@ -26,6 +28,23 @@ describe('startup runtime path', () => {
     expect(sent[2]).toContain(pub);
     expect(sent[2]).toContain('Base: SOL');
     expect(tgSetMyCommands).toHaveBeenCalledTimes(1);
+  });
+
+  it('startup/runtime boot path does not reference deprecated core module paths', () => {
+    const files = [
+      path.resolve('src/control_tower/startup/index.mjs'),
+      path.resolve('src/control_tower/startup/stage_boot_announce.mjs'),
+      path.resolve('src/control_tower/startup/stage_boot_runtime_context.mjs'),
+      path.resolve('src/control_tower/entry_dispatch/stage_ws_manager_exit.mjs'),
+    ];
+
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf8');
+      expect(text.includes('core/state.mjs')).toBe(false);
+      expect(text.includes('core/logger.mjs')).toBe(false);
+      expect(text.includes('core/metrics.mjs')).toBe(false);
+      expect(text.includes('core/fetch_retry.mjs')).toBe(false);
+    }
   });
 
   it('bootRuntimeContext executes startup/runtime wiring and returns context', async () => {
