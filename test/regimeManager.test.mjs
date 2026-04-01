@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import RegimeManager, { MODES } from '../src/services/regimeManager.mjs';
+import RegimeManager, { MODES } from '../src/trading/regimeManager.mjs';
 
 describe('regimeManager', () => {
   it('normalizes and computes bounded score', () => {

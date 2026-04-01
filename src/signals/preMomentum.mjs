@@ -1,5 +1,5 @@
 const cache = new Map();
-import hotQueue from '../services/hotQueue.mjs';
+import hotQueue from './hotQueue.mjs';
 // helper cache shim
 function cacheGet(k){ const r = cache.get(k); return r? r.v:undefined; }
 function cacheSet(k,v,ttlS){ cache.set(k,{v,expires: ttlS? Date.now()+ttlS*1000:null}); }

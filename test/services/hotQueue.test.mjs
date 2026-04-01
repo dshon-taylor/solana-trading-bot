@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import hotQueue from '../../src/services/hotQueue.mjs';
+import hotQueue from '../../src/signals/hotQueue.mjs';
 
 describe('services/hotQueue', () => {
   it('promote and demote', ()=>{

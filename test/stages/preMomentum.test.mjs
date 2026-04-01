@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {evaluatePreMomentum} from '../../src/stages/preMomentum.mjs';
+import {evaluatePreMomentum} from '../../src/signals/preMomentum.mjs';
 
 describe('stages/preMomentum', () => {
   it('tx burst promotes to HOT', ()=>{
