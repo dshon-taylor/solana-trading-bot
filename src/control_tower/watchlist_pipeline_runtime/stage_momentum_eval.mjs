@@ -32,8 +32,7 @@ export async function runMomentumEvalStage(ctx) {
 
   // Keep WS live for late-pipeline freshness (momentum/confirm/execution priority).
   try {
-    const wsSubTtlMs = Math.max(30_000, Number(process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS || 120_000));
-    cache.set(`birdeye:sub:${mint}`, true, Math.ceil(wsSubTtlMs / 1000));
+    cache.set(`birdeye:sub:${mint}`, true, Math.ceil(cfg.BIRDEYE_WATCHLIST_SUB_TTL_MS / 1000));
   } catch {}
 
   runtimeDeps.bumpWatchlistFunnel(counters, 'watchlistEvaluated', { nowMs });

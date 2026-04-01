@@ -139,7 +139,7 @@ export function summarizeConfigForBoot(cfg) {
   lines.push(`  conversionCanary: mode=${cfg.CONVERSION_CANARY_MODE} cooldownMs=${cfg.CONVERSION_CANARY_COOLDOWN_MS} tracePath=${cfg.CONVERSION_CANARY_TRACE_PATH} bypassMomentum=${cfg.CANARY_BYPASS_MOMENTUM ? 'on' : 'off'} until=${cfg.CANARY_BYPASS_MOMENTUM_UNTIL_ISO || 'n/a'} momoSamplePerMin=${cfg.CANARY_MOMO_FAIL_SAMPLE_PER_MIN} momoDiagWindowMin=${cfg.MOMENTUM_DIAG_WINDOW_MIN}`);
   lines.push(`  routeCache: enabled=${cfg.ROUTE_CACHE_ENABLED} ttlMs=${cfg.ROUTE_CACHE_TTL_MS} maxSize=${cfg.ROUTE_CACHE_MAX_SIZE}`);
   lines.push(`  reliability: pairCacheMaxAgeMs=${cfg.PAIR_CACHE_MAX_AGE_MS} adaptiveScanMaxMs=${cfg.SCAN_BACKOFF_MAX_MS}`);
-  lines.push(`  sources: mode=${cfg.SOURCE_MODE} qualityJupSampleN=${cfg.SOURCE_QUALITY_JUP_SAMPLE_N} qualityTrendingSampleN=${cfg.SOURCE_QUALITY_TRENDING_SAMPLE_N} qualityRequireQuoteable=${cfg.SOURCE_QUALITY_REQUIRE_JUP_QUOTEABLE} trendingEnabled=${cfg.TRENDING_ENABLED} trendingRefreshMs=${cfg.TRENDING_REFRESH_MS} birdeye=${cfg.BIRDEYE_LITE_ENABLED} rps=${cfg.BIRDEYE_LITE_MAX_RPS}`);
+  lines.push(`  sources: mode=${cfg.SOURCE_MODE} qualityJupSampleN=${cfg.SOURCE_QUALITY_JUP_SAMPLE_N} qualityTrendingSampleN=${cfg.SOURCE_QUALITY_TRENDING_SAMPLE_N} qualityRequireQuoteable=${cfg.SOURCE_QUALITY_REQUIRE_JUP_QUOTEABLE} trendingEnabled=${cfg.TRENDING_ENABLED} trendingRefreshMs=${cfg.TRENDING_REFRESH_MS} birdeye=${cfg.BIRDEYE_LITE_ENABLED} rps=${cfg.BIRDEYE_LITE_MAX_RPS} wsSubTtlMs=${cfg.BIRDEYE_WATCHLIST_SUB_TTL_MS}`);  
   lines.push(`  streaming: provider=${cfg.STREAMING_PROVIDER_MODE} laserEnabled=${cfg.LASERSTREAM_ENABLED} staging=${cfg.LASERSTREAM_STAGING_MODE} rollback=LASERSTREAM_ENABLED=false STREAMING_PROVIDER_MODE=existing`);
   lines.push(`  jup: tokenlist=${cfg.JUP_TOKENLIST_ENABLED} prefilter=${cfg.JUP_PREFILTER_ENABLED} amountUsd=${cfg.JUP_PREFILTER_AMOUNT_USD} altRoute(enabled=${cfg.ROUTE_ALT_ENABLED} minLiqUsd=${cfg.ROUTE_ALT_MIN_LIQ_USD} maxPiPct=${cfg.ROUTE_ALT_MAX_PRICE_IMPACT_PCT} raydium=${cfg.ROUTE_ALT_RAYDIUM_ENABLED})`);
   lines.push(`  circuit: enabled=${cfg.CIRCUIT_BREAKER_ENABLED} cooldownMs=${cfg.CIRCUIT_COOLDOWN_MS} fails(dex=${cfg.CIRCUIT_FAILS_DEX}, rpc=${cfg.CIRCUIT_FAILS_RPC}, jup=${cfg.CIRCUIT_FAILS_JUP})`);
@@ -373,6 +373,8 @@ export function getConfig() {
   // BirdEye lite caching and per-mint minimum interval (migration defaults)
   const BIRDEYE_LITE_CACHE_TTL_MS = Math.max(0, Number(process.env.BIRDEYE_LITE_CACHE_TTL_MS ?? 45_000));
   const BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS = Math.max(0, Number(process.env.BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS ?? 25_000));
+  // WS subscription TTL for late-pipeline mints (momentum/confirm/execution). 30 s floor.
+  const BIRDEYE_WATCHLIST_SUB_TTL_MS = Math.max(30_000, Number(process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS ?? 120_000));
   // Used for synchronous (bounded) entry price hydration when an otherwise-eligible entry is missing a safe snapshot.
   const BIRDEYE_ENTRY_FETCH_TIMEOUT_MS = Math.max(250, Number(process.env.BIRDEYE_ENTRY_FETCH_TIMEOUT_MS || 2500));
 
@@ -720,6 +722,7 @@ export function getConfig() {
     BIRDEYE_LITE_CHAIN,
     BIRDEYE_LITE_CACHE_TTL_MS,
     BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS,
+    BIRDEYE_WATCHLIST_SUB_TTL_MS,
     BIRDEYE_ENTRY_FETCH_TIMEOUT_MS,
     STREAMING_PROVIDER_MODE,
     LASERSTREAM_ENABLED,
