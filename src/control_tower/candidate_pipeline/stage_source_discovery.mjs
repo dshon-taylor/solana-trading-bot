@@ -5,7 +5,7 @@ import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { safeMsg } from '../../ai.mjs';
 import { nowIso } from '../../core/logger.mjs';
 import { bumpNoPairReason } from '../route_control.mjs';
-import cache from '../../global_cache.mjs';
+import cache from '../../lib/cache/global_cache.mjs';
 
 export async function runSourceDiscoveryStage({
   cfg,

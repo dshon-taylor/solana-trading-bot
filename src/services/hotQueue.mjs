@@ -1,4 +1,4 @@
-import cache from '../global_cache.mjs';
+import cache from '../lib/cache/global_cache.mjs';
 
 const DEFAULT = {
   HOT_TTL_MS: 5*60*1000,

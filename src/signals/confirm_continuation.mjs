@@ -1,4 +1,4 @@
-import sharedCache from '../global_cache.mjs';
+import sharedCache from '../lib/cache/global_cache.mjs';
 
 const DEFAULT_SLEEP_MS = 120;
 const DEFAULT_WS_FRESH_MS = 15_000;

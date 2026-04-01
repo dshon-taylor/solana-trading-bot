@@ -1,5 +1,5 @@
 import { fetchJsonWithRetry } from '../../core/fetch_retry.mjs';
-import cache from '../../global_cache.mjs';
+import cache from '../../lib/cache/global_cache.mjs';
 import { fetchJupTokenList } from '../jupiter/tokenlist.mjs';
 
 const BASE = 'https://public-api.birdeye.so';

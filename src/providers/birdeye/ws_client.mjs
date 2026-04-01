@@ -1,5 +1,5 @@
 import EventEmitter from 'events';
-import cache from '../../global_cache.mjs';
+import cache from '../../lib/cache/global_cache.mjs';
 
 const WS_URL = process.env.BIRDEYE_WS_URL || 'wss://public-api.birdeye.so/socket/solana';
 const API_KEY = process.env.BIRDEYE_API_KEY || '';

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import cache from '../global_cache.mjs';
+import cache from '../lib/cache/global_cache.mjs';
 import { getRugcheckReport, isTokenSafe } from '../providers/rugcheck.mjs';
 import { getSolBalanceLamports } from '../portfolio.mjs';
 import { passesBaseFilters, evaluateMomentumSignal } from '../strategy.mjs';

@@ -73,7 +73,7 @@ export function appendTrackSample(fp, row) {
   return true;
 }
 
-import { memoizeTTL, tokenBucket } from '../cache.mjs';
+import { memoizeTTL, tokenBucket } from '../lib/cache/memoize.mjs';
 
 const jupPriceMemo = memoizeTTL(async (mint) => await jupPriceUsd(mint), 15_000);
 const dexscreenerMemo = memoizeTTL(async (mint) => {

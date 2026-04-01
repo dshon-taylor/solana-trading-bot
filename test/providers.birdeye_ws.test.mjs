@@ -1,5 +1,5 @@
 import birdeye from '../src/providers/birdeye/ws_client.mjs';
-import cache from '../src/global_cache.mjs';
+import cache from '../src/lib/cache/global_cache.mjs';
 import { describe, it, expect, afterAll } from 'vitest';
 
 describe('birdeye_ws manager', ()=>{
