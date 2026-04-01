@@ -1228,10 +1228,26 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const chokePct = cumEvaluated > 0 ? ((chokeCount / cumEvaluated) * 100) : 0;
         const repeatSuppressed = Number(counters?.watchlist?.momentumRepeatFailSuppressed||0);
         const freshnessSourceCounts = { ws: 0, snapshot: 0, unknown: 0 };
+        const freshnessUnknownReasonCounts = { missingTelemetry: 0, inferredFromWs: 0, inferredFromSnapshot: 0 };
         const freshnessGateValues = [];
         const snapshotLagValues = [];
         for (const c of momentumCandidates) {
-          const fs = String(c?.freshnessSourceForMicroGate || 'unknown');
+          const fsRaw = String(c?.freshnessSourceForMicroGate || 'unknown');
+          const wsFresh = Number(c?.wsFreshnessMs ?? NaN);
+          const snapFresh = Number(c?.freshnessMs ?? NaN);
+          let fs = fsRaw;
+          if (fs !== 'ws' && fs !== 'snapshot') {
+            if (Number.isFinite(wsFresh) && wsFresh >= 0) {
+              fs = 'ws';
+              freshnessUnknownReasonCounts.inferredFromWs += 1;
+            } else if (Number.isFinite(snapFresh) && snapFresh >= 0) {
+              fs = 'snapshot';
+              freshnessUnknownReasonCounts.inferredFromSnapshot += 1;
+            } else {
+              fs = 'unknown';
+              freshnessUnknownReasonCounts.missingTelemetry += 1;
+            }
+          }
           if (fs === 'ws') freshnessSourceCounts.ws += 1;
           else if (fs === 'snapshot') freshnessSourceCounts.snapshot += 1;
           else freshnessSourceCounts.unknown += 1;
@@ -1324,6 +1340,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           strongestPassedMomentumRows,
           liqBandM,
           freshnessSourceCounts,
+          freshnessUnknownReasonCounts,
           medianFreshnessForGateMs,
           medianSnapshotLagOverWsMs,
           repeatSuppressed,
