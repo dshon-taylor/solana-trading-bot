@@ -10,9 +10,9 @@ import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './reconcile_positions.mjs';
 import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './wallet.mjs';
 import { makeConnection, getSolBalanceLamports, getSplBalance, getTokenHoldingsByMint } from './portfolio.mjs';
-import { getTokenPairs, pickBestPair } from './dexscreener.mjs';
-import { getRugcheckReport, isTokenSafe } from './rugcheck.mjs';
-import { getTokenSupply } from './helius.mjs';
+import { getTokenPairs, pickBestPair } from './providers/dexscreener.mjs';
+import { getRugcheckReport, isTokenSafe } from './providers/rugcheck.mjs';
+import { getTokenSupply } from './providers/helius.mjs';
 import { passesBaseFilters, evaluateMomentumSignal, canUseMomentumFallback } from './strategy.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
 import { nowIso, safeErr } from './core/logger.mjs';
@@ -25,20 +25,20 @@ import { pushDebug } from './observability/debug_buffer.mjs';
 import { safeMsg } from './ai.mjs';
 import { getModels, preprocessCandidate, analyzeTrade, gatekeep } from './ai_pipeline.mjs';
 import { appendCost, estimateCostUsd, parseRange, readLedger, summarize } from './cost.mjs';
-import { jupQuote } from './jupiter.mjs';
+import { jupQuote } from './providers/jupiter/client.mjs';
 import { autoTuneFilters } from './autotune.mjs';
 import { logCandidateDaily, appendJsonl } from './candidates_ledger.mjs';
 import { ensureDexState, getDexCooldownUntilMs, hitDex429, isDexScreener429 } from './dex_cooldown.mjs';
 import { ensureMarketDataState, computeAdaptiveScanDelayMs, getCachedPairSnapshot } from './market_data_reliability.mjs';
 import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isStopSnapshotUsable, getSnapshotStatus, snapshotFromBirdseye, formatMarketDataProviderSummary, markMarketDataRejectImpact } from './market_data_router.mjs';
-import { hitJup429, isJup429, jupCooldownRemainingMs } from './jup_cooldown.mjs';
+import { hitJup429, isJup429, jupCooldownRemainingMs } from './providers/jupiter/cooldown.mjs';
 import { maybeAlivePing } from './observability/alive_ping.mjs';
 import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './circuit_breaker.mjs';
 import { maybePruneJsonlByAge, maybeRotateBySize } from './ledger_retention.mjs';
 import { ensureCapitalGuardrailsState, canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from './capital_guardrails.mjs';
 import { ensurePlaybookState, recordPlaybookRestart, recordPlaybookError, evaluatePlaybook, runSelfRecovery, PLAYBOOK_MODE_DEGRADED } from './observability/incident_playbook.mjs';
-import { createStreamingProvider } from './streaming_provider.mjs';
-import { createBirdseyeLiteClient } from './birdeye_lite.mjs';
+import { createStreamingProvider } from './providers/streaming_provider.mjs';
+import { createBirdseyeLiteClient } from './providers/birdeye/http_client.mjs';
 import { didEntryFill } from './entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
@@ -101,7 +101,7 @@ import {
   conservativeExitMark,
 } from './control_tower/position_policy.mjs';
 import cache from './global_cache.mjs';
-import birdEyeWs from './providers/birdeye_ws.mjs';
+import birdEyeWs from './providers/birdeye/ws_client.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const wsmgr = require('../../src/services/wsSubscriptionManager.js');
@@ -819,7 +819,7 @@ async function main() {
   // mark Jupiter as unhealthy and hit the circuit so we avoid attempts that will fail.
   if (JUP_SOURCE_PREFLIGHT_ENABLED) {
     try {
-      const { jupiterPreflight } = await import('./jupiter.mjs');
+      const { jupiterPreflight } = await import('./providers/jupiter/client.mjs');
       const pref = await jupiterPreflight();
       state.marketData ||= {};
       state.marketData.providers ||= {};

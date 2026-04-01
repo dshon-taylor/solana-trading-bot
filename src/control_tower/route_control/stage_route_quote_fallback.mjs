@@ -1,8 +1,8 @@
-import { jupQuote } from '../../jupiter.mjs';
-import { getTokenPairs, pickBestPair } from '../../dexscreener.mjs';
-import { getRaydiumPools, pickBestRaydiumPool } from '../../raydium.mjs';
+import { jupQuote } from '../../providers/jupiter/client.mjs';
+import { getTokenPairs, pickBestPair } from '../../providers/dexscreener.mjs';
+import { getRaydiumPools, pickBestRaydiumPool } from '../../providers/raydium.mjs';
 import { isDexScreener429 } from '../../dex_cooldown.mjs';
-import { isJup429 } from '../../jup_cooldown.mjs';
+import { isJup429 } from '../../providers/jupiter/cooldown.mjs';
 
 export function parseJupQuoteFailure(err) {
   const msg = String(err?.message || '').toUpperCase();

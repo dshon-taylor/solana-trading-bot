@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { jupPriceUsd } from './jup_price.mjs';
-import { getTokenPairs, pickBestPair } from './dexscreener.mjs';
+import { jupPriceUsd } from './providers/jupiter/price.mjs';
+import { getTokenPairs, pickBestPair } from './providers/dexscreener.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from './trader.mjs';
 import { getSolBalanceLamports } from './portfolio.mjs';
 import { simulateStops } from './track_sim.mjs';

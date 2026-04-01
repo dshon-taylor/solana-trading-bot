@@ -1,4 +1,4 @@
-import { fetchJsonWithRetry } from './core/fetch_retry.mjs';
+import { fetchJsonWithRetry } from '../../core/fetch_retry.mjs';
 
 const API_KEY = process.env.JUPITER_API_KEY || '';
 const API_BASE = API_KEY ? 'https://api.jup.ag/swap/v1' : 'https://lite-api.jup.ag/swap/v1';

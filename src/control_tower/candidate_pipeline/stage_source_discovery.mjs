@@ -1,4 +1,4 @@
-import { getBoostedTokens } from '../../dexscreener.mjs';
+import { getBoostedTokens } from '../../providers/dexscreener.mjs';
 import { circuitClear, circuitHit } from '../../circuit_breaker.mjs';
 import { hitDex429, isDexScreener429 } from '../../dex_cooldown.mjs';
 import { pushDebug } from '../../observability/debug_buffer.mjs';

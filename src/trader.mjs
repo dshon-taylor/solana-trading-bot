@@ -1,5 +1,5 @@
 import { VersionedTransaction, PublicKey } from '@solana/web3.js';
-import { jupQuote, jupSwap } from './jupiter.mjs';
+import { jupQuote, jupSwap } from './providers/jupiter/client.mjs';
 
 export const DECIMALS = {
   // Solana mainnet USDC

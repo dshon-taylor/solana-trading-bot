@@ -1,4 +1,4 @@
-import birdeye from '../src/providers/birdeye_ws.mjs';
+import birdeye from '../src/providers/birdeye/ws_client.mjs';
 import cache from '../src/global_cache.mjs';
 import { describe, it, expect, afterAll } from 'vitest';
 

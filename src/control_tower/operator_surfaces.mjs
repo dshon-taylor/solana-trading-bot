@@ -2,7 +2,7 @@ import { estimateEquityUsd } from './portfolio_control.mjs';
 import { getTokenHoldingsByMint } from '../portfolio.mjs';
 import { positionCount } from './position_policy.mjs';
 import { isPaperModeActive } from './route_control.mjs';
-import { jupCooldownRemainingMs } from '../jup_cooldown.mjs';
+import { jupCooldownRemainingMs } from '../providers/jupiter/cooldown.mjs';
 import { formatTrackerIngestionSummary } from '../tracker.mjs';
 import { getLastDebug } from '../observability/debug_buffer.mjs';
 import { getModels } from '../ai_pipeline.mjs';

@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import cache from '../global_cache.mjs';
-import { getRugcheckReport, isTokenSafe } from '../rugcheck.mjs';
+import { getRugcheckReport, isTokenSafe } from '../providers/rugcheck.mjs';
 import { getSolBalanceLamports } from '../portfolio.mjs';
 import { passesBaseFilters, evaluateMomentumSignal } from '../strategy.mjs';
 import { paperComputeMomentumWindows } from '../paper_momentum.mjs';
@@ -11,7 +11,7 @@ import { bump, bumpWatchlistFunnel } from '../core/metrics.mjs';
 import { pushDebug } from '../observability/debug_buffer.mjs';
 import { safeMsg } from '../ai.mjs';
 import { appendJsonl } from '../candidates_ledger.mjs';
-import { jupQuote } from '../jupiter.mjs';
+import { jupQuote } from '../providers/jupiter/client.mjs';
 import { saveState } from '../core/state.mjs';
 import { getSnapshotStatus, isEntrySnapshotSafe, getWatchlistEntrySnapshotUnsafeReason, snapshotFromBirdseye } from '../market_data_router.mjs';
 import { canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from '../capital_guardrails.mjs';

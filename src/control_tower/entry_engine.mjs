@@ -1,6 +1,6 @@
 import cache from '../global_cache.mjs';
-import { getConcentrationMetrics } from '../rugcheck.mjs';
-import { getTokenSupply } from '../helius.mjs';
+import { getConcentrationMetrics } from '../providers/rugcheck.mjs';
+import { getTokenSupply } from '../providers/helius.mjs';
 import { executeSwap, toBaseUnits, DECIMALS } from '../trader.mjs';
 import { appendTradingLog, nowIso } from '../core/logger.mjs';
 import { tgSend } from '../telegram/index.mjs';

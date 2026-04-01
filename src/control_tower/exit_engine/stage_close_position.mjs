@@ -1,5 +1,5 @@
 import { getSplBalance } from '../../portfolio.mjs';
-import { getTokenSupply } from '../../helius.mjs';
+import { getTokenSupply } from '../../providers/helius.mjs';
 import { executeSwap } from '../../trader.mjs';
 import { appendTradingLog, nowIso } from '../../core/logger.mjs';
 import { tgSend } from '../../telegram/index.mjs';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createBirdseyeLiteClient } from '../src/birdeye_lite.mjs';
+import { createBirdseyeLiteClient } from '../src/providers/birdeye/http_client.mjs';
 
 function makeFetchMock() {
   const fn = vi.fn(async () => ({

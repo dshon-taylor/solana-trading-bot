@@ -1,4 +1,4 @@
-import { jupPriceUsd } from './jup_price.mjs';
+import { jupPriceUsd } from './providers/jupiter/price.mjs';
 import { validateSnapshot, computeConfidence as validatorComputeConfidence } from './lib/snapshot/validators.mjs';
 import cache from './global_cache.mjs';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createLaserstreamDevnetClient } from '../src/laserstream_devnet.mjs';
+import { createLaserstreamDevnetClient } from '../src/providers/laserstream_devnet.mjs';
 
 class FakeSocket {
   constructor() {
