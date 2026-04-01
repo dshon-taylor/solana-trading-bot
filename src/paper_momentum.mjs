@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { computeTrailPct } from './lib/trailing.mjs';
-import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
+import { computeTrailPct } from './signals/trailing.mjs';
+import { computePreTrailStopPrice } from './signals/stop_policy.mjs';
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });

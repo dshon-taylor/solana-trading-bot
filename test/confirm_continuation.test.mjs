@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { confirmContinuationGate } from '../src/lib/confirm_continuation.mjs';
+import { confirmContinuationGate } from '../src/signals/confirm_continuation.mjs';
 
 class FakeCache {
   constructor({ wsSeq = [], txSeq = [] } = {}) {

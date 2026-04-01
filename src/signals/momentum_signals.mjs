@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { toNumber, toPositiveNumber } from './normalize.mjs';
+import { toNumber, toPositiveNumber } from '../lib/normalize.mjs';
 
 const env = process.env;
 export const DEFAULTS = {

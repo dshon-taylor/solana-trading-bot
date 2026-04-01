@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../src/lib/trailing.mjs';
+import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../src/signals/trailing.mjs';
 
 describe('trailing', () => {
   it('computeTrailPct tiers', () => {

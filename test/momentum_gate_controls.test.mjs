@@ -4,7 +4,7 @@ import {
   applyMomentumPassHysteresis,
   getCachedMintCreatedAt,
   scheduleMintCreatedAtLookup,
-} from '../src/lib/momentum_gate_controls.mjs';
+} from '../src/signals/momentum_gate_controls.mjs';
 
 describe('momentum_gate_controls', () => {
   describe('isMicroFreshEnough', () => {

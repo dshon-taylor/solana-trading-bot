@@ -1,4 +1,4 @@
-import { computeBirdEyeSignals, fetchPaperMetricsFromBirdEye, DEFAULTS } from '../lib/momentum_signals.mjs';
+import { computeBirdEyeSignals, fetchPaperMetricsFromBirdEye, DEFAULTS } from '../signals/momentum_signals.mjs';
 
 export function hoursSince(msEpoch) {
   return (Date.now() - msEpoch) / 1000 / 3600;
