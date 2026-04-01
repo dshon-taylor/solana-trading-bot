@@ -50,11 +50,12 @@ export function createBirdseyeLiteClient({
   const minIntervalMs = Math.max(1, Math.ceil(1000 / Math.max(1, Number(maxRps || 15))));
   let lastAtMs = 0;
 
-  const cache = new Map();
+  const snapCache = new Map();
 
   const stats = {
     cacheHits: 0,
     cacheMisses: 0,
+    wsBypassCount: 0,
     fetches: 0,
     fetchAtMs: [], // rolling timestamps (ms)
   };
@@ -233,7 +234,7 @@ export function createBirdseyeLiteClient({
     if (!key) return null;
 
     const nowMs = Date.now();
-    const entry = cache.get(key) || null;
+    const entry = snapCache.get(key) || null;
     const cached = entry?.snapshot || null;
 
     if (cached && ttlMs > 0) {
@@ -302,6 +303,52 @@ export function createBirdseyeLiteClient({
       }
     }
 
+    // WS fast path: if WS data is fresh enough, skip REST entirely (zero CU churn).
+    // Env: BIRDEYE_WS_FRESHNESS_BYPASS_MS (default 10 s). Set to 0 to disable.
+    const wsFastPathMs = Math.max(0, Number(process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS ?? 10_000));
+    if (wsFastPathMs > 0) {
+      const ws = wsDerivedForMint(key);
+      if (ws && ws.priceUsd > 0) {
+        const wsAgeMs = Math.max(0, nowMs - Number(ws.atMs || 0));
+        if (wsAgeMs <= wsFastPathMs) {
+          stats.cacheHits += 1;
+          stats.wsBypassCount += 1;
+          return {
+            source: 'birdeye_ws',
+            atMs: ws.atMs,
+            observedAtMs: nowMs,
+            priceUsd: ws.priceUsd,
+            liquidityUsd: cached?.liquidityUsd ?? null,
+            marketCapUsd: cached?.marketCapUsd ?? null,
+            fdvUsd: cached?.fdvUsd ?? null,
+            txns: {
+              ...(cached?.txns || {}),
+              h1: {
+                buys: Number(ws.tx_1h || 0),
+                sells: Number(ws.tx_1h || 0) > 0
+                  ? Math.max(0, Math.round(Number(ws.tx_1h) / Math.max(1, Number(ws.buySellRatio || 1))))
+                  : 0,
+              },
+            },
+            volume: { ...(cached?.volume || {}), h1: Number(ws.volume_5m || 0) * 12 },
+            volume_5m: ws.volume_5m,
+            volume_30m_avg: ws.volume_30m_avg,
+            raw: {
+              ...(cached?.raw || {}),
+              volume_5m: ws.volume_5m,
+              volume_30m_avg: ws.volume_30m_avg,
+              tx_1m: ws.tx_1m,
+              tx_5m_avg: ws.tx_5m_avg,
+              tx_30m_avg: ws.tx_30m_avg,
+              tx_1h: ws.tx_1h,
+              rolling_high_5m: ws.rolling_high_5m,
+              buySellRatio: ws.buySellRatio,
+            },
+          };
+        }
+      }
+    }
+
     stats.cacheMisses += 1;
 
     // Record intent to fetch now so concurrent callers don't all burst.
@@ -310,12 +357,12 @@ export function createBirdseyeLiteClient({
       cachedAtMs: Number(entry?.cachedAtMs || 0),
       lastFetchAtMs: nowMs,
     };
-    cache.set(key, nextEntry);
+    snapCache.set(key, nextEntry);
 
     const snap = await fetchTokenSnapshot(key);
     if (!snap) return cached;
 
-    cache.set(key, {
+    snapCache.set(key, {
       snapshot: snap,
       cachedAtMs: Date.now(),
       lastFetchAtMs: Date.now(),
@@ -411,9 +458,10 @@ export function createBirdseyeLiteClient({
       enabled: isEnabled,
       ttlMs,
       perMintMinIntervalMs: minMintIntervalMs,
-      cacheSize: cache.size,
+      cacheSize: snapCache.size,
       cacheHits: hits,
       cacheMisses: misses,
+      wsBypassCount: Number(stats.wsBypassCount || 0),
       cacheHitRate: lookups > 0 ? hits / lookups : null,
       fetches: Number(stats.fetches || 0),
       fetchPerMin,

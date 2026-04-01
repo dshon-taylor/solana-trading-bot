@@ -31,8 +31,11 @@ export async function runMomentumEvalStage(ctx) {
   } = runtimeDeps;
 
   // Keep WS live for late-pipeline freshness (momentum/confirm/execution priority).
+  // Priority key guarantees this mint gets a WS slot before any early-pipeline candidate.
   try {
-    cache.set(`birdeye:sub:${mint}`, true, Math.ceil(cfg.BIRDEYE_WATCHLIST_SUB_TTL_MS / 1000));
+    const subTtlSec = Math.ceil(cfg.BIRDEYE_WATCHLIST_SUB_TTL_MS / 1000);
+    cache.set(`birdeye:sub:${mint}`, true, subTtlSec);
+    cache.set(`birdeye:sub:priority:${mint}`, true, subTtlSec);
   } catch {}
 
   runtimeDeps.bumpWatchlistFunnel(counters, 'watchlistEvaluated', { nowMs });

@@ -26,7 +26,10 @@ module.exports = {
         BIRDEYE_WS_TRAILING_CONFIRM_MS: process.env.BIRDEYE_WS_TRAILING_CONFIRM_MS||'300',
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: process.env.BIRDEYE_WS_IMPACT_THRESHOLD_PCT||'3',
         BIRDEYE_SUB_POLL_MS: process.env.BIRDEYE_SUB_POLL_MS||'500',
-        BIRDEYE_WATCHLIST_SUB_TTL_MS: process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS||'120000'
+        BIRDEYE_WATCHLIST_SUB_TTL_MS: process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS||'120000',
+        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'500',
+        BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
+        BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000'
       },
 
       env_file: '/home/dshontaylor/.openclaw/workspace/trading-bot/.env',

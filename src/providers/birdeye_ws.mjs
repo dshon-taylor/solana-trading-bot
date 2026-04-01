@@ -112,15 +112,36 @@ class BirdEyeWS extends EventEmitter {
   }
 
   _syncSubscriptions() {
-    const entries = cache.entries('birdeye:sub:');
-    const desiredRaw = entries.map(([k]) => String(k).replace(/^birdeye:sub:/, '')).filter(Boolean);
-    const desired = new Set(desiredRaw.slice(0, 100));
+    // Max WS subscriptions (Birdeye supports 500 concurrent connections).
+    const WS_MAX_SUBS = Math.max(10, Number(process.env.BIRDEYE_WS_MAX_SUBS || 500));
+
+    // Priority tier: late-pipeline mints (momentum/confirm/execution).
+    // These always get first slot allocation so they're never crowded out by early-pipeline mints.
+    const priorityEntries = cache.entries('birdeye:sub:priority:');
+    const priorityMints = priorityEntries
+      .map(([k]) => String(k).replace(/^birdeye:sub:priority:/, '').trim())
+      .filter(Boolean);
+
+    // Regular tier: early-pipeline mints (discovery/shortlist).
+    // Filter out priority: keys that slipped in via the broader birdeye:sub: prefix match.
+    const regularEntries = cache.entries('birdeye:sub:');
+    const regularMints = regularEntries
+      .map(([k]) => String(k).replace(/^birdeye:sub:/, '').trim())
+      .filter((m) => Boolean(m) && !m.startsWith('priority:'));
+
+    // Combine: priority first, then fill remaining capacity with regular mints.
+    const prioritySet = new Set(priorityMints.slice(0, WS_MAX_SUBS));
+    const remainingSlots = Math.max(0, WS_MAX_SUBS - prioritySet.size);
+    const desiredArr = [
+      ...Array.from(prioritySet),
+      ...regularMints.filter((m) => !prioritySet.has(m)).slice(0, remainingSlots),
+    ].sort();
+    const desired = new Set(desiredArr);
     this.desired = desired;
+    this.subscribed = new Set(desiredArr);
 
     // BirdEye WS keeps one active subscription per message type.
     // Use complex queries that include the full desired set instead of per-mint simple messages.
-    const desiredArr = Array.from(desired).sort();
-    this.subscribed = new Set(desiredArr);
     const sig = desiredArr.join(',');
     const nowMs = Date.now();
     const changed = sig !== this._lastSubSig;
@@ -244,12 +265,14 @@ class BirdEyeWS extends EventEmitter {
   }
 
   getStatus() {
+    const priorityEntries = cache.entries('birdeye:sub:priority:');
     return {
       enabled: ENABLED,
       status: this.status,
       subscribedCount: this.subscribed.size,
       desiredCount: this.desired.size,
-      subscriptionMode: 'complex_bulk',
+      priorityCount: priorityEntries.length,
+      subscriptionMode: 'complex_bulk_tiered',
       lastSubSentAtMs: this._lastSubSentAtMs || 0,
       url: WS_URL,
     };

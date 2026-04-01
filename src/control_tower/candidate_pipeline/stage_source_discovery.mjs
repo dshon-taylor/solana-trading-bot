@@ -5,6 +5,7 @@ import { pushDebug } from '../../debug_buffer.mjs';
 import { safeMsg } from '../../ai.mjs';
 import { nowIso } from '../../logger.mjs';
 import { bumpNoPairReason } from '../route_control.mjs';
+import cache from '../../global_cache.mjs';
 
 export async function runSourceDiscoveryStage({
   cfg,
@@ -73,6 +74,7 @@ export async function runSourceDiscoveryStage({
       }
 
       const wlMints = state?.watchlist?.mints && typeof state.watchlist.mints === 'object' ? state.watchlist.mints : {};
+      const earlySubTtlSec = Math.max(30, Math.floor(Number(process.env.BIRDEYE_EARLY_SUB_TTL_MS || 90_000) / 1000));
       const appendRows = (rows, source, sampleN) => {
         const n = Math.max(0, Math.min(Number(sampleN || 0), Number(rows?.length || 0)));
         for (const row of (rows || []).slice(0, n)) {
@@ -85,6 +87,8 @@ export async function runSourceDiscoveryStage({
             rank: Number(row.rank || 0),
             _source: source,
           });
+          // Pre-subscribe to BirdEye WS early so data accumulates before momentum eval.
+          try { cache.set(`birdeye:sub:${row.mint}`, true, earlySubTtlSec); } catch {}
         }
       };
       appendRows(cacheState.trendingTokens, 'trending', Number(cfg.SOURCE_QUALITY_TRENDING_SAMPLE_N || 10));
