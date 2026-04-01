@@ -37,7 +37,7 @@ import { didEntryFill } from './trading/entry_reliability.mjs';
 import createWatchlistPipeline from './control_tower/watchlist_pipeline.mjs';
 import { openPosition, processExposureQueue } from './control_tower/entry_engine.mjs';
 import createExitEngine from './control_tower/exit_engine.mjs';
-import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions } from './control_tower/portfolio_control.mjs';
+import { shouldStopPortfolio, reconcilePositions, syncExposureStateWithPositions, enforcePortfolioStopGate } from './control_tower/portfolio_control.mjs';
 import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_tower/ops_reporting.mjs';
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
@@ -68,6 +68,7 @@ import {
   initializeTimescaleDbIfEnabled,
   initializeRuntimeState,
   createMainLoopState,
+  runMaintenanceChores,
 } from './control_tower/runtime_helpers.mjs';
 import { setupBirdEyeWsGlue, initBirdEyeRuntimeListeners } from './control_tower/ws_runtime_bootstrap.mjs';
 import {
@@ -305,7 +306,7 @@ async function main() {
 
   // Positions enforcement must not be starved by long scan lanes.
   // runPositionsLoop is extracted to positions_loop.mjs; lastPosRef shared across all positions check blocks.
-  const { runPositionsLoop } = createPositionsLoop({
+  const { runPositionsLoop, runManualForceClose } = createPositionsLoop({
     cfg, state, cache, conn, wallet, birdseye,
     lastPosRef,
     closePosition, updateStops, tgSend, saveState, pushDebug, nowIso,
@@ -435,7 +436,7 @@ async function main() {
   // Initialize TimescaleDB for historical data persistence
   initializeTimescaleDbIfEnabled();
 
-  let lastRpcAlertAt = 0;
+  const lastRpcAlertRef = { value: 0 };
   let lastLowSolAlertAt = 0;
   let lastReconcileAt = 0;
 
@@ -647,287 +648,44 @@ async function main() {
     }
 
     // Manual force-close latch (handled early so scan-lane continues can't starve it).
-    state.runtime ||= {};
-    if (state.flags?.forceCloseMint) {
-      state.runtime.forceCloseMint = String(state.flags.forceCloseMint || '').trim() || null;
-      delete state.flags.forceCloseMint;
-      saveState(cfg.STATE_PATH, state);
-    }
-    if (state.runtime?.forceCloseMint) {
-      const mint = String(state.runtime.forceCloseMint || '').trim();
-      const pos = mint ? state.positions?.[mint] : null;
-      if (!mint || !pos || pos.status !== 'open') {
-        delete state.runtime.forceCloseMint;
-        saveState(cfg.STATE_PATH, state);
-      } else {
-        const lastTryMs = Number(pos._forceCloseLastTryAtMs || 0);
-        if ((t - lastTryMs) >= 10_000) {
-          pos._forceCloseLastTryAtMs = t;
-          try {
-            const pair = { baseToken: { symbol: pos?.symbol || null }, priceUsd: Number(pos?.lastSeenPriceUsd || pos?.entryPriceUsd || 0), url: pos?.pairUrl || null };
-            await closePosition(cfg, conn, wallet, state, mint, pair, 'manual force close');
-            if (state.positions?.[mint]?.status === 'closed') {
-              delete state.runtime.forceCloseMint;
-              await tgSend(cfg, `🛑 Manual force-close executed for ${pos?.symbol || mint.slice(0,6)+'…'} (${mint}).`);
-            }
-            saveState(cfg.STATE_PATH, state);
-          } catch (e) {
-            pos._forceCloseLastErrAtMs = t;
-            pos._forceCloseLastErr = safeErr(e).message;
-            saveState(cfg.STATE_PATH, state);
-          }
-        }
-      }
-    }
+    await runManualForceClose(t);
 
     // Check positions for exits (run early so scan-lane continues can't starve exits)
     if (t - lastPosRef.value >= cfg.POSITIONS_EVERY_MS) {
-      lastPosRef.value = t;
-
-      for (const [mint, pos] of Object.entries(state.positions)) {
-        if (pos.status !== 'open') continue;
-
-        // Streaming-first stop enforcement: use fresh BirdEye WS tick immediately.
-        try {
-          const ws = cache.get(`birdeye:ws:price:${mint}`) || null;
-          const wsTs = Number(ws?.tsMs || 0);
-          const wsPrice = Number(ws?.priceUsd || 0);
-          const wsFresh = wsTs > 0 && (Date.now() - wsTs) <= 15_000;
-          if (wsFresh && wsPrice > 0 && Number.isFinite(Number(pos.stopPriceUsd)) && conservativeExitMark(wsPrice, pos, null, cfg) <= Number(pos.stopPriceUsd)) {
-            const pairWs = { baseToken: { symbol: pos?.symbol || null }, priceUsd: wsPrice, url: pos?.pairUrl || null };
-            const r = pos.trailingActive
-              ? `trailing stop hit @ ${wsPrice.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (ws)`
-              : `stop hit @ ${wsPrice.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (ws)`;
-            await closePosition(cfg, conn, wallet, state, mint, pairWs, r);
-            saveState(cfg.STATE_PATH, state);
-            continue;
-          }
-        } catch {}
-
-        const snapshot = await getMarketSnapshot({
-          state,
-          mint,
-          nowMs: t,
-          maxAgeMs: cfg.PAIR_CACHE_MAX_AGE_MS,
-          getTokenPairs,
-          pickBestPair,
-          birdeyeEnabled: birdseye?.enabled,
-          getBirdseyeSnapshot: birdseye?.getTokenSnapshot,
-        });
-        let effectiveSnapshot = snapshot;
-        if (!effectiveSnapshot?.priceUsd || !isStopSnapshotUsable(effectiveSnapshot)) {
-          try {
-            const pairsFallback = await getTokenPairs(mint);
-            const bestFallback = pickBestPair(pairsFallback);
-            const pxFallback = Number(bestFallback?.priceUsd || 0);
-            if (pxFallback > 0) {
-              effectiveSnapshot = {
-                source: 'dex_fallback',
-                confidence: 'low',
-                freshnessMs: 0,
-                priceUsd: pxFallback,
-                pair: bestFallback,
-              };
-            }
-          } catch {}
-        }
-        if (!effectiveSnapshot?.priceUsd) {
-          pushDebug(state, {
-            t: nowIso(),
-            mint,
-            symbol: pos?.symbol || null,
-            reason: `positionsMarketData(skip src=${snapshot?.source || 'none'} conf=${snapshot?.confidence || 'none'} freshMs=${snapshot?.freshnessMs ?? 'n/a'})`,
-          });
-          continue;
-        }
-        const pair = effectiveSnapshot?.pair || { baseToken: { symbol: pos?.symbol || null }, priceUsd: effectiveSnapshot.priceUsd };
-        const priceUsd = Number(effectiveSnapshot.priceUsd);
-
-        // Stop has priority over time-stop labeling.
-        if (Number.isFinite(Number(pos.stopPriceUsd)) && conservativeExitMark(priceUsd, pos, effectiveSnapshot, cfg) <= Number(pos.stopPriceUsd)) {
-          const r = pos.trailingActive
-            ? `trailing stop hit @ ${priceUsd.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (cycle_reconcile)`
-            : `stop hit @ ${priceUsd.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (cycle_reconcile)`;
-          await closePosition(cfg, conn, wallet, state, mint, pair, r);
-          saveState(cfg.STATE_PATH, state);
-          continue;
-        }
-
-        // Early failure kill: if still below entry after 60-90s, cut quickly.
-        try {
-          if (cfg.EARLY_FAILURE_KILL_ENABLED) {
-            const entryTs = Date.parse(pos.entryAt) || 0;
-            const entryPrice = Number(pos.entryPriceUsd || 0) || null;
-            if (entryTs && entryPrice && entryPrice > 0) {
-              if (!Number.isFinite(Number(pos.earlyFailureDeadlineMs))) {
-                const minMs = Number(cfg.EARLY_FAILURE_KILL_MIN_MS || 60_000);
-                const maxMs = Math.max(minMs, Number(cfg.EARLY_FAILURE_KILL_MAX_MS || 90_000));
-                const jitter = Math.floor(minMs + (Math.random() * (maxMs - minMs)));
-                pos.earlyFailureDeadlineMs = entryTs + jitter;
-              }
-              const deadlineMs = Number(pos.earlyFailureDeadlineMs || 0);
-              if (deadlineMs > 0 && Date.now() >= deadlineMs && priceUsd < entryPrice) {
-                await closePosition(cfg, conn, wallet, state, mint, pair, 'early-failure kill (below entry after 60-90s)');
-                saveState(cfg.STATE_PATH, state);
-                continue;
-              }
-            }
-          }
-        } catch {
-          // best-effort only; do not throw
-        }
-
-        // Secondary time-stop: after 4 minutes, if still weak (<+2%).
-        try {
-          const entryTs = Date.parse(pos.entryAt) || 0;
-          const ageMs = Date.now() - entryTs;
-          const entryPrice = Number(pos.entryPriceUsd || 0) || null;
-          const profitPct = (entryPrice && entryPrice > 0) ? ((priceUsd - entryPrice) / entryPrice) : null;
-          if (entryTs && ageMs >= (4 * 60_000) && (profitPct == null || profitPct < 0.02)) {
-            await closePosition(cfg, conn, wallet, state, mint, pair, 'time-stop weak momentum');
-            saveState(cfg.STATE_PATH, state);
-            continue;
-          }
-        } catch {
-          // best-effort only; do not throw
-        }
-
-        // Repair missing entry/stop fields if we opened a position without a valid entry snapshot.
-        if (!Number.isFinite(Number(pos.entryPriceUsd)) || Number(pos.entryPriceUsd) <= 0) {
-          pos.entryPriceUsd = priceUsd;
-          pos.peakPriceUsd = priceUsd;
-          pos.lastSeenPriceUsd = priceUsd;
-          pos.stopPriceUsd = priceUsd;
-          pos.lastStopUpdateAt = nowIso();
-          pos.note = (pos.note || '') + ` | repairedEntryPriceFromPriceFeed`;
-          const label = tokenDisplayName({ name: pos?.tokenName, symbol: pos?.symbol, mint });
-          await tgSend(cfg, `🛠️ Repaired missing entry price for ${label} using live price ${priceUsd.toFixed(6)}. New stop set to ${pos.stopPriceUsd.toFixed(6)}.`);
-          saveState(cfg.STATE_PATH, state);
-        }
-
-        const stopUpdate = await updateStops(cfg, state, mint, priceUsd);
-        if (stopUpdate.changed) {
-          await tgSend(cfg, [
-            `🟣 *TRAIL UPDATE* — ${tokenDisplayName({ name: pos?.tokenName, symbol: pos?.symbol, mint })}`,
-            '',
-            `• New stop: $${pos.stopPriceUsd.toFixed(6)}`,
-            `• Peak: $${pos.peakPriceUsd.toFixed(6)}`,
-          ].join('\n'));
-        }
-
-        if (conservativeExitMark(priceUsd, pos, effectiveSnapshot, cfg) <= pos.stopPriceUsd) {
-          const r = pos.trailingActive ? 'trailing stop hit' : 'stop loss hit';
-          await closePosition(cfg, conn, wallet, state, mint, pair, r);
-          saveState(cfg.STATE_PATH, state);
-        }
-      }
+      await runPositionsLoop(t);
     }
 
-    // Ledger hygiene (best-effort): prune/rotate JSONL so disks don't fill.
-    if (t - lastLedgerPruneAt > 6 * 60 * 60_000) {
-      lastLedgerPruneAt = t;
-      try {
-        const files = [
-          cfg.LEDGER_PATH,
-          cfg.TRADES_LEDGER_PATH,
-          './state/candidates.jsonl',
-          './state/paper_trades.jsonl',
-          './state/paper_live_attempts.jsonl',
-        ];
-        for (const fp of files) {
-          try {
-            maybeRotateBySize({ filePath: fp, maxBytes: cfg.JSONL_ROTATE_MAX_BYTES, nowMs: t });
-            maybePruneJsonlByAge({ filePath: fp, maxAgeDays: cfg.JSONL_RETENTION_DAYS, nowMs: t });
-          } catch {}
-        }
-        try {
-          const diagEventsPath = getDiagEventsPath(cfg.STATE_PATH);
-          maybeRotateBySize({ filePath: diagEventsPath, maxBytes: cfg.JSONL_ROTATE_MAX_BYTES, nowMs: t });
-          maybePruneJsonlByAge({ filePath: diagEventsPath, maxAgeDays: cfg.DIAG_RETENTION_DAYS, nowMs: t });
-        } catch {}
-      } catch {}
-    }
-
-    // Reconcile state positions with on-chain balances (helps sync after manual sells / RPC flakiness)
-    if (t - lastReconcileAt >= 60_000) {
-      lastReconcileAt = t;
-
-      let holdings = null;
-      try {
-        holdings = await getTokenHoldingsByMint(conn, pub);
-      } catch {
-        holdings = null;
-      }
-
-      for (const [mint, pos] of Object.entries(state.positions || {})) {
-        if (!pos) continue;
-        if (pos.status !== 'open' && pos.status !== 'closed') continue;
-
-        // Prefer full holdings map (covers TOKEN + TOKEN-2022). Fall back to per-mint balance.
-        let bal = null;
-        if (holdings) {
-          const amt = holdings.get(mint) || 0;
-          bal = { amount: amt, ata: null, source: 'holdings_map', fetchOk: true };
-        } else {
-          try {
-            bal = await getSplBalance(conn, pub, mint);
-          } catch {
-            continue;
-          }
-        }
-
-        applyOnchainBalanceToPosition({
-          pos,
-          bal,
-          nowMs: Date.now(),
-          nowIso: nowIso(),
-        });
-      }
-
-      saveState(cfg.STATE_PATH, state);
-    }
-
-    // Auto-tune until first trade happens
-    const anyTradesYet = Object.values(state.positions || {}).some(p => p.entryTx);
-
-    if (cfg.AUTO_TUNE_ENABLED && t - lastAutoTune >= cfg.AUTO_TUNE_EVERY_MS) {
-      lastAutoTune = t;
-      if (!anyTradesYet) {
-        const changes = autoTuneFilters({ state, cfg, nowIso });
-        if (changes.length) {
-          saveState(cfg.STATE_PATH, state);
-          await tgSend(cfg, `🧠 Auto-tune adjusted filters: ${changes.join(', ')}`);
-        }
-      }
-    }
-
-    // Hourly throughput diagnostic (even when no changes are made)
-    const hourlyDiagEnabled = (state?.flags?.hourlyDiagEnabled ?? cfg.HOURLY_DIAG_ENABLED);
-    if (hourlyDiagEnabled && t - lastHourlyDiag >= cfg.HOURLY_DIAG_EVERY_MS) {
-      lastHourlyDiag = t;
-      if (!anyTradesYet) {
-        const { snap, next } = snapshotAndReset(counters);
-        counters = next;
-        state.runtime.diagCounters = counters;
-        const fo = state.filterOverrides || {};
-        const msg = [
-          formatThroughputSummary({
-            counters: snap,
-            title: '📈 *Throughput check* (last window)',
-          }),
-          '',
-          '🎛️ current filters',
-          `• liq >= ${fo.MIN_LIQUIDITY_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD}`,
-          `• age >= ${fo.MIN_TOKEN_AGE_HOURS ?? cfg.MIN_TOKEN_AGE_HOURS}h`,
-          `• mcap >= ${fo.MIN_MCAP_USD ?? cfg.MIN_MCAP_USD}`,
-          `• liqratio >= ${fo.LIQUIDITY_TO_MCAP_RATIO ?? cfg.LIQUIDITY_TO_MCAP_RATIO}`,
-          '',
-          formatMarketDataProviderSummary(state),
-          `🕒 ${nowIso()}`,
-        ].join('\n');
-        await tgSend(cfg, msg);
-      }
-    }
+    const maintenance = await runMaintenanceChores({
+      t,
+      cfg,
+      state,
+      conn,
+      pub,
+      counters,
+      lastLedgerPruneAt,
+      lastReconcileAt,
+      lastAutoTune,
+      lastHourlyDiag,
+      nowIso,
+      saveState,
+      tgSend,
+      positionCount,
+      getTokenHoldingsByMint,
+      getSplBalance,
+      applyOnchainBalanceToPosition,
+      maybeRotateBySize,
+      maybePruneJsonlByAge,
+      getDiagEventsPath,
+      autoTuneFilters,
+      snapshotAndReset,
+      formatThroughputSummary,
+      formatMarketDataProviderSummary,
+    });
+    lastLedgerPruneAt = maintenance.lastLedgerPruneAt;
+    lastReconcileAt = maintenance.lastReconcileAt;
+    lastAutoTune = maintenance.lastAutoTune;
+    lastHourlyDiag = maintenance.lastHourlyDiag;
+    counters = maintenance.counters;
 
     // Telegram controls polling
     if (t - lastTgPoll >= cfg.TELEGRAM_POLL_EVERY_MS) {
@@ -1051,41 +809,24 @@ async function main() {
     }
 
     // Portfolio stop checks (RPC can be flaky; never crash on transient failure)
-    if (solPrice) {
-      try {
-        const stopInfo = await shouldStopPortfolio(cfg, conn, pub, state, solPrice);
-        if (stopInfo.stop) {
-          // One-time alert + latch, to prevent Telegram spam loops.
-          state.flags ||= {};
-          state.flags.portfolioStopActive = true;
-          state.flags.portfolioStopReason = stopInfo.reason;
-          state.flags.portfolioStopAtIso = nowIso();
-          state.flags.lastPortfolioStopAlertAtMs ||= 0;
-
-          state.tradingEnabled = false;
-
-          if (t - state.flags.lastPortfolioStopAlertAtMs > 60 * 60_000) {
-            state.flags.lastPortfolioStopAlertAtMs = t;
-            await tgSend(cfg, `🛑 Trading halted: ${stopInfo.reason}`);
-          }
-
-          saveState(cfg.STATE_PATH, state);
-          // Do NOT throw; keep process alive for monitoring/controls.
-          continue;
-        }
-        circuitClear({ state, nowMs: t, dep: 'rpc', persist: () => saveState(cfg.STATE_PATH, state) });
-      } catch (e) {
-        // RPC failure. Hit circuit breaker and alert (rate-limited), but do not hard-toggle tradingEnabled.
-        if (cfg.PLAYBOOK_ENABLED) {
-          recordPlaybookError({ state, nowMs: t, kind: 'rpc_error', note: safeErr(e).message });
-        }
-        circuitHit({ state, nowMs: t, dep: 'rpc', note: `portfolioCheck(${safeErr(e).message})`, persist: () => saveState(cfg.STATE_PATH, state) });
-        if (t - lastRpcAlertAt > 10 * 60_000) {
-          lastRpcAlertAt = t;
-          await tgSend(cfg, `⚠️ RPC/balance check failed. Pausing entries until it recovers. (${safeErr(e).message})`);
-        }
-      }
-    }
+    const portfolioGate = await enforcePortfolioStopGate({
+      cfg,
+      conn,
+      pub,
+      state,
+      solPrice,
+      nowMs: t,
+      nowIso,
+      tgSend,
+      shouldStopPortfolio,
+      circuitClear,
+      circuitHit,
+      recordPlaybookError,
+      saveState,
+      safeErr,
+      lastRpcAlertRef,
+    });
+    if (portfolioGate.halted) continue;
 
     // Scan for entries
     if (t - lastScan >= nextScanDelayMs) {
@@ -1275,118 +1016,9 @@ async function main() {
 
     await processOperatorCommands(t);
 
-    // Check positions for exits
+    // Re-check positions after operator commands when due.
     if (t - lastPosRef.value >= cfg.POSITIONS_EVERY_MS) {
-      lastPosRef.value = t;
-
-      for (const [mint, pos] of Object.entries(state.positions)) {
-        if (pos.status !== 'open') continue;
-
-        // Streaming-first stop enforcement: use fresh BirdEye WS tick immediately.
-        try {
-          const ws = cache.get(`birdeye:ws:price:${mint}`) || null;
-          const wsTs = Number(ws?.tsMs || 0);
-          const wsPrice = Number(ws?.priceUsd || 0);
-          const wsFresh = wsTs > 0 && (Date.now() - wsTs) <= 15_000;
-          if (wsFresh && wsPrice > 0 && Number.isFinite(Number(pos.stopPriceUsd)) && conservativeExitMark(wsPrice, pos, null, cfg) <= Number(pos.stopPriceUsd)) {
-            const pairWs = { baseToken: { symbol: pos?.symbol || null }, priceUsd: wsPrice, url: pos?.pairUrl || null };
-            const r = pos.trailingActive
-              ? `trailing stop hit @ ${wsPrice.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (ws)`
-              : `stop hit @ ${wsPrice.toFixed(6)} <= ${Number(pos.stopPriceUsd).toFixed(6)} (ws)`;
-            await closePosition(cfg, conn, wallet, state, mint, pairWs, r);
-            saveState(cfg.STATE_PATH, state);
-            continue;
-          }
-        } catch {}
-
-        const snapshot = await getMarketSnapshot({
-          state,
-          mint,
-          nowMs: t,
-          maxAgeMs: cfg.PAIR_CACHE_MAX_AGE_MS,
-          preferWsPrice: true,
-          getTokenPairs,
-          pickBestPair,
-          birdeyeEnabled: birdseye?.enabled,
-          getBirdseyeSnapshot: birdseye?.getTokenSnapshot,
-        });
-
-        let effectiveSnapshot = snapshot;
-        if (!effectiveSnapshot?.priceUsd) {
-          // Fallback: direct Dex fetch for open-position safety if router has no usable price.
-          try {
-            const pairsFallback = await getTokenPairs(mint);
-            const bestFallback = pickBestPair(pairsFallback);
-            const pxFallback = Number(bestFallback?.priceUsd || 0);
-            if (pxFallback > 0) {
-              effectiveSnapshot = {
-                source: 'dex_fallback',
-                confidence: 'low',
-                freshnessMs: 0,
-                priceUsd: pxFallback,
-                pair: bestFallback,
-              };
-            }
-          } catch {}
-        }
-        if (!effectiveSnapshot?.priceUsd) {
-          pushDebug(state, {
-            t: nowIso(),
-            mint,
-            symbol: pos?.symbol || null,
-            reason: `positionsMarketData(skip_no_price src=${snapshot?.source || 'none'} conf=${snapshot?.confidence || 'none'} freshMs=${snapshot?.freshnessMs ?? 'n/a'})`,
-          });
-          continue;
-        }
-
-        const pair = effectiveSnapshot?.pair || { baseToken: { symbol: pos?.symbol || null }, priceUsd: effectiveSnapshot.priceUsd };
-        const priceUsd = Number(effectiveSnapshot.priceUsd);
-
-        const usableForTrailing = isStopSnapshotUsable(effectiveSnapshot);
-        if (!usableForTrailing) {
-          pushDebug(state, {
-            t: nowIso(),
-            mint,
-            symbol: pos?.symbol || null,
-            reason: `positionsMarketData(stale_ok_for_stop src=${effectiveSnapshot?.source || 'none'} conf=${effectiveSnapshot?.confidence || 'none'} freshMs=${effectiveSnapshot?.freshnessMs ?? 'n/a'})`,
-          });
-          if (Number.isFinite(Number(pos.stopPriceUsd)) && conservativeExitMark(priceUsd, pos, effectiveSnapshot, cfg) <= Number(pos.stopPriceUsd)) {
-            const r = pos.trailingActive ? 'trailing stop hit (stale snapshot)' : 'stop loss hit (stale snapshot)';
-            await closePosition(cfg, conn, wallet, state, mint, pair, r);
-            saveState(cfg.STATE_PATH, state);
-          }
-          continue;
-        }
-
-        // Repair missing entry/stop fields if we opened a position without a valid entry snapshot.
-        if (!Number.isFinite(Number(pos.entryPriceUsd)) || Number(pos.entryPriceUsd) <= 0) {
-          pos.entryPriceUsd = priceUsd;
-          pos.peakPriceUsd = priceUsd;
-          pos.lastSeenPriceUsd = priceUsd;
-          pos.stopPriceUsd = priceUsd;
-          pos.lastStopUpdateAt = nowIso();
-          pos.note = (pos.note || '') + ` | repairedEntryPriceFromPriceFeed`;
-          const label = tokenDisplayName({ name: pos?.tokenName, symbol: pos?.symbol, mint });
-          await tgSend(cfg, `🛠️ Repaired missing entry price for ${label} using live price ${priceUsd.toFixed(6)}. New stop set to ${pos.stopPriceUsd.toFixed(6)}.`);
-          saveState(cfg.STATE_PATH, state);
-        }
-
-        const stopUpdate = await updateStops(cfg, state, mint, priceUsd);
-        if (stopUpdate.changed) {
-          await tgSend(cfg, [
-            `🟣 *TRAIL UPDATE* — ${tokenDisplayName({ name: pos?.tokenName, symbol: pos?.symbol, mint })}`,
-            '',
-            `• New stop: $${pos.stopPriceUsd.toFixed(6)}`,
-            `• Peak: $${pos.peakPriceUsd.toFixed(6)}`,
-          ].join('\n'));
-        }
-
-        if (conservativeExitMark(priceUsd, pos, effectiveSnapshot, cfg) <= pos.stopPriceUsd) {
-          const r = pos.trailingActive ? 'trailing stop hit' : 'stop loss hit';
-          await closePosition(cfg, conn, wallet, state, mint, pair, r);
-          saveState(cfg.STATE_PATH, state);
-        }
-      }
+      await runPositionsLoop(t);
     }
 
     await new Promise(r => setTimeout(r, 250));

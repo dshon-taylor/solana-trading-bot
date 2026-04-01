@@ -1,4 +1,5 @@
 import { processOpenPosition } from './stage_process_open_position.mjs';
+import { runManualForceClose as runManualForceCloseStage } from './stage_manual_force_close.mjs';
 
 /**
  * positions_loop.mjs
@@ -72,5 +73,18 @@ export function createPositionsLoop({
     }
   }
 
-  return { runPositionsLoop };
+  async function runManualForceClose(t) {
+    await runManualForceCloseStage({
+      state,
+      cfg,
+      t,
+      conn,
+      wallet,
+      closePosition,
+      saveState,
+      tgSend,
+    });
+  }
+
+  return { runPositionsLoop, runManualForceClose };
 }
