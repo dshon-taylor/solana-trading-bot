@@ -3,6 +3,7 @@ import { runMomentumEvalStage } from './stage_momentum_eval.mjs';
 import { runConfirmContinuationStage } from './stage_confirm_continuation.mjs';
 import { runAttemptPolicyAndEntryStage } from './stage_attempt_policy_and_entry.mjs';
 import { runPostAttemptOutcomesStage } from './stage_post_attempt_outcomes.mjs';
+import { appendDiagEvent } from '../diag_reporting/diag_event_store.mjs';
 
 export async function evaluateWatchlistRowsRuntime({
   rows,
@@ -211,7 +212,11 @@ export async function evaluateWatchlistRowsRuntime({
           'candidateLiquiditySeen',
         ]);
         if (persistKinds.has(String(kind || ''))) {
-          appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind, reason: reason || null, extra: extra || null });
+          appendDiagEvent({
+            appendJsonl,
+            statePath: cfg.STATE_PATH,
+            event: { tMs: now, kind, reason: reason || null, extra: extra || null },
+          });
         }
       } catch {}
     }

@@ -1,4 +1,5 @@
 import { resolveConfirmTxMetricsFromDiagEvent } from '../../diag_event_invariants.mjs';
+import { buildCompactWindowFromDiagEvents, readRecentDiagEvents } from './diag_event_store.mjs';
 import { buildExecutionDiagMessage } from './messages/execution_message.mjs';
 import { buildScannerDiagMessage } from './messages/scanner_message.mjs';
 import { buildConfirmDiagMessage } from './messages/confirm_message.mjs';
@@ -64,7 +65,26 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const circuitOpenRemainingSec = circuitOpen ? Math.max(0, Math.round((circuitTrippedUntilMs - snapshotRefMs) / 1000)) : 0;
       const circuitOpenReason = String(circuit?.lastTripReason || 'none');
       const circuitOpenSinceMs = Number(circuit?.lastTripAtMs || 0);
-      const compactWindow = counters?.watchlist?.compactWindow || {};
+      const inMemoryCompactWindow = counters?.watchlist?.compactWindow || {};
+      const durableHistoryEnabled = (process.env.DIAG_USE_DURABLE_HISTORY ?? 'true') === 'true';
+      const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
+      let compactWindow = inMemoryCompactWindow;
+      if (durableHistoryEnabled) {
+        try {
+          const events = readRecentDiagEvents({
+            statePath: cfg.STATE_PATH,
+            nowMs: snapshotRefMs,
+            windowStartMs: effectiveWindowStartMs,
+            retainMs,
+          });
+          if (events.length) {
+            compactWindow = buildCompactWindowFromDiagEvents({
+              events,
+              cutoffMs: effectiveWindowStartMs,
+            });
+          }
+        } catch {}
+      }
       const inWindowTs = (arr) => (arr || []).filter((t) => Number(t || 0) >= effectiveWindowStartMs);
       const inWindowObj = (arr) => (arr || []).filter((x) => Number(x?.tMs || 0) >= effectiveWindowStartMs);
       const momentumEvalWin = inWindowTs(compactWindow.momentumEval || []);

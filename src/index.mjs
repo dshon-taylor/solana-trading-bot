@@ -48,6 +48,7 @@ import { createOpsReporting, createSpendSummaryCache, fmtUsd } from './control_t
 import { startWatchlistCleanupTimer, startObservabilityHeartbeatTimer, startPositionsLoopTimer } from './control_tower/runtime_timers.mjs';
 import { createPositionsLoop } from './control_tower/positions_loop.mjs';
 import { createDiagReporting } from './control_tower/diag_reporting.mjs';
+import { appendDiagEvent, buildCompactWindowFromDiagEvents, getDiagEventsPath, readRecentDiagEvents } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
 import { createScanPipeline } from './control_tower/scan_pipeline/index.mjs';
@@ -789,23 +790,24 @@ async function main() {
   };
 
   // Hydrate compact diagnostic window from durable diag events log for retro windows across restarts.
-  // Skip replay if compact window is already populated in persisted counters.
+  // Single source of truth: replay retained events from diag_events.jsonl.
   try {
-    const compactHasData = Array.isArray(counters?.watchlist?.compactWindow?.momentumAgeSamples) && counters.watchlist.compactWindow.momentumAgeSamples.length > 0;
-    const diagEventsPath = path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl');
-    if (!compactHasData && fs.existsSync(diagEventsPath)) {
-      const raw = fs.readFileSync(diagEventsPath, 'utf8');
-      const replayMaxLines = Math.max(10_000, Number(process.env.DIAG_HYDRATE_MAX_LINES || 500_000));
-      const lines = raw.trim().split('\n').slice(-replayMaxLines);
+    const compactHasData = Array.isArray(counters?.watchlist?.compactWindow?.momentumAgeSamples)
+      && counters.watchlist.compactWindow.momentumAgeSamples.length > 0;
+    if (!compactHasData) {
       const retainMs = Math.max(60 * 60_000, Number(cfg.DIAG_RETENTION_MS || (90 * 24 * 60 * 60_000)));
-      const cutoff = Date.now() - retainMs;
-      for (const ln of lines) {
-        try {
-          const ev = JSON.parse(ln);
-          const tMs = Number(ev?.tMs || 0);
-          if (!Number.isFinite(tMs) || tMs < cutoff) continue;
-          pushCompactWindowEvent(String(ev?.kind || ''), ev?.reason ?? null, ev?.extra ?? null, { persist: false, tMs });
-        } catch {}
+      const nowMsForHydrate = Date.now();
+      const events = readRecentDiagEvents({
+        statePath: cfg.STATE_PATH,
+        nowMs: nowMsForHydrate,
+        retainMs,
+      });
+      if (events.length) {
+        state.runtime.compactWindow = buildCompactWindowFromDiagEvents({
+          events,
+          cutoffMs: nowMsForHydrate - retainMs,
+        });
+        counters.watchlist.compactWindow = state.runtime.compactWindow;
       }
     }
   } catch {}
@@ -1424,7 +1426,7 @@ async function main() {
           } catch {}
         }
         try {
-          const diagEventsPath = path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl');
+          const diagEventsPath = getDiagEventsPath(cfg.STATE_PATH);
           maybeRotateBySize({ filePath: diagEventsPath, maxBytes: cfg.JSONL_ROTATE_MAX_BYTES, nowMs: t });
           maybePruneJsonlByAge({ filePath: diagEventsPath, maxAgeDays: cfg.DIAG_RETENTION_DAYS, nowMs: t });
         } catch {}
@@ -1755,21 +1757,39 @@ async function main() {
           if (!Array.isArray(w.candidateSeen)) w.candidateSeen = [];
           w.candidateSeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
           while (w.candidateSeen.length && Number(w.candidateSeen[0]?.tMs || 0) < cutoff) w.candidateSeen.shift();
-          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateSeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } }); } catch {}
+          try {
+            appendDiagEvent({
+              appendJsonl,
+              statePath: cfg.STATE_PATH,
+              event: { tMs: now, kind: 'candidateSeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } },
+            });
+          } catch {}
           return;
         }
         if (kind === 'candidateRouteable') {
           if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
           w.candidateRouteable.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') });
           while (w.candidateRouteable.length && Number(w.candidateRouteable[0]?.tMs || 0) < cutoff) w.candidateRouteable.shift();
-          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateRouteable', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } }); } catch {}
+          try {
+            appendDiagEvent({
+              appendJsonl,
+              statePath: cfg.STATE_PATH,
+              event: { tMs: now, kind: 'candidateRouteable', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown') } },
+            });
+          } catch {}
           return;
         }
         if (kind === 'candidateLiquiditySeen') {
           if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
           w.candidateLiquiditySeen.push({ tMs: now, mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
           while (w.candidateLiquiditySeen.length && Number(w.candidateLiquiditySeen[0]?.tMs || 0) < cutoff) w.candidateLiquiditySeen.shift();
-          try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: now, kind: 'candidateLiquiditySeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } }); } catch {}
+          try {
+            appendDiagEvent({
+              appendJsonl,
+              statePath: cfg.STATE_PATH,
+              event: { tMs: now, kind: 'candidateLiquiditySeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
+            });
+          } catch {}
         }
       };
 
@@ -1885,7 +1905,13 @@ async function main() {
         };
         w.scanCycles.push(scanCycleEvent);
         while (w.scanCycles.length && Number(w.scanCycles[0]?.tMs || 0) < cutoff) w.scanCycles.shift();
-        try { appendJsonl(path.join(path.dirname(cfg.STATE_PATH), 'diag_events.jsonl'), { tMs: Number(scanCycleEvent.tMs || Date.now()), kind: 'scanCycle', reason: null, extra: { ...scanCycleEvent } }); } catch {}
+        try {
+          appendDiagEvent({
+            appendJsonl,
+            statePath: cfg.STATE_PATH,
+            event: { tMs: Number(scanCycleEvent.tMs || Date.now()), kind: 'scanCycle', reason: null, extra: { ...scanCycleEvent } },
+          });
+        } catch {}
       };
 
       try {
