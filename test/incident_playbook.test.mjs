@@ -5,7 +5,7 @@ import {
   recordPlaybookError,
   evaluatePlaybook,
   PLAYBOOK_MODE_DEGRADED,
-} from '../src/incident_playbook.mjs';
+} from '../src/observability/incident_playbook.mjs';
 
 const cfg = {
   PLAYBOOK_RESTART_THRESHOLD: 3,

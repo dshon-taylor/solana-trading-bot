@@ -1,5 +1,5 @@
 import { nowIso } from '../../logger.mjs';
-import { pushDebug } from '../../debug_buffer.mjs';
+import { pushDebug } from '../../observability/debug_buffer.mjs';
 
 export function positionCount(state) {
   return Object.values(state.positions || {}).filter(p => p?.status === 'open').length;

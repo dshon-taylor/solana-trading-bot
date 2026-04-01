@@ -1,5 +1,5 @@
 import { getTokenHoldingsByMint } from '../../portfolio.mjs';
-import { getLastDebug } from '../../debug_buffer.mjs';
+import { getLastDebug } from '../../observability/debug_buffer.mjs';
 import { nowIso, safeErr } from '../../logger.mjs';
 
 export async function handlePositionsCommands(ctx) {

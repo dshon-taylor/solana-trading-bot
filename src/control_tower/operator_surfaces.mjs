@@ -4,7 +4,7 @@ import { positionCount } from './position_policy.mjs';
 import { isPaperModeActive } from './route_control.mjs';
 import { jupCooldownRemainingMs } from '../jup_cooldown.mjs';
 import { formatTrackerIngestionSummary } from '../tracker.mjs';
-import { getLastDebug } from '../debug_buffer.mjs';
+import { getLastDebug } from '../observability/debug_buffer.mjs';
 import { getModels } from '../ai_pipeline.mjs';
 import { fmtUsd } from './ops_reporting.mjs';
 import { saveState } from '../state.mjs';

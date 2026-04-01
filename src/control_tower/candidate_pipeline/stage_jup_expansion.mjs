@@ -1,4 +1,4 @@
-import { pushDebug } from '../../debug_buffer.mjs';
+import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { safeMsg } from '../../ai.mjs';
 import { nowIso } from '../../logger.mjs';
 

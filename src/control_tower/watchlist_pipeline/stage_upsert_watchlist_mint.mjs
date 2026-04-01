@@ -1,5 +1,5 @@
 import { nowIso } from '../../logger.mjs';
-import { pushDebug } from '../../debug_buffer.mjs';
+import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { readPct, ensureWatchlistState, queueHotWatchlistMint, resolvePairCreatedAtGlobal } from '../watchlist_control.mjs';
 import { holdersGateCheck } from '../route_control.mjs';
 

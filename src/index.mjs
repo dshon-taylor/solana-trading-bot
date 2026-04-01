@@ -21,7 +21,7 @@ import { tgSend, tgSetMyCommands } from './telegram/index.mjs';
 import { makeCounters, bump, bumpSourceCounter, snapshotAndReset, formatThroughputSummary, bumpWatchlistFunnel, rollWatchlistMinuteWindow } from './metrics.mjs';
 import { handleTelegramControls } from './telegram/control.mjs';
 import { trackerMaybeEnqueue, trackerTick } from './tracker.mjs';
-import { pushDebug } from './debug_buffer.mjs';
+import { pushDebug } from './observability/debug_buffer.mjs';
 import { safeMsg } from './ai.mjs';
 import { getModels, preprocessCandidate, analyzeTrade, gatekeep } from './ai_pipeline.mjs';
 import { appendCost, estimateCostUsd, parseRange, readLedger, summarize } from './cost.mjs';
@@ -32,11 +32,11 @@ import { ensureDexState, getDexCooldownUntilMs, hitDex429, isDexScreener429 } fr
 import { ensureMarketDataState, computeAdaptiveScanDelayMs, getCachedPairSnapshot } from './market_data_reliability.mjs';
 import { getMarketSnapshot, getEntrySnapshotUnsafeReason, isStopSnapshotUsable, getSnapshotStatus, snapshotFromBirdseye, formatMarketDataProviderSummary, markMarketDataRejectImpact } from './market_data_router.mjs';
 import { hitJup429, isJup429, jupCooldownRemainingMs } from './jup_cooldown.mjs';
-import { maybeAlivePing } from './alive_ping.mjs';
+import { maybeAlivePing } from './observability/alive_ping.mjs';
 import { ensureCircuitState, circuitOkForEntries, circuitHit, circuitClear } from './circuit_breaker.mjs';
 import { maybePruneJsonlByAge, maybeRotateBySize } from './ledger_retention.mjs';
 import { ensureCapitalGuardrailsState, canOpenNewEntry, recordEntryOpened, applySoftReserveToUsdTarget } from './capital_guardrails.mjs';
-import { ensurePlaybookState, recordPlaybookRestart, recordPlaybookError, evaluatePlaybook, runSelfRecovery, PLAYBOOK_MODE_DEGRADED } from './incident_playbook.mjs';
+import { ensurePlaybookState, recordPlaybookRestart, recordPlaybookError, evaluatePlaybook, runSelfRecovery, PLAYBOOK_MODE_DEGRADED } from './observability/incident_playbook.mjs';
 import { createStreamingProvider } from './streaming_provider.mjs';
 import { createBirdseyeLiteClient } from './birdeye_lite.mjs';
 import { didEntryFill } from './entry_reliability.mjs';
@@ -965,7 +965,7 @@ async function main() {
   import('./rpc_probe.mjs').then(({ startRpcProbe }) => {
     try {
       const rpcHealth = startRpcProbe({ cfg, intervalMs: Number(process.env.RPC_PROBE_EVERY_MS || 30000) });
-      import('./heartbeat.mjs').then(({ startHeartbeat }) => {
+      import('./observability/heartbeat.mjs').then(({ startHeartbeat }) => {
         try {
           startHeartbeat({ cfg, state, conn, walletPub: pub, tgSend, rpcHealth });
         } catch (e) {

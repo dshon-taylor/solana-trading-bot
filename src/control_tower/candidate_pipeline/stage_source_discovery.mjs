@@ -1,7 +1,7 @@
 import { getBoostedTokens } from '../../dexscreener.mjs';
 import { circuitClear, circuitHit } from '../../circuit_breaker.mjs';
 import { hitDex429, isDexScreener429 } from '../../dex_cooldown.mjs';
-import { pushDebug } from '../../debug_buffer.mjs';
+import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { safeMsg } from '../../ai.mjs';
 import { nowIso } from '../../logger.mjs';
 import { bumpNoPairReason } from '../route_control.mjs';

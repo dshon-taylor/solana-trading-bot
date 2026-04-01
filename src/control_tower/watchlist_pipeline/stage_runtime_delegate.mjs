@@ -8,7 +8,7 @@ import { paperComputeMomentumWindows } from '../../paper_momentum.mjs';
 import { toBaseUnits, DECIMALS } from '../../trader.mjs';
 import { nowIso } from '../../logger.mjs';
 import { bump, bumpWatchlistFunnel } from '../../metrics.mjs';
-import { pushDebug } from '../../debug_buffer.mjs';
+import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { safeMsg } from '../../ai.mjs';
 import { appendJsonl } from '../../candidates_ledger.mjs';
 import { jupQuote } from '../../jupiter.mjs';

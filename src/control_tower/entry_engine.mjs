@@ -7,7 +7,7 @@ import { tgSend } from '../telegram/index.mjs';
 import { appendJsonl } from '../candidates_ledger.mjs';
 import { resolveEntryAndStopForOpenPosition } from '../entry_guard.mjs';
 import { computePreTrailStopPrice } from '../lib/stop_policy.mjs';
-import { pushDebug } from '../debug_buffer.mjs';
+import { pushDebug } from '../observability/debug_buffer.mjs';
 import { saveState } from '../state.mjs';
 import { isPaperModeActive } from './route_control.mjs';
 import { enforceEntryCapacityGate, tokenDisplayName, tokenDisplayWithSymbol } from './position_policy.mjs';
