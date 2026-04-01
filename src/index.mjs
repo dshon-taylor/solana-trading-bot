@@ -669,15 +669,7 @@ async function main() {
       `trailActivatePct=${cfg.LIVE_MOMO_TRAIL_ACTIVATE_PCT} trailDistancePct=${cfg.LIVE_MOMO_TRAIL_DISTANCE_PCT}`,
   );
 
-  async function tgSendBoot(text, { attempts = 8, delayMs = 5000 } = {}) {
-    for (let i = 0; i < attempts; i += 1) {
-      if (await tgSend(cfg, text)) return true;
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
-    }
-    return false;
-  }
-
-  await tgSendBoot(`🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`);
+  await tgSend(cfg, `🟢 *Candle Carl online*\n\n👛 Wallet: ${pub}\n🪙 Base: SOL`);
 
   // Register command menu in Telegram UI (best-effort; must not block online ping)
   void tgSetMyCommands(cfg);
@@ -707,7 +699,7 @@ async function main() {
 
   const solLamports = await getSolBalanceLamports(conn, pub);
 
-  await tgSendBoot([
+  await tgSend(cfg, [
     '📊 *Balances*',
     '',
     `• SOL: ${(solLamports / 1e9).toFixed(4)}`,
