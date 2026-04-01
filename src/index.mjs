@@ -51,7 +51,7 @@ import { createDiagReporting } from './control_tower/diag_reporting.mjs';
 import { appendDiagEvent, getCompactWindowForDiagRequest, getDiagEventsPath } from './control_tower/diag_reporting/diag_event_store.mjs';
 import { createCandidatePipeline } from './control_tower/candidate_pipeline.mjs';
 import { createOperatorSurfaces } from './control_tower/operator_surfaces.mjs';
-import { createScanPipeline } from './control_tower/scan_pipeline/index.mjs';
+import { createScanPipeline } from './control_tower/scan_pipeline.mjs';
 import { createEntryDispatch } from './control_tower/entry_dispatch/index.mjs';
 import { confirmContinuationGate as runConfirmContinuationGate } from './lib/confirm_continuation.mjs';
 import { computePreTrailStopPrice } from './lib/stop_policy.mjs';
