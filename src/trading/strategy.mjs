@@ -94,7 +94,7 @@ const MOMENTUM_SCORE_WEIGHTS = {
 
 const MOMENTUM_SCORE_PENALTIES = {
   weakVolumeExpansion: Number(process.env.MOMENTUM_SCORE_PENALTY_WEAK_VOLUME || 3),
-  weakBuyPressure: Number(process.env.MOMENTUM_SCORE_PENALTY_WEAK_BUY_PRESSURE || 6),
+  weakBuyPressure: Number(process.env.MOMENTUM_SCORE_PENALTY_WEAK_BUY_PRESSURE || 5),
   weakTxAcceleration: Number(process.env.MOMENTUM_SCORE_PENALTY_WEAK_TX_ACCELERATION || 4),
   weakWalletExpansion: Number(process.env.MOMENTUM_SCORE_PENALTY_WEAK_WALLET_EXPANSION || 2),
   negativeRet1: Number(process.env.MOMENTUM_SCORE_PENALTY_NEGATIVE_RET1 || 4),
