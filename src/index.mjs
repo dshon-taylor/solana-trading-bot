@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
