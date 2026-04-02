@@ -634,6 +634,14 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         }
         const _confirmFreshnessLast10Removed = true;
 
+        const preConfirmRejectedRows = postFlowWin.filter((ev) => String(ev?.stage || '') === 'preConfirm' && String(ev?.outcome || '') === 'rejected');
+        const preConfirmRejectTop = Object.entries(preConfirmRejectedRows.reduce((acc, ev) => {
+          const k = String(ev?.reason || 'unknown');
+          acc[k] = Number(acc[k] || 0) + 1;
+          return acc;
+        }, {})).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 4)
+          .map(([k, v]) => `${k}:${v}`).join(', ') || 'none';
+
         const confirmReachedRows = postFlowWin.filter((ev) => String(ev?.stage || '') === 'confirm' && String(ev?.outcome || '') === 'reached');
         const confirmCandidateTxRows = confirmReachedRows.map((ev) => {
           const mint = String(ev?.mint || 'unknown');
@@ -1086,6 +1094,8 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           runupTimingBuckets,
           top3ConfirmBlockers,
           top3AttemptBlockers,
+          preConfirmRejectedCount: Number(preConfirmRejectedRows.length || 0),
+          preConfirmRejectTop,
           recycledRequalifiedPassedCount,
           topHandoffBlocker,
           medianRunupPct,
