@@ -87,16 +87,26 @@ export function applySnapshotToLatest({ row, snapshot }) {
     .find((x) => Number.isInteger(x) && x >= 0);
   if (Number.isInteger(decimalsFromSnapshot)) row.latest.decimals = Number(decimalsFromSnapshot);
 
+  const rawBuy1m = Number(snapshot?.raw?.buy1m ?? 0);
+  const rawSell1m = Number(snapshot?.raw?.sell1m ?? 0);
+  const rawTrade1m = Number(snapshot?.raw?.trade1m ?? 0);
+  const rawTrade5m = Number(snapshot?.raw?.trade5m ?? 0);
+  const rawTrade30m = Number(snapshot?.raw?.trade30m ?? 0);
+
+  const derivedBuySellRatio = (rawBuy1m > 0 || rawSell1m > 0)
+    ? (rawBuy1m / Math.max(1, rawSell1m))
+    : 0;
+
   const micro = {
-    volume5m: Number(snapshot?.volume_5m ?? snapshot?.pair?.birdeye?.volume_5m ?? 0),
-    volume30mAvg: Number(snapshot?.volume_30m_avg ?? snapshot?.pair?.birdeye?.volume_30m_avg ?? 0),
-    buySellRatio: Number(snapshot?.buySellRatio ?? snapshot?.pair?.birdeye?.buySellRatio ?? 0),
-    tx1m: Number(snapshot?.tx_1m ?? snapshot?.pair?.birdeye?.tx_1m ?? 0),
-    tx5mAvg: Number(snapshot?.tx_5m_avg ?? snapshot?.pair?.birdeye?.tx_5m_avg ?? 0),
-    tx30mAvg: Number(snapshot?.tx_30m_avg ?? snapshot?.pair?.birdeye?.tx_30m_avg ?? 0),
-    rollingHigh5m: Number(snapshot?.rolling_high_5m ?? snapshot?.pair?.birdeye?.rolling_high_5m ?? 0),
-    uniqueBuyers1m: Number(snapshot?.uniqueBuyers1m ?? snapshot?.pair?.birdeye?.uniqueBuyers1m ?? snapshot?.pair?.birdeye?.uniqueWallet1m ?? 0),
-    uniqueBuyers5m: Number(snapshot?.uniqueBuyers5m ?? snapshot?.pair?.birdeye?.uniqueBuyers5m ?? snapshot?.pair?.birdeye?.uniqueWallet5m ?? 0),
+    volume5m: Number(snapshot?.volume_5m ?? snapshot?.raw?.v5mUSD ?? snapshot?.raw?.v5m ?? snapshot?.pair?.birdeye?.volume_5m ?? 0),
+    volume30mAvg: Number(snapshot?.volume_30m_avg ?? ((Number(snapshot?.raw?.v30mUSD ?? snapshot?.raw?.v30m ?? 0) > 0) ? (Number(snapshot?.raw?.v30mUSD ?? snapshot?.raw?.v30m) / 6) : null) ?? snapshot?.pair?.birdeye?.volume_30m_avg ?? 0),
+    buySellRatio: Number(snapshot?.buySellRatio ?? snapshot?.raw?.buySellRatio ?? (derivedBuySellRatio > 0 ? derivedBuySellRatio : null) ?? snapshot?.pair?.birdeye?.buySellRatio ?? 0),
+    tx1m: Number(snapshot?.tx_1m ?? snapshot?.raw?.tx_1m ?? (rawTrade1m > 0 ? rawTrade1m : (rawBuy1m + rawSell1m)) ?? snapshot?.pair?.birdeye?.tx_1m ?? 0),
+    tx5mAvg: Number(snapshot?.tx_5m_avg ?? snapshot?.raw?.tx_5m_avg ?? (rawTrade5m > 0 ? (rawTrade5m / 5) : null) ?? ((Number(snapshot?.raw?.buy5m ?? 0) + Number(snapshot?.raw?.sell5m ?? 0)) > 0 ? ((Number(snapshot?.raw?.buy5m ?? 0) + Number(snapshot?.raw?.sell5m ?? 0)) / 5) : null) ?? snapshot?.pair?.birdeye?.tx_5m_avg ?? 0),
+    tx30mAvg: Number(snapshot?.tx_30m_avg ?? snapshot?.raw?.tx_30m_avg ?? (rawTrade30m > 0 ? (rawTrade30m / 30) : null) ?? ((Number(snapshot?.raw?.buy30m ?? 0) + Number(snapshot?.raw?.sell30m ?? 0)) > 0 ? ((Number(snapshot?.raw?.buy30m ?? 0) + Number(snapshot?.raw?.sell30m ?? 0)) / 30) : null) ?? snapshot?.pair?.birdeye?.tx_30m_avg ?? 0),
+    rollingHigh5m: Number(snapshot?.rolling_high_5m ?? snapshot?.raw?.history5mPrice ?? snapshot?.pair?.birdeye?.rolling_high_5m ?? 0),
+    uniqueBuyers1m: Number(snapshot?.uniqueBuyers1m ?? snapshot?.raw?.uniqueBuyers1m ?? snapshot?.raw?.uniqueWallet1m ?? snapshot?.raw?.uniqueWalletHistory1m ?? snapshot?.pair?.birdeye?.uniqueBuyers1m ?? snapshot?.pair?.birdeye?.uniqueWallet1m ?? 0),
+    uniqueBuyers5m: Number(snapshot?.uniqueBuyers5m ?? snapshot?.raw?.uniqueBuyers5m ?? snapshot?.raw?.uniqueWallet5m ?? snapshot?.raw?.uniqueWalletHistory5m ?? snapshot?.pair?.birdeye?.uniqueBuyers5m ?? snapshot?.pair?.birdeye?.uniqueWallet5m ?? 0),
   };
   for (const [key, value] of Object.entries(micro)) {
     if (Number.isFinite(Number(value)) && Number(value) > 0) row.latest[key] = Number(value);
@@ -108,15 +118,25 @@ export function buildNormalizedMomentumInput({ snapshot, latest, pair }) {
   const s = snapshot || {};
   const l = latest || {};
   const wsBe = p?.wsCache?.birdeye || {};
+  const rawBuy1m = Number(s?.raw?.buy1m ?? 0);
+  const rawSell1m = Number(s?.raw?.sell1m ?? 0);
+  const rawTrade1m = Number(s?.raw?.trade1m ?? 0);
+  const rawTrade5m = Number(s?.raw?.trade5m ?? 0);
+  const rawTrade30m = Number(s?.raw?.trade30m ?? 0);
+  const rawTrade1h = Number(s?.raw?.trade1h ?? 0);
+  const rawBuySellRatio = (rawBuy1m > 0 || rawSell1m > 0)
+    ? (rawBuy1m / Math.max(1, rawSell1m))
+    : 0;
+
   const birdeye = {
-    volume_5m: Number(l.volume5m ?? s?.volume_5m ?? s?.raw?.volume_5m ?? p?.birdeye?.volume_5m ?? wsBe?.volume_5m ?? 0) || 0,
-    volume_30m_avg: Number(l.volume30mAvg ?? s?.volume_30m_avg ?? s?.raw?.volume_30m_avg ?? p?.birdeye?.volume_30m_avg ?? wsBe?.volume_30m_avg ?? 0) || 0,
-    buySellRatio: Number(l.buySellRatio ?? s?.buySellRatio ?? s?.raw?.buySellRatio ?? p?.birdeye?.buySellRatio ?? wsBe?.buySellRatio ?? 0) || 0,
-    tx_1m: Number(l.tx1m ?? s?.tx_1m ?? s?.raw?.tx_1m ?? p?.birdeye?.tx_1m ?? wsBe?.tx_1m ?? 0) || 0,
-    tx_5m_avg: Number(l.tx5mAvg ?? s?.tx_5m_avg ?? s?.raw?.tx_5m_avg ?? p?.birdeye?.tx_5m_avg ?? wsBe?.tx_5m_avg ?? 0) || 0,
-    tx_30m_avg: Number(l.tx30mAvg ?? s?.tx_30m_avg ?? s?.raw?.tx_30m_avg ?? p?.birdeye?.tx_30m_avg ?? wsBe?.tx_30m_avg ?? 0) || 0,
-    rolling_high_5m: Number(l.rollingHigh5m ?? s?.rolling_high_5m ?? s?.raw?.rolling_high_5m ?? p?.birdeye?.rolling_high_5m ?? wsBe?.rolling_high_5m ?? 0) || 0,
-    tx_1h: Number(l.tx1h ?? s?.tx_1h ?? s?.raw?.tx_1h ?? p?.birdeye?.tx_1h ?? wsBe?.tx_1h ?? 0) || 0,
+    volume_5m: Number(l.volume5m ?? s?.volume_5m ?? s?.raw?.volume_5m ?? s?.raw?.v5mUSD ?? s?.raw?.v5m ?? p?.birdeye?.volume_5m ?? wsBe?.volume_5m ?? 0) || 0,
+    volume_30m_avg: Number(l.volume30mAvg ?? s?.volume_30m_avg ?? s?.raw?.volume_30m_avg ?? ((Number(s?.raw?.v30mUSD ?? s?.raw?.v30m ?? 0) > 0) ? (Number(s?.raw?.v30mUSD ?? s?.raw?.v30m) / 6) : null) ?? p?.birdeye?.volume_30m_avg ?? wsBe?.volume_30m_avg ?? 0) || 0,
+    buySellRatio: Number(l.buySellRatio ?? s?.buySellRatio ?? s?.raw?.buySellRatio ?? (rawBuySellRatio > 0 ? rawBuySellRatio : null) ?? p?.birdeye?.buySellRatio ?? wsBe?.buySellRatio ?? 0) || 0,
+    tx_1m: Number(l.tx1m ?? s?.tx_1m ?? s?.raw?.tx_1m ?? (rawTrade1m > 0 ? rawTrade1m : (rawBuy1m + rawSell1m)) ?? p?.birdeye?.tx_1m ?? wsBe?.tx_1m ?? 0) || 0,
+    tx_5m_avg: Number(l.tx5mAvg ?? s?.tx_5m_avg ?? s?.raw?.tx_5m_avg ?? (rawTrade5m > 0 ? (rawTrade5m / 5) : null) ?? ((Number(s?.raw?.buy5m ?? 0) + Number(s?.raw?.sell5m ?? 0)) > 0 ? ((Number(s?.raw?.buy5m ?? 0) + Number(s?.raw?.sell5m ?? 0)) / 5) : null) ?? p?.birdeye?.tx_5m_avg ?? wsBe?.tx_5m_avg ?? 0) || 0,
+    tx_30m_avg: Number(l.tx30mAvg ?? s?.tx_30m_avg ?? s?.raw?.tx_30m_avg ?? (rawTrade30m > 0 ? (rawTrade30m / 30) : null) ?? ((Number(s?.raw?.buy30m ?? 0) + Number(s?.raw?.sell30m ?? 0)) > 0 ? ((Number(s?.raw?.buy30m ?? 0) + Number(s?.raw?.sell30m ?? 0)) / 30) : null) ?? p?.birdeye?.tx_30m_avg ?? wsBe?.tx_30m_avg ?? 0) || 0,
+    rolling_high_5m: Number(l.rollingHigh5m ?? s?.rolling_high_5m ?? s?.raw?.rolling_high_5m ?? s?.raw?.history5mPrice ?? p?.birdeye?.rolling_high_5m ?? wsBe?.rolling_high_5m ?? 0) || 0,
+    tx_1h: Number(l.tx1h ?? s?.tx_1h ?? s?.raw?.tx_1h ?? (rawTrade1h > 0 ? rawTrade1h : null) ?? p?.birdeye?.tx_1h ?? wsBe?.tx_1h ?? 0) || 0,
     uniqueBuyers1m: Number(l.uniqueBuyers1m ?? s?.uniqueBuyers1m ?? s?.raw?.uniqueBuyers1m ?? s?.raw?.uniqueWallet1m ?? s?.raw?.uniqueWalletHistory1m ?? p?.birdeye?.uniqueBuyers1m ?? p?.birdeye?.uniqueWallet1m ?? p?.birdeye?.uniqueWalletHistory1m ?? wsBe?.uniqueBuyers1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
     uniqueBuyers5m: Number(l.uniqueBuyers5m ?? s?.uniqueBuyers5m ?? s?.raw?.uniqueBuyers5m ?? s?.raw?.uniqueWallet5m ?? s?.raw?.uniqueWalletHistory5m ?? p?.birdeye?.uniqueBuyers5m ?? p?.birdeye?.uniqueWallet5m ?? p?.birdeye?.uniqueWalletHistory5m ?? wsBe?.uniqueBuyers5m ?? wsBe?.uniqueWallet5m ?? 0) || 0,
     uniqueWallet1m: Number(s?.raw?.uniqueWallet1m ?? p?.birdeye?.uniqueWallet1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
