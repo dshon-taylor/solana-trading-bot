@@ -1378,6 +1378,16 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const hotEnq = Number(counters?.watchlist?.hotEnqueued || 0);
       const hotCons = Number(counters?.watchlist?.hotConsumed || 0);
 
+      const preHotMinLiqActive = Number(state?.filterOverrides?.MIN_LIQUIDITY_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD ?? 0);
+      const preHotConsideredWin = Number(candidateLiquiditySeenWin.length || 0);
+      const preHotPassedWin = Number(candidateLiquiditySeenWin.filter((x) => Number(x?.liqUsd || 0) >= preHotMinLiqActive).length || 0);
+      const preHotFailedWin = Math.max(0, preHotConsideredWin - preHotPassedWin);
+      // Approximate hot queue window from current window events:
+      // - enqueued ≈ preHotPassedWin
+      // - consumed = watchlistSeen events in window
+      const hotEnqWin = preHotPassedWin;
+      const hotConsWin = Number(inWindowTs(compactWindow.watchlistSeen || []).length || 0);
+
       const blockerTop5 = Object.entries(blockerCounts1h)
         .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)
         ).slice(0,5);
@@ -1386,7 +1396,6 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const chokeStage = String(primaryChokeRaw || 'none').split('.')[0] || 'none';
       const top5Blockers = blockerTop5.map(([k,v])=>`- ${blockerRename(k)} = ${v}`);
 
-      const preHotMinLiqActive = Number(state?.filterOverrides?.MIN_LIQUIDITY_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD ?? 0);
       const hotStalkingFloor = Number(process.env.HOT_MOMENTUM_MIN_LIQ_USD || 40000);
       const stalkableByMint = {};
       for (const ev of stalkableSeenWin) {
@@ -1466,8 +1475,13 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         preHotConsidered,
         preHotPassed,
         preHotFailed,
+        preHotConsideredWin,
+        preHotPassedWin,
+        preHotFailedWin,
         hotEnq,
         hotCons,
+        hotEnqWin,
+        hotConsWin,
         cumulativeMomentumEvaluated,
         cumulativeConfirmReached,
         cumulativeAttempt,
