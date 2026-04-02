@@ -78,10 +78,26 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
             windowStartMs: effectiveWindowStartMs,
             retainMs,
           });
-          const arrKeys = ['momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill', 'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen'];
+          const arrKeys = [
+            'momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill',
+            'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'watchlistSeen', 'watchlistEvaluated',
+            'postMomentumFlow', 'momentumLiqValues', 'stalkableSeen', 'repeatSuppressed', 'momentumFailChecks', 'providerHealth', 'hotBypass',
+          ];
           const durableCount = arrKeys.reduce((a, k) => a + Number((durableCompactWindow?.[k] || []).length || 0), 0);
           const memoryCount = arrKeys.reduce((a, k) => a + Number((inMemoryCompactWindow?.[k] || []).length || 0), 0);
           compactWindow = (durableCount > 0 || memoryCount === 0) ? durableCompactWindow : inMemoryCompactWindow;
+
+          // Keep window metrics accurate when some keys are only tracked in-memory in this process.
+          // If durable selection is active but a key is missing/empty there, fall back to in-memory array.
+          if (compactWindow === durableCompactWindow) {
+            for (const k of arrKeys) {
+              const durableArr = Array.isArray(durableCompactWindow?.[k]) ? durableCompactWindow[k] : [];
+              const memoryArr = Array.isArray(inMemoryCompactWindow?.[k]) ? inMemoryCompactWindow[k] : [];
+              if (durableArr.length === 0 && memoryArr.length > 0) {
+                compactWindow[k] = memoryArr;
+              }
+            }
+          }
         } catch {}
       }
       const inWindowTs = (arr) => (arr || []).filter((t) => Number(t || 0) >= effectiveWindowStartMs);
