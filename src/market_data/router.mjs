@@ -1,6 +1,8 @@
 import { jupPriceUsd } from '../providers/jupiter/price.mjs';
 import { validateSnapshot, computeConfidence as validatorComputeConfidence } from '../lib/snapshot/validators.mjs';
 import cache from '../lib/cache/global_cache.mjs';
+import { appendJsonl } from '../trading/candidates_ledger.mjs';
+import { appendDiagEvent } from '../control_tower/diag_reporting/diag_event_store.mjs';
 
 const PROVIDERS = {
   bird: 'birdeye',
@@ -90,6 +92,9 @@ function ensureProviderHealth(state, provider) {
 }
 
 function pushProviderWindowEvent(state, { provider, outcome, nowMs = Date.now() }) {
+  const tMs = Number(nowMs || Date.now());
+  const providerName = String(provider || 'unknown');
+  const outcomeName = String(outcome || 'unknown');
   try {
     state.runtime ||= {};
     state.runtime.diagCounters ||= {};
@@ -97,8 +102,16 @@ function pushProviderWindowEvent(state, { provider, outcome, nowMs = Date.now() 
     state.runtime.diagCounters.watchlist.compactWindow ||= {};
     const cw = state.runtime.diagCounters.watchlist.compactWindow;
     cw.providerHealth ||= [];
-    cw.providerHealth.push({ tMs: Number(nowMs || Date.now()), provider: String(provider || 'unknown'), outcome: String(outcome || 'unknown') });
+    cw.providerHealth.push({ tMs, provider: providerName, outcome: outcomeName });
     if (cw.providerHealth.length > 3000) cw.providerHealth = cw.providerHealth.slice(-3000);
+  } catch {}
+
+  try {
+    appendDiagEvent({
+      appendJsonl,
+      statePath: process.env.STATE_PATH || './state/state.json',
+      event: { tMs, kind: 'providerHealth', reason: null, extra: { provider: providerName, outcome: outcomeName } },
+    });
   } catch {}
 }
 

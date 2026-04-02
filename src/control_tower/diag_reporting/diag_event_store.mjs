@@ -13,6 +13,8 @@ const TS_EVENT_KINDS = new Set([
 ]);
 
 const PERSIST_KINDS = new Set([
+  'watchlistSeen',
+  'watchlistEvaluated',
   'momentumEval',
   'momentumPassed',
   'momentumFailChecks',
@@ -29,6 +31,8 @@ const PERSIST_KINDS = new Set([
   'postMomentumFlow',
   'blocker',
   'stalkableSeen',
+  'hotBypass',
+  'providerHealth',
   'scanCycle',
   'candidateSeen',
   'candidateRouteable',
@@ -37,6 +41,8 @@ const PERSIST_KINDS = new Set([
 
 const FAMILY_KIND_SETS = {
   momentum: new Set([
+    'watchlistSeen',
+    'watchlistEvaluated',
     'momentumEval',
     'momentumPassed',
     'momentumFailChecks',
@@ -48,7 +54,9 @@ const FAMILY_KIND_SETS = {
     'repeatSuppressed',
     'blocker',
     'stalkableSeen',
+    'hotBypass',
   ]),
+  provider: new Set(['providerHealth']),
   confirm: new Set(['confirmReached', 'confirmPassed', 'postMomentumFlow']),
   execution: new Set(['attempt', 'fill']),
   scanner: new Set(['scanCycle', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen']),
@@ -362,6 +370,8 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     candidateRouteable: [],
     candidateLiquiditySeen: [],
     repeatSuppressed: [],
+    providerHealth: [],
+    hotBypass: [],
   };
 
   for (const ev of events) {
@@ -411,6 +421,14 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     }
     if (kind === 'repeatSuppressed') {
       pushObj(w.repeatSuppressed, { tMs, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') }, cutoffMs);
+      continue;
+    }
+    if (kind === 'providerHealth') {
+      pushObj(w.providerHealth, { tMs, provider: String(extra?.provider || 'unknown'), outcome: String(extra?.outcome || 'unknown') }, cutoffMs);
+      continue;
+    }
+    if (kind === 'hotBypass') {
+      pushObj(w.hotBypass, { tMs, mint: String(extra?.mint || 'unknown'), decision: String(extra?.decision || 'unknown'), primary: String(extra?.primary || 'unknown') }, cutoffMs);
       continue;
     }
     if (kind === 'momentumRecent') {

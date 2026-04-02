@@ -180,6 +180,8 @@ export async function evaluateWatchlistRowsRuntime({
     if (!Array.isArray(w.candidateRouteable)) w.candidateRouteable = [];
     if (!Array.isArray(w.candidateLiquiditySeen)) w.candidateLiquiditySeen = [];
     if (!Array.isArray(w.repeatSuppressed)) w.repeatSuppressed = [];
+    if (!Array.isArray(w.providerHealth)) w.providerHealth = [];
+    if (!Array.isArray(w.hotBypass)) w.hotBypass = [];
     return w;
   };
   const pushCompactWindowEvent = (kind, reason = null, extra = null, opts = {}) => {
@@ -191,6 +193,8 @@ export async function evaluateWatchlistRowsRuntime({
     if (shouldPersist) {
       try {
         const persistKinds = new Set([
+          'watchlistSeen',
+          'watchlistEvaluated',
           'momentumEval',
           'momentumPassed',
           'momentumFailChecks',
@@ -207,6 +211,8 @@ export async function evaluateWatchlistRowsRuntime({
           'postMomentumFlow',
           'blocker',
           'stalkableSeen',
+          'hotBypass',
+          'providerHealth',
           'scanCycle',
           'candidateSeen',
           'candidateRouteable',
@@ -315,6 +321,16 @@ export async function evaluateWatchlistRowsRuntime({
     if (kind === 'repeatSuppressed') {
       w.repeatSuppressed.push({ tMs: now, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
       while (w.repeatSuppressed.length && Number(w.repeatSuppressed[0]?.tMs || 0) < cutoff) w.repeatSuppressed.shift();
+      return;
+    }
+    if (kind === 'providerHealth') {
+      w.providerHealth.push({ tMs: now, provider: String(extra?.provider || 'unknown'), outcome: String(extra?.outcome || 'unknown') });
+      while (w.providerHealth.length && Number(w.providerHealth[0]?.tMs || 0) < cutoff) w.providerHealth.shift();
+      return;
+    }
+    if (kind === 'hotBypass') {
+      w.hotBypass.push({ tMs: now, mint: String(extra?.mint || 'unknown'), decision: String(extra?.decision || 'unknown'), primary: String(extra?.primary || 'unknown') });
+      while (w.hotBypass.length && Number(w.hotBypass[0]?.tMs || 0) < cutoff) w.hotBypass.shift();
       return;
     }
     if (kind === 'momentumRecent') {
