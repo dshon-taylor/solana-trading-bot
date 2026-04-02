@@ -97,6 +97,8 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const repeatSuppressedWin = inWindowObj(compactWindow.repeatSuppressed || []);
       const momentumLiqWin = inWindowObj(compactWindow.momentumLiqValues || []);
       const stalkableSeenWin = inWindowObj(compactWindow.stalkableSeen || []);
+      const providerHealthWin = inWindowObj(compactWindow.providerHealth || []);
+      const hotBypassWin = inWindowObj(compactWindow.hotBypass || []);
       const scanCyclesRaw = compactWindow.scanCycles || [];
       const scanCyclesWin = inWindowObj(scanCyclesRaw);
       const candidateSeenWin = inWindowObj(compactWindow.candidateSeen || []);
@@ -1372,6 +1374,15 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const pairFetchReqWin = Number(candidateSeenWin.length || 0);
       const pairFetchHitWin = Number(candidateRouteableWin.length || 0);
       const pairFetchRate = pairFetchReqWin > 0 ? `${Math.round((pairFetchHitWin / pairFetchReqWin) * 100)}%` : 'n/a';
+
+      const providerWinRate = (name) => {
+        const req = providerHealthWin.filter((x) => String(x?.provider || '') === name && String(x?.outcome || '') === 'request').length;
+        const hit = providerHealthWin.filter((x) => String(x?.provider || '') === name && String(x?.outcome || '') === 'hit').length;
+        return req > 0 ? `${Math.round((hit / req) * 100)}%` : 'n/a';
+      };
+      const providerBirdEyeRateWin = providerWinRate('birdeye');
+      const providerJupiterRateWin = providerWinRate('jupiter');
+      const providerDexRateWin = providerWinRate('dexscreener');
       const preHotConsidered = Number(counters?.watchlist?.preHotConsidered || 0);
       const preHotPassed = Number(counters?.watchlist?.preHotPassed || 0);
       const preHotFailed = Number(counters?.watchlist?.preHotFailed || 0);
@@ -1415,9 +1426,16 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const bypassAllowed = Number(counters?.watchlist?.hotLiqMomentumBypassAllowed || 0);
       const bypassRejected = Number(counters?.watchlist?.hotLiqMomentumBypassRejected || 0);
       const bypassPrimaryReject = Object.entries(counters?.watchlist?.hotLiqBypassPrimaryRejectReason || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
-      const bypassAllowedWin = null;
-      const bypassRejectedWin = null;
-      const bypassPrimaryRejectWin = 'n/a(window-unavailable)';
+      const bypassAllowedWin = Number(hotBypassWin.filter((x) => String(x?.decision || '') === 'allowed').length || 0);
+      const bypassRejectedWin = Number(hotBypassWin.filter((x) => String(x?.decision || '') === 'rejected').length || 0);
+      const bypassPrimaryRejectWin = Object.entries(hotBypassWin
+        .filter((x) => String(x?.decision || '') === 'rejected')
+        .reduce((acc, x) => {
+          const k = String(x?.primary || 'unknown');
+          acc[k] = Number(acc[k] || 0) + 1;
+          return acc;
+        }, {}))
+        .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0]?.[0] || 'none';
 
       const liqBandFromMomentum = momentumLiqWin.length > 0;
       let liqBand = { lt30: 0, b30_50: 0, b50_75: 0, gte75: 0 };
@@ -1470,6 +1488,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         evalsPerMinute,
         providerRate,
         providers,
+        providerBirdEyeRateWin,
+        providerJupiterRateWin,
+        providerDexRateWin,
         scannerHealth,
         uniqueCandidatesSeen,
         uniqueAboveHotFloor,

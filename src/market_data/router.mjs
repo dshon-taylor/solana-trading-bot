@@ -89,24 +89,41 @@ function ensureProviderHealth(state, provider) {
   return h;
 }
 
+function pushProviderWindowEvent(state, { provider, outcome, nowMs = Date.now() }) {
+  try {
+    state.runtime ||= {};
+    state.runtime.diagCounters ||= {};
+    state.runtime.diagCounters.watchlist ||= {};
+    state.runtime.diagCounters.watchlist.compactWindow ||= {};
+    const cw = state.runtime.diagCounters.watchlist.compactWindow;
+    cw.providerHealth ||= [];
+    cw.providerHealth.push({ tMs: Number(nowMs || Date.now()), provider: String(provider || 'unknown'), outcome: String(outcome || 'unknown') });
+    if (cw.providerHealth.length > 3000) cw.providerHealth = cw.providerHealth.slice(-3000);
+  } catch {}
+}
+
 function markProviderRequest(state, provider) {
   const h = ensureProviderHealth(state, provider);
   h.requests = Number(h.requests || 0) + 1;
+  pushProviderWindowEvent(state, { provider, outcome: 'request' });
 }
 
 function markProviderHit(state, provider) {
   const h = ensureProviderHealth(state, provider);
   h.hits = Number(h.hits || 0) + 1;
+  pushProviderWindowEvent(state, { provider, outcome: 'hit' });
 }
 
 function markProviderMiss(state, provider) {
   const h = ensureProviderHealth(state, provider);
   h.misses = Number(h.misses || 0) + 1;
+  pushProviderWindowEvent(state, { provider, outcome: 'miss' });
 }
 
 function markProviderReject(state, provider) {
   const h = ensureProviderHealth(state, provider);
   h.rejects = Number(h.rejects || 0) + 1;
+  pushProviderWindowEvent(state, { provider, outcome: 'reject' });
 }
 
 function markProviderSuccess(state, provider, nowMs) {

@@ -12,6 +12,9 @@ export function buildCompactDiagMessage(ctx) {
     evalsPerMinute,
     providerRate,
     providers,
+    providerBirdEyeRateWin,
+    providerJupiterRateWin,
+    providerDexRateWin,
     scannerHealth,
     uniqueCandidatesSeen,
     uniqueAboveHotFloor,
@@ -56,7 +59,7 @@ export function buildCompactDiagMessage(ctx) {
     `🧪 *Diag (compact)* window=${windowHeaderLabel} start=${fmtCt(effectiveWindowStartMs)}`,
     'SYSTEM',
     `snapshotAt=${updatedIso} windowHours=${elapsedHours.toFixed(2)} scansPerHour=${warmingUp ? 'warming_up' : scansPerHourWindow.toFixed(1)} watchlistSize=${watchlistSize} hotDepth=${hotDepth} evalsPerMinute=${warmingUp ? 'warming_up' : evalsPerMinute.toFixed(2)} status=${warmingUp ? 'warming_up' : 'ready'}`,
-    `providers(lifetime): birdeye=${providerRate(providers?.birdeye)} jupiter=${providerRate(providers?.jupiter)} dex=${providerRate(providers?.dexscreener)}`, // window unavailable for provider counters
+    `providers: birdeye=${providerBirdEyeRateWin} jupiter=${providerJupiterRateWin} dex=${providerDexRateWin}`,
     `scannerSummary: scansPerHour=${warmingUp ? 'warming_up' : scansPerHourWindow.toFixed(1)} scannerHealth=${scannerHealth} uniqueCandidatesSeen=${uniqueCandidatesSeen} uniqueCandidatesAboveHotFloor=${uniqueAboveHotFloor}`,
     '',
     'PIPELINE HEALTH',

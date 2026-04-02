@@ -177,6 +177,7 @@ export async function runRowPreflightStage(ctx) {
 
         if (bypassEligible) {
           counters.watchlist.hotLiqMomentumBypassAllowed = Number(counters.watchlist.hotLiqMomentumBypassAllowed || 0) + 1;
+          try { ctx.pushCompactWindowEvent?.('hotBypass', null, { mint, decision: 'allowed', primary: 'allowed' }); } catch {}
           row.meta.hotMomentumOnlyLiquidityBypass = true;
           row.meta.hotMomentumBypassLiquidityUsd = liqNow;
           row.meta.hotMomentumBypassAtMs = nowMs;
@@ -201,6 +202,7 @@ export async function runRowPreflightStage(ctx) {
           else if (!liqInBypassBand) primary = (liqNow < ctx.hotMomentumMinLiqUsd) ? 'belowHotStalkingFloor' : 'atOrAboveFullFloor';
           else primary = 'other';
           bumpPrimary(primary);
+          try { ctx.pushCompactWindowEvent?.('hotBypass', null, { mint, decision: 'rejected', primary }); } catch {}
 
           const secondaryTags = [];
           if (hasMcapMissing) { bumpSecondary('mcapMissing(diagnostic)'); secondaryTags.push('mcapMissing(diagnostic)'); }
