@@ -81,7 +81,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           const arrKeys = [
             'momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill',
             'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'watchlistSeen', 'watchlistEvaluated',
-            'postMomentumFlow', 'momentumLiqValues', 'stalkableSeen', 'repeatSuppressed', 'momentumFailChecks', 'providerHealth', 'hotBypass',
+            'postMomentumFlow', 'momentumLiqValues', 'stalkableSeen', 'repeatSuppressed', 'momentumFailChecks', 'providerHealth', 'hotBypass', 'preHotFlow',
           ];
           const durableCount = arrKeys.reduce((a, k) => a + Number((durableCompactWindow?.[k] || []).length || 0), 0);
           const memoryCount = arrKeys.reduce((a, k) => a + Number((inMemoryCompactWindow?.[k] || []).length || 0), 0);
@@ -115,6 +115,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const stalkableSeenWin = inWindowObj(compactWindow.stalkableSeen || []);
       const providerHealthWin = inWindowObj(compactWindow.providerHealth || []);
       const hotBypassWin = inWindowObj(compactWindow.hotBypass || []);
+      const preHotFlowWin = inWindowObj(compactWindow.preHotFlow || []);
       const scanCyclesRaw = compactWindow.scanCycles || [];
       const scanCyclesWin = inWindowObj(scanCyclesRaw);
       const candidateSeenWin = inWindowObj(compactWindow.candidateSeen || []);
@@ -1416,14 +1417,119 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const hotCons = Number(counters?.watchlist?.hotConsumed || 0);
 
       const preHotMinLiqActive = Number(state?.filterOverrides?.MIN_LIQUIDITY_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD ?? 0);
-      const preHotConsideredWin = Number(candidateLiquiditySeenWin.length || 0);
-      const preHotPassedWin = Number(candidateLiquiditySeenWin.filter((x) => Number(x?.liqUsd || 0) >= preHotMinLiqActive).length || 0);
-      const preHotFailedWin = Math.max(0, preHotConsideredWin - preHotPassedWin);
-      // Approximate hot queue window from current window events:
-      // - enqueued ≈ preHotPassedWin
-      // - consumed = watchlistSeen events in window
-      const hotEnqWin = preHotPassedWin;
+      const preHotConsideredRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'considered');
+      const preHotPassedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'passed');
+      const preHotRejectedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'rejected');
+      const hotEnqueuedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'hotQueue' && String(x?.outcome || '') === 'enqueued');
+
+      const preHotConsideredWin = Number(preHotConsideredRows.length || 0);
+      const preHotPassedWin = Number(preHotPassedRows.length || 0);
+      const preHotFailedWin = Number(preHotRejectedRows.length || 0);
+      const hotEnqWin = Number(hotEnqueuedRows.length || 0);
       const hotConsWin = Number(inWindowTs(compactWindow.watchlistSeen || []).length || 0);
+
+      const liqBandKey = (liq) => {
+        const n = Number(liq || 0);
+        if (n >= 75_000) return '75k+';
+        if (n >= 50_000) return '50-75k';
+        if (n >= 40_000) return '40-50k';
+        if (n >= 30_000) return '30-40k';
+        return null;
+      };
+      const bandKeys = ['30-40k', '40-50k', '50-75k', '75k+'];
+      const makeBandShape = () => ({
+        candidateSeen: 0,
+        preHotConsidered: 0,
+        preHotPassed: 0,
+        hotEnqueued: 0,
+        momentumEvaluated: 0,
+        momentumPassed: 0,
+        hardGuardBlocked: 0,
+        confirmReached: 0,
+      });
+      const funnelByBand = Object.fromEntries(bandKeys.map((k) => [k, makeBandShape()]));
+      const reasonByBand = Object.fromEntries(bandKeys.map((k) => [k, {}]));
+      const addReason = (band, reason) => {
+        if (!band || !reasonByBand[band]) return;
+        const key = String(reason || 'unknown');
+        reasonByBand[band][key] = Number(reasonByBand[band][key] || 0) + 1;
+      };
+      const classifyReason = (raw) => {
+        const r = String(raw || '').toLowerCase();
+        if (!r || r === 'none') return null;
+        if (r.includes('mcap/liquidity>10.0')) return 'mcap/liquidity>10.0';
+        if (r.includes('buypressure')) return 'buyPressure';
+        if (r.includes('walletexpansion')) return 'walletExpansion';
+        if (r.includes('volumeexpansion')) return 'volumeExpansion';
+        if (r.includes('cooldown') || r.includes('repeat')) return 'cooldown/repeat suppression';
+        if (r.includes('liq') || r.includes('liquidity')) return 'liquidity-based rejection';
+        return String(raw || 'other');
+      };
+
+      for (const ev of candidateLiquiditySeenWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (band) funnelByBand[band].candidateSeen += 1;
+      }
+      for (const ev of preHotConsideredRows) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (band) funnelByBand[band].preHotConsidered += 1;
+      }
+      for (const ev of preHotPassedRows) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (band) funnelByBand[band].preHotPassed += 1;
+      }
+      for (const ev of hotEnqueuedRows) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (band) funnelByBand[band].hotEnqueued += 1;
+      }
+      for (const ev of momentumLiqWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (band) funnelByBand[band].momentumEvaluated += 1;
+      }
+      for (const ev of inWindowObj(compactWindow.momentumRecent || [])) {
+        if (String(ev?.final || '') !== 'momentum.passed') continue;
+        const band = liqBandKey(ev?.liq);
+        if (band) funnelByBand[band].momentumPassed += 1;
+      }
+      for (const ev of postFlowWin) {
+        const stage = String(ev?.stage || '');
+        const outcome = String(ev?.outcome || '');
+        const band = liqBandKey(ev?.liq);
+        if (!band) continue;
+        if (stage === 'confirm' && outcome === 'reached') funnelByBand[band].confirmReached += 1;
+      }
+      for (const ev of momentumFailChecksWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        const checks = Array.isArray(ev?.checks) ? ev.checks.map((x) => String(x || '')) : [];
+        const hardGuardHit = checks.some((c) => {
+          const cc = String(c || '').toLowerCase();
+          return ['dex.mcap/liquidity>10.0', 'dex.spread>3%', 'dex.age<180s', 'dex.liqdrop60s>10%'].includes(cc) || cc.startsWith('dex.liq<');
+        });
+        if (hardGuardHit) funnelByBand[band].hardGuardBlocked += 1;
+        for (const c of checks) {
+          const rr = classifyReason(c);
+          if (rr) addReason(band, rr);
+        }
+      }
+      for (const ev of preHotRejectedRows) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        const reasons = Array.isArray(ev?.reasons) && ev.reasons.length ? ev.reasons : [ev?.reason || 'unknown'];
+        for (const r of reasons) {
+          const rr = classifyReason(r);
+          if (rr) addReason(band, rr);
+        }
+      }
+      for (const ev of repeatSuppressedWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        addReason(band, 'cooldown/repeat suppression');
+      }
+      const topRejectionByBand = Object.fromEntries(bandKeys.map((k) => {
+        const top = Object.entries(reasonByBand[k] || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0];
+        return [k, top ? `${top[0]}:${top[1]}` : 'none'];
+      }));
 
       const blockerTop5 = Object.entries(blockerCounts1h)
         .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)
@@ -1553,6 +1659,8 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         stalkableBand,
         liqBandFromMomentum,
         liqBand,
+        funnelByBand,
+        topRejectionByBand,
         downstreamShort,
         examples,
       });

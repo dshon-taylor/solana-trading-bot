@@ -221,7 +221,7 @@ export async function runMomentumEvalStage(ctx) {
       counters.watchlist.momentumBreakoutSignalsFailed = Number(counters.watchlist.momentumBreakoutSignalsFailed || 0) + breakoutSignalsFailed;
 
       recordCanaryMomoFailChecks({ state, nowMs, failedChecks: combinedFailed, windowMin: cfg.MOMENTUM_DIAG_WINDOW_MIN, enabled: ctx.isCanary });
-      pushCompactWindowEvent('momentumFailChecks', null, { checks: combinedFailed, mint });
+      pushCompactWindowEvent('momentumFailChecks', null, { checks: combinedFailed, mint, liqUsd });
 
       counters.watchlist.momentumFailedChecksTop ||= {};
       counters.watchlist.momentumFailedMintsTop ||= {};
@@ -380,7 +380,7 @@ export async function runMomentumEvalStage(ctx) {
             counters.watchlist.momentumRepeatFailReasonTop ||= {};
             counters.watchlist.momentumRepeatFailMintsTop[mint] = Number(counters.watchlist.momentumRepeatFailMintsTop[mint] || 0) + 1;
             counters.watchlist.momentumRepeatFailReasonTop[repeatReason] = Number(counters.watchlist.momentumRepeatFailReasonTop[repeatReason] || 0) + 1;
-            pushCompactWindowEvent('repeatSuppressed', null, { mint, reason: repeatReason });
+            pushCompactWindowEvent('repeatSuppressed', null, { mint, reason: repeatReason, liqUsd });
           }
         }
       }

@@ -2,12 +2,36 @@ import { nowIso } from '../../observability/logger.mjs';
 import { pushDebug } from '../../observability/debug_buffer.mjs';
 import { readPct, ensureWatchlistState, queueHotWatchlistMint, resolvePairCreatedAtGlobal } from '../watchlist_control.mjs';
 import { holdersGateCheck } from '../route_control.mjs';
+import { appendJsonl } from '../../trading/candidates_ledger.mjs';
+import { appendDiagEvent } from '../diag_reporting/diag_event_store.mjs';
 
 export async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, snapshot, counters, routeHint = false, birdseye = null, deps }) {
   const { recordConfirmCarryTrace } = deps;
 
   const wl = ensureWatchlistState(state);
   const prev = wl.mints[mint] || null;
+  const emitPreHotFlow = ({ liqUsd = 0, mcapUsd = 0, stage = 'preHot', outcome = 'unknown', reason = 'none', reasons = [] } = {}) => {
+    try {
+      appendDiagEvent({
+        appendJsonl,
+        statePath: cfg.STATE_PATH,
+        event: {
+          tMs: nowMs,
+          kind: 'preHotFlow',
+          reason: null,
+          extra: {
+            mint,
+            liqUsd: Number(liqUsd || 0),
+            mcapUsd: Number(mcapUsd || 0),
+            stage: String(stage || 'preHot'),
+            outcome: String(outcome || 'unknown'),
+            reason: String(reason || 'none'),
+            reasons: Array.isArray(reasons) ? reasons.slice(0, 8).map((x) => String(x || '')) : [],
+          },
+        },
+      });
+    } catch {}
+  };
   const liqUsd = Number(snapshot?.liquidityUsd || pair?.liquidity?.usd || 0);
   const mcapUsd = Number(snapshot?.marketCapUsd || pair?.marketCap || pair?.fdv || tok?.marketCap || 0);
   const spreadPct = Number(snapshot?.spreadPct ?? pair?.spreadPct ?? pair?.market?.spreadPct ?? pair?.raw?.spreadPct);
@@ -181,10 +205,12 @@ export async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, 
     if (Number(next.hotPromotionCooldownUntilMs || 0) > nowMs) {
       counters.watchlist.preHotFailedByReason ||= {};
       counters.watchlist.preHotFailedByReason.cooldown = Number(counters.watchlist.preHotFailedByReason.cooldown || 0) + 1;
+      emitPreHotFlow({ liqUsd: Number(next?.latest?.liqUsd || 0), mcapUsd: Number(next?.latest?.mcapUsd || 0), stage: 'preHot', outcome: 'rejected', reason: 'cooldown', reasons: ['cooldown'] });
       return;
     }
     counters.watchlist.preHotConsidered = Number(counters.watchlist.preHotConsidered || 0) + 1;
     counters.watchlist.preHotFailedByReason ||= {};
+    emitPreHotFlow({ liqUsd: Number(next?.latest?.liqUsd || 0), mcapUsd: Number(next?.latest?.mcapUsd || 0), stage: 'preHot', outcome: 'considered', reason: 'none' });
 
     const liqEff = Number(next?.latest?.liqUsd || 0);
     const top10Eff = readPct(next?.latest?.top10Pct);
@@ -302,9 +328,11 @@ export async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, 
     if (failReasons.length > 0) {
       counters.watchlist.preHotFailed = Number(counters.watchlist.preHotFailed || 0) + 1;
       for (const r of failReasons) counters.watchlist.preHotFailedByReason[r] = Number(counters.watchlist.preHotFailedByReason[r] || 0) + 1;
+      emitPreHotFlow({ liqUsd: Number(liqEff || 0), mcapUsd: Number(next?.latest?.mcapUsd || 0), stage: 'preHot', outcome: 'rejected', reason: String(failReasons[0] || 'unknown'), reasons: failReasons });
       next.hotPromotionCooldownUntilMs = nowMs + (5 * 60_000);
     } else {
       counters.watchlist.preHotPassed = Number(counters.watchlist.preHotPassed || 0) + 1;
+      emitPreHotFlow({ liqUsd: Number(liqEff || 0), mcapUsd: Number(next?.latest?.mcapUsd || 0), stage: 'preHot', outcome: 'passed', reason: 'none' });
       if (bundleClusterPct == null) pushDebug(state, { t: nowIso(), mint, symbol: next?.symbol || null, reason: 'preHot(bundleClusterMissing_nonBlocking)' });
       if (!Number.isFinite(spreadPct)) pushDebug(state, { t: nowIso(), mint, symbol: next?.symbol || null, reason: 'preHot(spreadMissing_nonBlocking)' });
 
@@ -316,6 +344,7 @@ export async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, 
       if (Number(next.hotPromotionCooldownUntilMs || 0) <= nowMs) {
         queueHotWatchlistMint({ state, cfg, mint, nowMs, priority: hotPriority, reason: hotReason, counters });
         counters.watchlist.hotEnqueued += 1;
+        emitPreHotFlow({ liqUsd: Number(liqEff || 0), mcapUsd: Number(next?.latest?.mcapUsd || 0), stage: 'hotQueue', outcome: 'enqueued', reason: String(hotReason || 'preHotPassed') });
       }
     }
   }

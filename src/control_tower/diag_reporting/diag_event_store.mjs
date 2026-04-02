@@ -37,6 +37,7 @@ const PERSIST_KINDS = new Set([
   'candidateSeen',
   'candidateRouteable',
   'candidateLiquiditySeen',
+  'preHotFlow',
 ]);
 
 const FAMILY_KIND_SETS = {
@@ -55,6 +56,7 @@ const FAMILY_KIND_SETS = {
     'blocker',
     'stalkableSeen',
     'hotBypass',
+    'preHotFlow',
   ]),
   provider: new Set(['providerHealth']),
   confirm: new Set(['confirmReached', 'confirmPassed', 'postMomentumFlow']),
@@ -372,6 +374,7 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     repeatSuppressed: [],
     providerHealth: [],
     hotBypass: [],
+    preHotFlow: [],
   };
 
   for (const ev of events) {
@@ -392,7 +395,7 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
       continue;
     }
     if (kind === 'momentumFailChecks') {
-      pushObj(w.momentumFailChecks, { tMs, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') }, cutoffMs);
+      pushObj(w.momentumFailChecks, { tMs, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) }, cutoffMs);
       continue;
     }
     if (kind === 'momentumLiq') {
@@ -420,7 +423,7 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
       continue;
     }
     if (kind === 'repeatSuppressed') {
-      pushObj(w.repeatSuppressed, { tMs, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') }, cutoffMs);
+      pushObj(w.repeatSuppressed, { tMs, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) }, cutoffMs);
       continue;
     }
     if (kind === 'providerHealth') {
@@ -429,6 +432,19 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     }
     if (kind === 'hotBypass') {
       pushObj(w.hotBypass, { tMs, mint: String(extra?.mint || 'unknown'), decision: String(extra?.decision || 'unknown'), primary: String(extra?.primary || 'unknown') }, cutoffMs);
+      continue;
+    }
+    if (kind === 'preHotFlow') {
+      pushObj(w.preHotFlow, {
+        tMs,
+        mint: String(extra?.mint || 'unknown'),
+        liqUsd: Number(extra?.liqUsd || 0),
+        mcapUsd: Number(extra?.mcapUsd || 0),
+        stage: String(extra?.stage || 'preHot'),
+        outcome: String(extra?.outcome || 'unknown'),
+        reason: String(extra?.reason || 'none'),
+        reasons: Array.isArray(extra?.reasons) ? extra.reasons.slice(0, 8).map((x) => String(x || '')) : [],
+      }, cutoffMs);
       continue;
     }
     if (kind === 'momentumRecent') {

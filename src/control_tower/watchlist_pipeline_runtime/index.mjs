@@ -237,7 +237,7 @@ export async function evaluateWatchlistRowsRuntime({
       return;
     }
     if (kind === 'momentumFailChecks') {
-      w.momentumFailChecks.push({ tMs: now, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown') });
+      w.momentumFailChecks.push({ tMs: now, checks: Array.isArray(extra?.checks) ? extra.checks.slice(0, 16) : [], mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
       while (w.momentumFailChecks.length && Number(w.momentumFailChecks[0]?.tMs || 0) < cutoff) w.momentumFailChecks.shift();
       return;
     }
@@ -319,7 +319,7 @@ export async function evaluateWatchlistRowsRuntime({
       return;
     }
     if (kind === 'repeatSuppressed') {
-      w.repeatSuppressed.push({ tMs: now, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown') });
+      w.repeatSuppressed.push({ tMs: now, mint: String(extra?.mint || 'unknown'), reason: String(extra?.reason || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
       while (w.repeatSuppressed.length && Number(w.repeatSuppressed[0]?.tMs || 0) < cutoff) w.repeatSuppressed.shift();
       return;
     }
