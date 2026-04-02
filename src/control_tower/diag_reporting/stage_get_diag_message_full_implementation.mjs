@@ -1369,9 +1369,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       }
 
       const routeable = Number(candidateRouteableWin.length || 0);
-      const pairFetchReq = Number(providers?.birdeye?.requests || 0);
-      const pairFetchHit = Number(providers?.birdeye?.hits || 0);
-      const pairFetchRate = pairFetchReq > 0 ? `${Math.round((pairFetchHit / pairFetchReq) * 100)}%` : 'n/a';
+      const pairFetchReqWin = Number(candidateSeenWin.length || 0);
+      const pairFetchHitWin = Number(candidateRouteableWin.length || 0);
+      const pairFetchRate = pairFetchReqWin > 0 ? `${Math.round((pairFetchHitWin / pairFetchReqWin) * 100)}%` : 'n/a';
       const preHotConsidered = Number(counters?.watchlist?.preHotConsidered || 0);
       const preHotPassed = Number(counters?.watchlist?.preHotPassed || 0);
       const preHotFailed = Number(counters?.watchlist?.preHotFailed || 0);
@@ -1415,6 +1415,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const bypassAllowed = Number(counters?.watchlist?.hotLiqMomentumBypassAllowed || 0);
       const bypassRejected = Number(counters?.watchlist?.hotLiqMomentumBypassRejected || 0);
       const bypassPrimaryReject = Object.entries(counters?.watchlist?.hotLiqBypassPrimaryRejectReason || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0))[0]?.[0] || 'none';
+      const bypassAllowedWin = null;
+      const bypassRejectedWin = null;
+      const bypassPrimaryRejectWin = 'n/a(window-unavailable)';
 
       const liqBandFromMomentum = momentumLiqWin.length > 0;
       let liqBand = { lt30: 0, b30_50: 0, b50_75: 0, gte75: 0 };
@@ -1496,6 +1499,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         bypassAllowed,
         bypassRejected,
         bypassPrimaryReject,
+        bypassAllowedWin,
+        bypassRejectedWin,
+        bypassPrimaryRejectWin,
         stalkableCandidates,
         stalkableBand,
         liqBandFromMomentum,
