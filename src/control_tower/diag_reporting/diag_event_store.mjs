@@ -391,7 +391,7 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     }
 
     if (kind === 'blocker') {
-      pushObj(w.blockers, { tMs, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') }, cutoffMs);
+      pushObj(w.blockers, { tMs, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown'), liqUsd: Number(extra?.liqUsd || 0), mcapUsd: Number(extra?.mcapUsd || 0) }, cutoffMs);
       continue;
     }
     if (kind === 'momentumFailChecks') {

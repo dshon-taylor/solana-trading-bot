@@ -1531,6 +1531,26 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         return [k, top ? `${top[0]}:${top[1]}` : 'none'];
       }));
 
+      const trackedPreMomentumReasons = [
+        'precheck.cooldown',
+        'hot.mcapLow(<250000)',
+        'precheck.alreadyOpen',
+        'hot.mcapStaleData',
+      ];
+      const preMomentumBlockersByBand = Object.fromEntries(bandKeys.map((k) => [k, Object.fromEntries(trackedPreMomentumReasons.map((r) => [r, 0]))]));
+      for (const ev of blockersWin) {
+        const rawReason = String(ev?.reason || '');
+        const reason = trackedPreMomentumReasons.find((r) => rawReason.startsWith(r)) || null;
+        if (!reason) continue;
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        preMomentumBlockersByBand[band][reason] = Number(preMomentumBlockersByBand[band][reason] || 0) + 1;
+      };
+      const preMomentumBlockersByBandText = Object.fromEntries(bandKeys.map((k) => {
+        const row = preMomentumBlockersByBand[k] || {};
+        return [k, `cooldown=${Number(row['precheck.cooldown'] || 0)} mcapLow=${Number(row['hot.mcapLow(<250000)'] || 0)} alreadyOpen=${Number(row['precheck.alreadyOpen'] || 0)} mcapStale=${Number(row['hot.mcapStaleData'] || 0)}`];
+      }));
+
       const blockerTop5 = Object.entries(blockerCounts1h)
         .sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)
         ).slice(0,5);
@@ -1661,6 +1681,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         liqBand,
         funnelByBand,
         topRejectionByBand,
+        preMomentumBlockersByBandText,
         downstreamShort,
         examples,
       });

@@ -232,7 +232,7 @@ export async function evaluateWatchlistRowsRuntime({
       while (arr.length && Number(arr[0] || 0) < cutoff) arr.shift();
     };
     if (kind === 'blocker') {
-      w.blockers.push({ tMs: now, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown') });
+      w.blockers.push({ tMs: now, reason: String(reason || 'unknown'), mint: String(extra?.mint || 'unknown'), stage: String(extra?.stage || 'unknown'), liqUsd: Number(extra?.liqUsd || 0), mcapUsd: Number(extra?.mcapUsd || 0) });
       while (w.blockers.length && Number(w.blockers[0]?.tMs || 0) < cutoff) w.blockers.shift();
       return;
     }
@@ -718,7 +718,12 @@ export async function evaluateWatchlistRowsRuntime({
     ctx.fail = (reason, { stage = 'gate', breakLoop = false, cooldownMs = 0, meta = null } = {}) => {
       const reasonCode = `${stage}.${reason}`;
       bumpWatchlistFunnel(counters, 'blockedByReason', { nowMs, blockedReason: reasonCode });
-      pushCompactWindowEvent('blocker', reasonCode, { mint, stage });
+      pushCompactWindowEvent('blocker', reasonCode, {
+        mint,
+        stage,
+        liqUsd: Number(ctx.snapshot?.liquidityUsd ?? ctx.pair?.liquidity?.usd ?? row?.latest?.liqUsd ?? 0),
+        mcapUsd: Number(ctx.mcapHot ?? row?.latest?.mcapUsd ?? ctx.snapshot?.marketCapUsd ?? ctx.pair?.marketCap ?? 0),
+      });
       if (ctx.momentumPassedThisEval && !ctx.confirmReachedThisEval) {
         pushCompactWindowEvent('postMomentumFlow', null, {
           mint,
