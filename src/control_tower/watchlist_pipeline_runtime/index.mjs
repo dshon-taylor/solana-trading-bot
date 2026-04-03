@@ -495,7 +495,7 @@ export async function evaluateWatchlistRowsRuntime({
   const repeatEscalationWindowSec = 900;
   const repeatEscalationHits = 3;
   const repeatEscalationCooldownSec = 900;
-  const repeatImprovementDelta = 0.02;
+  const repeatImprovementDelta = Number(process.env.PRECHECK_REPEAT_IMPROVEMENT_DELTA || 0.02);
   state.runtime ||= {};
   state.runtime.momentumRepeatFail ||= {};
   pruneMomentumRepeatFailMap(state.runtime.momentumRepeatFail, {
