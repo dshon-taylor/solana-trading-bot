@@ -491,7 +491,7 @@ export async function evaluateWatchlistRowsRuntime({
   };
 
   const repeatFailWindowSec = 180;
-  const repeatFailCooldownSec = 120;
+  const repeatFailCooldownSec = Number(process.env.PRECHECK_REPEAT_FAIL_COOLDOWN_SEC || 120);
   const repeatEscalationWindowSec = 900;
   const repeatEscalationHits = 3;
   const repeatEscalationCooldownSec = 900;
