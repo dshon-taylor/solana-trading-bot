@@ -48,6 +48,34 @@ export function createScanCompactEventPusher({ counters, cfg, appendJsonl }) {
           event: { tMs: now, kind: 'candidateLiquiditySeen', reason: null, extra: { mint: String(extra?.mint || 'unknown'), source: String(extra?.source || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
         });
       } catch {}
+      return;
+    }
+
+    if (kind === 'shortlistPreCandidate') {
+      if (!Array.isArray(w.shortlistPreCandidate)) w.shortlistPreCandidate = [];
+      w.shortlistPreCandidate.push({ tMs: now, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+      while (w.shortlistPreCandidate.length && Number(w.shortlistPreCandidate[0]?.tMs || 0) < cutoff) w.shortlistPreCandidate.shift();
+      try {
+        appendDiagEvent({
+          appendJsonl,
+          statePath: cfg.STATE_PATH,
+          event: { tMs: now, kind: 'shortlistPreCandidate', reason: null, extra: { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
+        });
+      } catch {}
+      return;
+    }
+
+    if (kind === 'shortlistSelected') {
+      if (!Array.isArray(w.shortlistSelected)) w.shortlistSelected = [];
+      w.shortlistSelected.push({ tMs: now, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) });
+      while (w.shortlistSelected.length && Number(w.shortlistSelected[0]?.tMs || 0) < cutoff) w.shortlistSelected.shift();
+      try {
+        appendDiagEvent({
+          appendJsonl,
+          statePath: cfg.STATE_PATH,
+          event: { tMs: now, kind: 'shortlistSelected', reason: null, extra: { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
+        });
+      } catch {}
     }
   };
 }

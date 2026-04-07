@@ -65,6 +65,7 @@ export function createScanPipeline(deps) {
       scanPhase,
       preCandidates: pairFetch.preCandidates,
       scanState: pairFetch.scanState,
+      pushScanCompactEvent,
     });
 
     return {

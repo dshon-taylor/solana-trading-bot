@@ -80,7 +80,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           });
           const arrKeys = [
             'momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill',
-            'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'watchlistSeen', 'watchlistEvaluated',
+            'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'shortlistPreCandidate', 'shortlistSelected', 'watchlistSeen', 'watchlistEvaluated',
             'postMomentumFlow', 'momentumLiqValues', 'stalkableSeen', 'repeatSuppressed', 'momentumFailChecks', 'providerHealth', 'hotBypass', 'preHotFlow',
           ];
           const durableCount = arrKeys.reduce((a, k) => a + Number((durableCompactWindow?.[k] || []).length || 0), 0);
@@ -121,6 +121,8 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const candidateSeenWin = inWindowObj(compactWindow.candidateSeen || []);
       const candidateRouteableWin = inWindowObj(compactWindow.candidateRouteable || []);
       const candidateLiquiditySeenWin = inWindowObj(compactWindow.candidateLiquiditySeen || []);
+      const shortlistPreCandidateWin = inWindowObj(compactWindow.shortlistPreCandidate || []);
+      const shortlistSelectedWin = inWindowObj(compactWindow.shortlistSelected || []);
       const postFlowWin = inWindowObj(compactWindow.postMomentumFlow || []);
       const momentumAgeWin = inWindowObj(compactWindow.momentumAgeSamples || []);
       const agePresentWin = momentumAgeWin.filter(x => Number.isFinite(x?.ageMin)).length;
@@ -1536,7 +1538,21 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const band = liqBandKey(ev?.liqUsd);
         if (!band) continue;
         hotReasonMissByBand[band] = Number(hotReasonMissByBand[band] || 0) + 1;
-      };
+      }
+
+      const shortlistPreByBand = Object.fromEntries(bandKeys.map((k) => [k, 0]));
+      const shortlistSelectedByBand = Object.fromEntries(bandKeys.map((k) => [k, 0]));
+      for (const ev of shortlistPreCandidateWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        shortlistPreByBand[band] = Number(shortlistPreByBand[band] || 0) + 1;
+      }
+      for (const ev of shortlistSelectedWin) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        shortlistSelectedByBand[band] = Number(shortlistSelectedByBand[band] || 0) + 1;
+      }
+      const shortlistDroppedByBand = Object.fromEntries(bandKeys.map((k) => [k, Math.max(0, Number(shortlistPreByBand[k] || 0) - Number(shortlistSelectedByBand[k] || 0))]));
 
       const trackedPreMomentumReasons = [
         'precheck.cooldown',
@@ -1690,6 +1706,9 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         topRejectionByBand,
         preMomentumBlockersByBandText,
         hotReasonMissByBand,
+        shortlistPreByBand,
+        shortlistSelectedByBand,
+        shortlistDroppedByBand,
         downstreamShort,
         examples,
       });

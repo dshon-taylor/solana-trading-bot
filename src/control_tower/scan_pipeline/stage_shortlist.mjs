@@ -10,6 +10,7 @@ export async function buildShortlistAndGates({
   scanPhase,
   preCandidates,
   scanState,
+  pushScanCompactEvent,
 }) {
   const {
     toBaseUnits,
@@ -25,6 +26,14 @@ export async function buildShortlistAndGates({
   } = deps;
 
   const _tShortlist = Date.now();
+  if (typeof pushScanCompactEvent === 'function') {
+    for (const c of preCandidates) {
+      pushScanCompactEvent('shortlistPreCandidate', {
+        mint: c?.mint,
+        liqUsd: Number(c?.snapshot?.liquidityUsd ?? c?.pair?.liquidity?.usd ?? 0),
+      });
+    }
+  }
   preCandidates.sort((a, b) => b.score - a.score);
   scanState.scanCandidatesFound = Number(preCandidates.length || 0);
 
@@ -101,6 +110,15 @@ export async function buildShortlistAndGates({
       })
       .slice(0, cfg.LIVE_PROBE_MAX_CANDIDATES)
     : rawTopCandidates;
+
+  if (typeof pushScanCompactEvent === 'function') {
+    for (const c of probeShortlist) {
+      pushScanCompactEvent('shortlistSelected', {
+        mint: c?.mint,
+        liqUsd: Number(c?.snapshot?.liquidityUsd ?? c?.pair?.liquidity?.usd ?? 0),
+      });
+    }
+  }
 
   return {
     preCandidates,
