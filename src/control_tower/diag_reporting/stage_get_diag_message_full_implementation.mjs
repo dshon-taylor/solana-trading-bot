@@ -1420,6 +1420,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const preHotConsideredRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'considered');
       const preHotPassedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'passed');
       const preHotRejectedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHot' && String(x?.outcome || '') === 'rejected');
+      const preHotMissedTriggerRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'preHotEntry' && String(x?.outcome || '') === 'missedTrigger');
       const hotEnqueuedRows = preHotFlowWin.filter((x) => String(x?.stage || '') === 'hotQueue' && String(x?.outcome || '') === 'enqueued');
 
       const preHotConsideredWin = Number(preHotConsideredRows.length || 0);
@@ -1530,6 +1531,12 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const top = Object.entries(reasonByBand[k] || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0];
         return [k, top ? `${top[0]}:${top[1]}` : 'none'];
       }));
+      const hotReasonMissByBand = Object.fromEntries(bandKeys.map((k) => [k, 0]));
+      for (const ev of preHotMissedTriggerRows) {
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        hotReasonMissByBand[band] = Number(hotReasonMissByBand[band] || 0) + 1;
+      };
 
       const trackedPreMomentumReasons = [
         'precheck.cooldown',
@@ -1682,6 +1689,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         funnelByBand,
         topRejectionByBand,
         preMomentumBlockersByBandText,
+        hotReasonMissByBand,
         downstreamShort,
         examples,
       });

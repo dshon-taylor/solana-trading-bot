@@ -201,6 +201,17 @@ export async function upsertWatchlistMint({ state, cfg, nowMs, tok, mint, pair, 
     if (txAccelRatio >= PRE_RUNNER_TX_ACCEL_MIN || walletExpansionRatio >= PRE_RUNNER_WALLET_EXPANSION_MIN || priceImpactExpansionRatio >= PRE_RUNNER_PRICE_IMPACT_EXPANSION_MIN) hotReason = 'preRunnerSignal';
   }
 
+  if (!hotReason) {
+    emitPreHotFlow({
+      liqUsd: Number(next?.latest?.liqUsd || 0),
+      mcapUsd: Number(next?.latest?.mcapUsd || 0),
+      stage: 'preHotEntry',
+      outcome: 'missedTrigger',
+      reason: 'hotReasonMissing',
+      reasons: ['hotReasonMissing'],
+    });
+  }
+
   if (hotReason) {
     if (Number(next.hotPromotionCooldownUntilMs || 0) > nowMs) {
       counters.watchlist.preHotFailedByReason ||= {};
