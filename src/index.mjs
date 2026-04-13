@@ -337,6 +337,7 @@ async function main() {
     safeErr,
     runNodeScriptJson,
     sendPositionsReport,
+    getSolUsdPrice,
     getLoopState: () => ({
       dexCooldownUntil: loopState.dexCooldownUntil,
       lastScan: loopState.lastScan,

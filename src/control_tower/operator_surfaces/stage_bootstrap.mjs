@@ -14,6 +14,7 @@ export function bootstrapOperatorSurfaces({
   runNodeScriptJson,
   sendPositionsReport,
   getLoopState,
+  getSolUsdPrice,
   createOperatorSurfaces,
 }) {
   const SPEND_CACHE_TTL_MS = Math.max(60_000, Number(process.env.SPEND_CACHE_TTL_MS || 5 * 60_000));
@@ -41,7 +42,7 @@ export function bootstrapOperatorSurfaces({
     SPEND_CACHE_TTL_MS,
     runNodeScriptJson,
     appendLearningNote: undefined,
-    getSolUsdPrice: undefined,
+    getSolUsdPrice,
     sendPositionsReport,
     getLoopState,
   });
