@@ -515,6 +515,69 @@ export async function runConfirmContinuationStage(ctx) {
     ? await ctx.deps.confirmContinuationGate({ cfg, mint, row, snapshot: ctx.snapshot, pair: ctx.pair, confirmMinLiqUsd, confirmPriceImpactPct, confirmStartLiqUsd })
     : ctx.deps.confirmQualityGate({ cfg, sigReasons: confirmSigReasons, snapshot: ctx.snapshot });
   ctx.confirmGate = confirmGate;
+
+  if (continuationActive) {
+    counters.watchlist.confirmContinuation ||= {
+      evaluated: 0,
+      passed: 0,
+      rejected: 0,
+      passReasons: {},
+      failReasons: {},
+      runupSourceUsed: {},
+      liveSourceAtPass: { ws_trade: 0, ws_ohlcv: 0, other: 0 },
+      twoGreenEvidence: { yes: 0, no: 0 },
+      selectedReads: { trade: 0, ohlcv: 0 },
+      maxTradeUpticksSeen: 0,
+      maxOhlcvUpticksSeen: 0,
+      last10: [],
+    };
+    const cc = counters.watchlist.confirmContinuation;
+    const diag = confirmGate?.diag || {};
+    const passReason = String(confirmGate?.passReason || 'none');
+    const failReason = String(confirmGate?.failReason || 'none');
+    const runupSourceUsed = String(diag?.runupSourceUsed || 'no_runup');
+    const selectedTradeReads = Number(diag?.selectedTradeReads || 0) || 0;
+    const selectedOhlcvReads = Number(diag?.selectedOhlcvReads || 0) || 0;
+    const maxTradeUpticks = Number(diag?.maxConsecutiveTradeUpticks || 0) || 0;
+    const maxOhlcvUpticks = Number(diag?.maxConsecutiveOhlcvUpticks || 0) || 0;
+    const minUpticks = Math.max(1, Number(diag?.minConsecutiveTradeUpticks || 2) || 2);
+    const twoGreenEvidence = Math.max(maxTradeUpticks, maxOhlcvUpticks) >= minUpticks;
+
+    cc.evaluated = Number(cc.evaluated || 0) + 1;
+    if (confirmGate?.ok) {
+      cc.passed = Number(cc.passed || 0) + 1;
+      cc.passReasons[passReason] = Number(cc.passReasons[passReason] || 0) + 1;
+      const sourceBucket = runupSourceUsed === 'ws_trade'
+        ? 'ws_trade'
+        : (runupSourceUsed === 'ws_ohlcv' ? 'ws_ohlcv' : 'other');
+      cc.liveSourceAtPass[sourceBucket] = Number(cc.liveSourceAtPass[sourceBucket] || 0) + 1;
+    } else {
+      cc.rejected = Number(cc.rejected || 0) + 1;
+      cc.failReasons[failReason] = Number(cc.failReasons[failReason] || 0) + 1;
+    }
+    cc.runupSourceUsed[runupSourceUsed] = Number(cc.runupSourceUsed[runupSourceUsed] || 0) + 1;
+    cc.twoGreenEvidence[twoGreenEvidence ? 'yes' : 'no'] = Number(cc.twoGreenEvidence[twoGreenEvidence ? 'yes' : 'no'] || 0) + 1;
+    cc.selectedReads.trade = Number(cc.selectedReads.trade || 0) + selectedTradeReads;
+    cc.selectedReads.ohlcv = Number(cc.selectedReads.ohlcv || 0) + selectedOhlcvReads;
+    cc.maxTradeUpticksSeen = Math.max(Number(cc.maxTradeUpticksSeen || 0), maxTradeUpticks);
+    cc.maxOhlcvUpticksSeen = Math.max(Number(cc.maxOhlcvUpticksSeen || 0), maxOhlcvUpticks);
+    cc.last10.push({
+      t: nowIso(),
+      mint,
+      ok: !!confirmGate?.ok,
+      passReason,
+      failReason,
+      runupSourceUsed,
+      maxTradeUpticks,
+      maxOhlcvUpticks,
+      minUpticks,
+      twoGreenEvidence,
+      selectedTradeReads,
+      selectedOhlcvReads,
+    });
+    if (cc.last10.length > 10) cc.last10 = cc.last10.slice(-10);
+  }
+
   if (!confirmGate.ok) {
     const rejectReason = continuationActive ? `confirmContinuation.${String(confirmGate?.failReason || 'windowExpired')}` : String(confirmGate.reason || 'confirmGateRejected');
     pushCompactWindowEvent('postMomentumFlow', null, {
@@ -569,6 +632,8 @@ export async function runConfirmContinuationStage(ctx) {
       continuationTradeTickCountAtRunupMoment: Number(confirmGate?.diag?.tradeTickCountAtRunupMoment || 0) || 0,
       continuationTradeSequenceEligibleAtRunup: !!confirmGate?.diag?.tradeSequenceEligibleAtRunup,
       continuationMaxConsecutiveTradeUpticks: Number(confirmGate?.diag?.maxConsecutiveTradeUpticks || 0) || 0,
+      continuationConsecutiveOhlcvUpticks: Number(confirmGate?.diag?.consecutiveOhlcvUpticks || 0) || 0,
+      continuationMaxConsecutiveOhlcvUpticks: Number(confirmGate?.diag?.maxConsecutiveOhlcvUpticks || 0) || 0,
       continuationMinConsecutiveTradeUpticks: Number(confirmGate?.diag?.minConsecutiveTradeUpticks || 0) || 0,
       continuationRequireTradeUpticks: !!confirmGate?.diag?.requireTradeUpticks,
       continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,
@@ -669,6 +734,8 @@ export async function runConfirmContinuationStage(ctx) {
     continuationTradeTickCountAtRunupMoment: Number(confirmGate?.diag?.tradeTickCountAtRunupMoment || 0) || 0,
     continuationTradeSequenceEligibleAtRunup: !!confirmGate?.diag?.tradeSequenceEligibleAtRunup,
     continuationMaxConsecutiveTradeUpticks: Number(confirmGate?.diag?.maxConsecutiveTradeUpticks || 0) || 0,
+    continuationConsecutiveOhlcvUpticks: Number(confirmGate?.diag?.consecutiveOhlcvUpticks || 0) || 0,
+    continuationMaxConsecutiveOhlcvUpticks: Number(confirmGate?.diag?.maxConsecutiveOhlcvUpticks || 0) || 0,
     continuationMinConsecutiveTradeUpticks: Number(confirmGate?.diag?.minConsecutiveTradeUpticks || 0) || 0,
     continuationRequireTradeUpticks: !!confirmGate?.diag?.requireTradeUpticks,
     continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,

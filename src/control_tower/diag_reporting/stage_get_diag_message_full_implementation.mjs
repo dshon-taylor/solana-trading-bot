@@ -968,11 +968,15 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const confirmWindowSec = Math.round(confirmWindowMs / 1000);
         const confirmReachedRunup15 = confirmCandidatesDecorated.filter((r) => Number.isFinite(Number(r.continuationMaxRunupPct)) && Number(r.continuationMaxRunupPct) >= 0.015).length;
         const requireTradeSequence = (process.env.CONFIRM_CONTINUATION_REQUIRE_TRADE_UPTICKS ?? 'false') === 'true';
+        const allowOhlcvUpticksFallback = (process.env.CONFIRM_CONTINUATION_ALLOW_OHLCV_UPTICKS_FALLBACK ?? 'true') === 'true';
         const minTradeSequence = Math.max(1, Number(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS || 2));
         const confirmReachedRunupAndTradeSeq = confirmCandidatesDecorated.filter((r) => {
           const runup = Number(r?.continuationMaxRunupPct ?? NaN);
           const maxSeq = Number(r?.continuationMaxConsecutiveTradeUpticks ?? 0);
-          return Number.isFinite(runup) && runup >= 0.015 && (!requireTradeSequence || maxSeq >= minTradeSequence);
+          const maxOhlcvSeq = Number(r?.continuationMaxConsecutiveOhlcvUpticks ?? 0);
+          const tradeReads = Number(r?.continuationSelectedTradeReads ?? 0);
+          const ohlcvFallbackSeqPass = allowOhlcvUpticksFallback && tradeReads <= 0 && maxOhlcvSeq >= minTradeSequence;
+          return Number.isFinite(runup) && runup >= 0.015 && (!requireTradeSequence || maxSeq >= minTradeSequence || ohlcvFallbackSeqPass);
         }).length;
         const failedAfterRunupNoTradeSequence = Number(confirmRejectCounts['confirm.confirmContinuation.runupNoTradeTrendConfirm'] || 0);
         const runupSourceUsedCounts = {};

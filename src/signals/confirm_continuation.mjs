@@ -20,10 +20,12 @@ function readRuntimeTuning() {
     subRefreshMs: Math.max(500, toNum(process.env.CONFIRM_CONTINUATION_SUB_REFRESH_MS, DEFAULT_SUB_REFRESH_MS)),
     requireTradeUpticks: (process.env.CONFIRM_CONTINUATION_REQUIRE_TRADE_UPTICKS ?? 'false') === 'true',
     minConsecutiveTradeUpticks: Math.max(1, Math.floor(toNum(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS, 2))),
+    allowOhlcvUpticksFallback: (process.env.CONFIRM_CONTINUATION_ALLOW_OHLCV_UPTICKS_FALLBACK ?? 'true') === 'true',
+    passRequiresLiveSource: (process.env.CONFIRM_CONTINUATION_PASS_REQUIRES_LIVE_SOURCE ?? 'true') === 'true',
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, consecutiveOhlcvUpticks = 0, maxConsecutiveOhlcvUpticks = 0, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
   return {
     startPrice,
     highPrice,
@@ -55,6 +57,8 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, 
     selectedOhlcvReads: Number(selectedOhlcvReads || 0),
     consecutiveTradeUpticks: Number(consecutiveTradeUpticks || 0),
     maxConsecutiveTradeUpticks: Number(maxConsecutiveTradeUpticks || 0),
+    consecutiveOhlcvUpticks: Number(consecutiveOhlcvUpticks || 0),
+    maxConsecutiveOhlcvUpticks: Number(maxConsecutiveOhlcvUpticks || 0),
     requireTradeUpticks: !!requireTradeUpticks,
     minConsecutiveTradeUpticks: Number(minConsecutiveTradeUpticks || 0),
     runupSourceUsed: String(runupSourceUsed || 'no_runup'),
@@ -108,6 +112,9 @@ export async function confirmContinuationGate({
   let consecutiveTradeUpticks = 0;
   let maxConsecutiveTradeUpticks = 0;
   let prevTradePriceForTrend = null;
+  let consecutiveOhlcvUpticks = 0;
+  let maxConsecutiveOhlcvUpticks = 0;
+  let prevOhlcvPriceForTrend = null;
   let runupSeenInWindow = false;
   let runupSourceUsed = 'no_runup';
   const tradeSequenceSourceUsed = 'ws_trade';
@@ -126,7 +133,16 @@ export async function confirmContinuationGate({
 
   const readWsOrFallbackPrice = (nowMs) => {
     const txArr = cacheImpl.get(`birdeye:ws:tx:${mint}`) || [];
-    const latestTrade = Array.isArray(txArr) ? [...txArr].reverse().find((x) => Number.isFinite(Number(x?.priceUsd)) && Number(x?.priceUsd) > 0) : null;
+    let latestTrade = null;
+    if (Array.isArray(txArr)) {
+      for (let i = txArr.length - 1; i >= 0; i -= 1) {
+        const x = txArr[i];
+        if (Number.isFinite(Number(x?.priceUsd)) && Number(x?.priceUsd) > 0) {
+          latestTrade = x;
+          break;
+        }
+      }
+    }
     const tradePrice = toNum(latestTrade?.priceUsd, 0);
     const tradeTsMs = toNum(latestTrade?.t, 0);
     const tradeFreshMs = tradeTsMs > 0 ? (nowMs - tradeTsMs) : null;
@@ -195,6 +211,8 @@ export async function confirmContinuationGate({
           selectedOhlcvReads,
           consecutiveTradeUpticks,
           maxConsecutiveTradeUpticks,
+          consecutiveOhlcvUpticks,
+          maxConsecutiveOhlcvUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           runupSourceUsed,
@@ -238,6 +256,13 @@ export async function confirmContinuationGate({
         wsUpdatePrices.push(p);
         if (wsUpdateTimestamps.length > 24) wsUpdateTimestamps.shift();
         if (wsUpdatePrices.length > 24) wsUpdatePrices.shift();
+        if (Number.isFinite(prevOhlcvPriceForTrend) && prevOhlcvPriceForTrend > 0) {
+          consecutiveOhlcvUpticks = p > prevOhlcvPriceForTrend ? (consecutiveOhlcvUpticks + 1) : 0;
+        } else {
+          consecutiveOhlcvUpticks = 0;
+        }
+        if (consecutiveOhlcvUpticks > maxConsecutiveOhlcvUpticks) maxConsecutiveOhlcvUpticks = consecutiveOhlcvUpticks;
+        prevOhlcvPriceForTrend = p;
       }
     }
     if (tick?.source === 'ws_trade') {
@@ -298,6 +323,8 @@ export async function confirmContinuationGate({
             selectedOhlcvReads,
             consecutiveTradeUpticks,
             maxConsecutiveTradeUpticks,
+            consecutiveOhlcvUpticks,
+            maxConsecutiveOhlcvUpticks,
             requireTradeUpticks: rt.requireTradeUpticks,
             minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           runupSourceUsed,
@@ -345,6 +372,8 @@ export async function confirmContinuationGate({
           selectedOhlcvReads,
           consecutiveTradeUpticks,
           maxConsecutiveTradeUpticks,
+          consecutiveOhlcvUpticks,
+          maxConsecutiveOhlcvUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           runupSourceUsed,
@@ -386,6 +415,8 @@ export async function confirmContinuationGate({
           selectedOhlcvReads,
           consecutiveTradeUpticks,
           maxConsecutiveTradeUpticks,
+          consecutiveOhlcvUpticks,
+          maxConsecutiveOhlcvUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           runupSourceUsed,
@@ -397,12 +428,21 @@ export async function confirmContinuationGate({
     }
 
     if (runupPct >= rt.passPct || p >= (startPrice * (1 + rt.passPct))) {
+      const liveSourceForPass = tick?.source === 'ws_trade' || tick?.source === 'ws_ohlcv';
+      if (rt.passRequiresLiveSource && !liveSourceForPass) {
+        await sleepFn(rt.sleepMs);
+        continue;
+      }
       runupSeenInWindow = true;
       runupSourceUsed = String(tick?.source || 'unknown');
       tradeTickCountAtRunupMoment = Array.isArray(tradeUpdateTimestamps) ? tradeUpdateTimestamps.length : 0;
       tradeSequenceEligibleAtRunup = tradeTickCountAtRunupMoment >= (rt.minConsecutiveTradeUpticks + 1);
-      const tradeTrendOk = !rt.requireTradeUpticks || maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
-      if (!tradeTrendOk) {
+      const tradeTrendOk = maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
+      const ohlcvTrendOk = maxConsecutiveOhlcvUpticks >= rt.minConsecutiveTradeUpticks;
+      const trendOk = !rt.requireTradeUpticks
+        || tradeTrendOk
+        || (rt.allowOhlcvUpticksFallback && Number(selectedTradeReads || 0) <= 0 && ohlcvTrendOk);
+      if (!trendOk) {
         await sleepFn(rt.sleepMs);
         continue;
       }
@@ -437,6 +477,8 @@ export async function confirmContinuationGate({
           selectedOhlcvReads,
           consecutiveTradeUpticks,
           maxConsecutiveTradeUpticks,
+          consecutiveOhlcvUpticks,
+          maxConsecutiveOhlcvUpticks,
           requireTradeUpticks: rt.requireTradeUpticks,
           minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
           runupSourceUsed,
@@ -452,7 +494,12 @@ export async function confirmContinuationGate({
 
   const finalRet = (finalPrice / startPrice) - 1;
   const timeoutWasFlatOrNegative = finalRet <= 0;
-  const tradeTrendMissing = rt.requireTradeUpticks && runupSeenInWindow && maxConsecutiveTradeUpticks < rt.minConsecutiveTradeUpticks;
+  const tradeTrendMissing = rt.requireTradeUpticks
+    && runupSeenInWindow
+    && !(
+      maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks
+      || (rt.allowOhlcvUpticksFallback && Number(selectedTradeReads || 0) <= 0 && maxConsecutiveOhlcvUpticks >= rt.minConsecutiveTradeUpticks)
+    );
   const noLiveDataEvidence = Number(selectedTradeReads || 0) <= 0 && Number(selectedOhlcvReads || 0) <= 0;
   failReason = tradeTrendMissing
     ? 'runupNoTradeTrendConfirm'
@@ -485,6 +532,16 @@ export async function confirmContinuationGate({
       tradeUpdatePrices,
       selectedTradeReads,
       selectedOhlcvReads,
+      consecutiveTradeUpticks,
+      maxConsecutiveTradeUpticks,
+      consecutiveOhlcvUpticks,
+      maxConsecutiveOhlcvUpticks,
+      requireTradeUpticks: rt.requireTradeUpticks,
+      minConsecutiveTradeUpticks: rt.minConsecutiveTradeUpticks,
+      runupSourceUsed,
+      tradeSequenceSourceUsed,
+      tradeTickCountAtRunupMoment,
+      tradeSequenceEligibleAtRunup,
     }),
   };
 }
