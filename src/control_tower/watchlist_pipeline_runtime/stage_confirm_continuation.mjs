@@ -529,6 +529,9 @@ export async function runConfirmContinuationStage(ctx) {
       selectedReads: { trade: 0, ohlcv: 0 },
       maxTradeUpticksSeen: 0,
       maxOhlcvUpticksSeen: 0,
+      votingWindowPasses: { trade: 0, ohlcv: 0, none: 0 },
+      netMoveFloorPasses: { yes: 0, no: 0 },
+      epsilonFilteredTicksSeen: { trade: 0, ohlcv: 0 },
       last10: [],
     };
     const cc = counters.watchlist.confirmContinuation;
@@ -541,6 +544,11 @@ export async function runConfirmContinuationStage(ctx) {
     const maxTradeUpticks = Number(diag?.maxConsecutiveTradeUpticks || 0) || 0;
     const maxOhlcvUpticks = Number(diag?.maxConsecutiveOhlcvUpticks || 0) || 0;
     const minUpticks = Math.max(1, Number(diag?.minConsecutiveTradeUpticks || 2) || 2);
+    const tradeVotePassed = !!diag?.tradeVotePassed;
+    const ohlcvVotePassed = !!diag?.ohlcvVotePassed;
+    const netMovePassedFloor = !!diag?.netMovePassedFloor;
+    const epsilonTradeCount = Number(diag?.epsilonFilteredTradeCount || 0) || 0;
+    const epsilonOhlcvCount = Number(diag?.epsilonFilteredOhlcvCount || 0) || 0;
     const twoGreenEvidence = Math.max(maxTradeUpticks, maxOhlcvUpticks) >= minUpticks;
 
     cc.evaluated = Number(cc.evaluated || 0) + 1;
@@ -561,6 +569,18 @@ export async function runConfirmContinuationStage(ctx) {
     cc.selectedReads.ohlcv = Number(cc.selectedReads.ohlcv || 0) + selectedOhlcvReads;
     cc.maxTradeUpticksSeen = Math.max(Number(cc.maxTradeUpticksSeen || 0), maxTradeUpticks);
     cc.maxOhlcvUpticksSeen = Math.max(Number(cc.maxOhlcvUpticksSeen || 0), maxOhlcvUpticks);
+    
+    // Track voting window passes
+    const votingResult = tradeVotePassed ? 'trade' : (ohlcvVotePassed ? 'ohlcv' : 'none');
+    cc.votingWindowPasses[votingResult] = Number(cc.votingWindowPasses[votingResult] || 0) + 1;
+    
+    // Track net move floor
+    cc.netMoveFloorPasses[netMovePassedFloor ? 'yes' : 'no'] = Number(cc.netMoveFloorPasses[netMovePassedFloor ? 'yes' : 'no'] || 0) + 1;
+    
+    // Accumulate epsilon-filtered tick counts
+    cc.epsilonFilteredTicksSeen.trade = Number(cc.epsilonFilteredTicksSeen.trade || 0) + epsilonTradeCount;
+    cc.epsilonFilteredTicksSeen.ohlcv = Number(cc.epsilonFilteredTicksSeen.ohlcv || 0) + epsilonOhlcvCount;
+    
     cc.last10.push({
       t: nowIso(),
       mint,
@@ -574,6 +594,11 @@ export async function runConfirmContinuationStage(ctx) {
       twoGreenEvidence,
       selectedTradeReads,
       selectedOhlcvReads,
+      tradeVotePassed,
+      ohlcvVotePassed,
+      netMovePassedFloor,
+      epsilonTradeCount,
+      epsilonOhlcvCount,
     });
     if (cc.last10.length > 10) cc.last10 = cc.last10.slice(-10);
   }

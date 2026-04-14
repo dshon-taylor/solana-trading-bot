@@ -969,14 +969,27 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         const confirmReachedRunup15 = confirmCandidatesDecorated.filter((r) => Number.isFinite(Number(r.continuationMaxRunupPct)) && Number(r.continuationMaxRunupPct) >= 0.015).length;
         const requireTradeSequence = (process.env.CONFIRM_CONTINUATION_REQUIRE_TRADE_UPTICKS ?? 'false') === 'true';
         const allowOhlcvUpticksFallback = (process.env.CONFIRM_CONTINUATION_ALLOW_OHLCV_UPTICKS_FALLBACK ?? 'true') === 'true';
+        const useVotingWindow = (process.env.CONFIRM_CONTINUATION_USE_VOTING_WINDOW ?? 'true') === 'true';
         const minTradeSequence = Math.max(1, Number(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS || 2));
         const confirmReachedRunupAndTradeSeq = confirmCandidatesDecorated.filter((r) => {
           const runup = Number(r?.continuationMaxRunupPct ?? NaN);
           const maxSeq = Number(r?.continuationMaxConsecutiveTradeUpticks ?? 0);
           const maxOhlcvSeq = Number(r?.continuationMaxConsecutiveOhlcvUpticks ?? 0);
           const tradeReads = Number(r?.continuationSelectedTradeReads ?? 0);
-          const ohlcvFallbackSeqPass = allowOhlcvUpticksFallback && tradeReads <= 0 && maxOhlcvSeq >= minTradeSequence;
-          return Number.isFinite(runup) && runup >= 0.015 && (!requireTradeSequence || maxSeq >= minTradeSequence || ohlcvFallbackSeqPass);
+          let trendPass = false;
+          if (useVotingWindow) {
+            // Check voting window passes
+            const tradeVote = !!r?.continuationTradeVotePassed;
+            const ohlcvVote = !!r?.continuationOhlcvVotePassed;
+            const ohlcvFallbackVotePass = allowOhlcvUpticksFallback && tradeReads <= 0 && ohlcvVote;
+            trendPass = !requireTradeSequence || tradeVote || ohlcvFallbackVotePass;
+          } else {
+            // Fallback to consecutive logic
+            const ohlcvFallbackSeqPass = allowOhlcvUpticksFallback && tradeReads <= 0 && maxOhlcvSeq >= minTradeSequence;
+            trendPass = !requireTradeSequence || maxSeq >= minTradeSequence || ohlcvFallbackSeqPass;
+          }
+          const netMovePass = !!r?.continuationNetMovePassedFloor;
+          return Number.isFinite(runup) && runup >= 0.015 && trendPass && netMovePass;
         }).length;
         const failedAfterRunupNoTradeSequence = Number(confirmRejectCounts['confirm.confirmContinuation.runupNoTradeTrendConfirm'] || 0);
         const runupSourceUsedCounts = {};

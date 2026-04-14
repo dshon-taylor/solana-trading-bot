@@ -22,10 +22,15 @@ function readRuntimeTuning() {
     minConsecutiveTradeUpticks: Math.max(1, Math.floor(toNum(process.env.CONFIRM_CONTINUATION_MIN_CONSECUTIVE_TRADE_UPTICKS, 2))),
     allowOhlcvUpticksFallback: (process.env.CONFIRM_CONTINUATION_ALLOW_OHLCV_UPTICKS_FALLBACK ?? 'true') === 'true',
     passRequiresLiveSource: (process.env.CONFIRM_CONTINUATION_PASS_REQUIRES_LIVE_SOURCE ?? 'true') === 'true',
+    useVotingWindow: (process.env.CONFIRM_CONTINUATION_USE_VOTING_WINDOW ?? 'true') === 'true',
+    votingWindowSize: Math.max(2, Math.floor(toNum(process.env.CONFIRM_CONTINUATION_VOTING_WINDOW_SIZE, 3))),
+    votingPassThreshold: Math.max(1, Math.floor(toNum(process.env.CONFIRM_CONTINUATION_VOTING_PASS_THRESHOLD, 2))),
+    epsilonPct: Math.max(0, toNum(process.env.CONFIRM_CONTINUATION_EPSILON_PCT, 0.0003)),
+    netMovePctFloor: Math.max(0, toNum(process.env.CONFIRM_CONTINUATION_NET_MOVE_PCT_FLOOR, 0.0015)),
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, consecutiveOhlcvUpticks = 0, maxConsecutiveOhlcvUpticks = 0, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, consecutiveOhlcvUpticks = 0, maxConsecutiveOhlcvUpticks = 0, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup, tradeVotePassed = false, ohlcvVotePassed = false, netMovePassedFloor = false, epsilonFilteredTradeCount = 0, epsilonFilteredOhlcvCount = 0 }) {
   return {
     startPrice,
     highPrice,
@@ -65,6 +70,11 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, 
     tradeSequenceSourceUsed: String(tradeSequenceSourceUsed || 'ws_trade'),
     tradeTickCountAtRunupMoment: Number(tradeTickCountAtRunupMoment || 0),
     tradeSequenceEligibleAtRunup: !!tradeSequenceEligibleAtRunup,
+    tradeVotePassed: !!tradeVotePassed,
+    ohlcvVotePassed: !!ohlcvVotePassed,
+    netMovePassedFloor: !!netMovePassedFloor,
+    epsilonFilteredTradeCount: Number(epsilonFilteredTradeCount || 0),
+    epsilonFilteredOhlcvCount: Number(epsilonFilteredOhlcvCount || 0),
   };
 }
 
@@ -121,6 +131,15 @@ export async function confirmContinuationGate({
   let tradeTickCountAtRunupMoment = 0;
   let tradeSequenceEligibleAtRunup = false;
 
+  // Voting window tracking (2-of-3 logic with epsilon filter)
+  const tradeVotingWindow = [];
+  const ohlcvVotingWindow = [];
+  let tradeVotePassed = false;
+  let ohlcvVotePassed = false;
+  let netMovePassedFloor = false;
+  let epsilonFilteredTradeCount = 0;
+  let epsilonFilteredOhlcvCount = 0;
+
   const getDominantSourceUsed = () => {
     const trade = Number(selectedTradeReads || 0);
     const ohlcv = Number(selectedOhlcvReads || 0);
@@ -129,6 +148,17 @@ export async function confirmContinuationGate({
     if (ohlcv >= trade && ohlcv >= fallback && ohlcv > 0) return 'ws_ohlcv';
     if (fallback > 0) return 'snapshot_fallback';
     return 'unknown';
+  };
+
+  const updateVotingWindow = (voteWindow, newVote, maxSize) => {
+    voteWindow.push(newVote);
+    if (voteWindow.length > maxSize) voteWindow.shift();
+  };
+
+  const checkVotingPass = (voteWindow, threshold) => {
+    if (voteWindow.length < threshold) return false;
+    const recent = voteWindow.slice(-threshold);
+    return recent.filter((v) => v).length >= threshold;
   };
 
   const readWsOrFallbackPrice = (nowMs) => {
@@ -257,7 +287,14 @@ export async function confirmContinuationGate({
         if (wsUpdateTimestamps.length > 24) wsUpdateTimestamps.shift();
         if (wsUpdatePrices.length > 24) wsUpdatePrices.shift();
         if (Number.isFinite(prevOhlcvPriceForTrend) && prevOhlcvPriceForTrend > 0) {
-          consecutiveOhlcvUpticks = p > prevOhlcvPriceForTrend ? (consecutiveOhlcvUpticks + 1) : 0;
+          const priceDiffPct = (p - prevOhlcvPriceForTrend) / prevOhlcvPriceForTrend;
+          const isEpsilonUpTick = p > prevOhlcvPriceForTrend && priceDiffPct >= rt.epsilonPct;
+          if (isEpsilonUpTick) {
+            epsilonFilteredOhlcvCount += 1;
+          }
+          updateVotingWindow(ohlcvVotingWindow, isEpsilonUpTick, rt.votingWindowSize);
+          ohlcvVotePassed = checkVotingPass(ohlcvVotingWindow, rt.votingPassThreshold);
+          consecutiveOhlcvUpticks = isEpsilonUpTick ? (consecutiveOhlcvUpticks + 1) : 0;
         } else {
           consecutiveOhlcvUpticks = 0;
         }
@@ -274,7 +311,14 @@ export async function confirmContinuationGate({
         if (tradeUpdateTimestamps.length > 24) tradeUpdateTimestamps.shift();
         if (tradeUpdatePrices.length > 24) tradeUpdatePrices.shift();
         if (Number.isFinite(prevTradePriceForTrend) && prevTradePriceForTrend > 0) {
-          consecutiveTradeUpticks = p > prevTradePriceForTrend ? (consecutiveTradeUpticks + 1) : 0;
+          const priceDiffPct = (p - prevTradePriceForTrend) / prevTradePriceForTrend;
+          const isEpsilonUpTick = p > prevTradePriceForTrend && priceDiffPct >= rt.epsilonPct;
+          if (isEpsilonUpTick) {
+            epsilonFilteredTradeCount += 1;
+          }
+          updateVotingWindow(tradeVotingWindow, isEpsilonUpTick, rt.votingWindowSize);
+          tradeVotePassed = checkVotingPass(tradeVotingWindow, rt.votingPassThreshold);
+          consecutiveTradeUpticks = isEpsilonUpTick ? (consecutiveTradeUpticks + 1) : 0;
         } else {
           consecutiveTradeUpticks = 0;
         }
@@ -437,12 +481,28 @@ export async function confirmContinuationGate({
       runupSourceUsed = String(tick?.source || 'unknown');
       tradeTickCountAtRunupMoment = Array.isArray(tradeUpdateTimestamps) ? tradeUpdateTimestamps.length : 0;
       tradeSequenceEligibleAtRunup = tradeTickCountAtRunupMoment >= (rt.minConsecutiveTradeUpticks + 1);
-      const tradeTrendOk = maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
-      const ohlcvTrendOk = maxConsecutiveOhlcvUpticks >= rt.minConsecutiveTradeUpticks;
-      const trendOk = !rt.requireTradeUpticks
-        || tradeTrendOk
-        || (rt.allowOhlcvUpticksFallback && Number(selectedTradeReads || 0) <= 0 && ohlcvTrendOk);
-      if (!trendOk) {
+
+      // Check net move floor
+      netMovePassedFloor = runupPct >= rt.netMovePctFloor;
+
+      // Determine if trend is OK using voting windows or fallback to consecutive logic
+      let trendOk = false;
+      if (rt.useVotingWindow) {
+        const tradeTrendOk = tradeVotePassed;
+        const ohlcvTrendOk = ohlcvVotePassed;
+        trendOk = !rt.requireTradeUpticks
+          || tradeTrendOk
+          || (rt.allowOhlcvUpticksFallback && Number(selectedTradeReads || 0) <= 0 && ohlcvTrendOk);
+      } else {
+        // Fallback to consecutive logic if voting is disabled
+        const tradeTrendOk = maxConsecutiveTradeUpticks >= rt.minConsecutiveTradeUpticks;
+        const ohlcvTrendOk = maxConsecutiveOhlcvUpticks >= rt.minConsecutiveTradeUpticks;
+        trendOk = !rt.requireTradeUpticks
+          || tradeTrendOk
+          || (rt.allowOhlcvUpticksFallback && Number(selectedTradeReads || 0) <= 0 && ohlcvTrendOk);
+      }
+
+      if (!trendOk || !netMovePassedFloor) {
         await sleepFn(rt.sleepMs);
         continue;
       }
@@ -485,6 +545,11 @@ export async function confirmContinuationGate({
           tradeSequenceSourceUsed,
           tradeTickCountAtRunupMoment,
           tradeSequenceEligibleAtRunup,
+          tradeVotePassed,
+          ohlcvVotePassed,
+          netMovePassedFloor,
+          epsilonFilteredTradeCount,
+          epsilonFilteredOhlcvCount,
         }),
       };
     }
@@ -542,6 +607,11 @@ export async function confirmContinuationGate({
       tradeSequenceSourceUsed,
       tradeTickCountAtRunupMoment,
       tradeSequenceEligibleAtRunup,
+      tradeVotePassed,
+      ohlcvVotePassed,
+      netMovePassedFloor,
+      epsilonFilteredTradeCount,
+      epsilonFilteredOhlcvCount,
     }),
   };
 }
