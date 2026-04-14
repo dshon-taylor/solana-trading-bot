@@ -37,6 +37,7 @@ export async function runConfirmContinuationStage(ctx) {
   let report = null;
   let mcap = { ok: true, reason: 'skipped', mcapUsd: null, decimals: null };
   let mcapComputed = { ok: false, reason: 'not_attempted', mcapUsd: null, decimals: null };
+  const preconfirmFiltersDisabled = (process.env.PRECONFIRM_FILTERS_DISABLED ?? 'false') === 'true';
 
   const mcapCandidates = [
     { source: 'row.latest.mcapUsd', value: Number(row?.latest?.mcapUsd ?? 0) || 0 },
@@ -61,7 +62,7 @@ export async function runConfirmContinuationStage(ctx) {
     needsMcapComputation ? ctx.deps.computeMcapUsd(cfg, ctx.pair, cfg.SOLANA_RPC_URL).catch((err) => ({ ok: false, reason: 'error', _error: err })) : Promise.resolve({ ok: false, reason: 'not_needed' }),
   ]);
 
-  if (cfg.RUGCHECK_ENABLED) {
+  if (!preconfirmFiltersDisabled && cfg.RUGCHECK_ENABLED) {
     if (parallelResults[0].status === 'fulfilled') {
       report = parallelResults[0].value;
       if (report && !report._error) {
@@ -80,7 +81,7 @@ export async function runConfirmContinuationStage(ctx) {
     }
   }
 
-  if (needsMcapComputation) {
+  if (!preconfirmFiltersDisabled && needsMcapComputation) {
     if (parallelResults[1].status === 'fulfilled') {
       mcapComputed = parallelResults[1].value;
       if (!mcapComputed._error) {
@@ -114,13 +115,13 @@ export async function runConfirmContinuationStage(ctx) {
   const effLiqFloor = state.filterOverrides?.MIN_LIQUIDITY_USD ?? cfg.MIN_LIQUIDITY_FLOOR_USD;
   const effMinAge = state.filterOverrides?.MIN_TOKEN_AGE_HOURS ?? cfg.MIN_TOKEN_AGE_HOURS;
   const base = passesBaseFilters({ pair: ctx.pair, minLiquidityUsd: effLiqFloor, minAgeHours: effMinAge });
-  if (cfg.BASE_FILTERS_ENABLED && !base.ok) {
+  if (!preconfirmFiltersDisabled && cfg.BASE_FILTERS_ENABLED && !base.ok) {
     if (fail('baseFiltersFailed', { stage: 'filters', cooldownMs: 60_000 }) === 'break') return 'break';
     return 'continue';
   }
 
   const effMinMcap = state.filterOverrides?.MIN_MCAP_USD ?? cfg.MIN_MCAP_USD;
-  if (cfg.MCAP_FILTER_ENABLED) {
+  if (!preconfirmFiltersDisabled && cfg.MCAP_FILTER_ENABLED) {
     if (!(Number(mcapForFilters || 0) > 0)) {
       counters.watchlist.preConfirmMcapMissingRejected = Number(counters.watchlist.preConfirmMcapMissingRejected || 0) + 1;
       if (fail('mcapMissing', { stage: 'filters', meta: { mcapSourceUsed: preConfirmMcapSourceUsed, computedReason: mcapComputed?.reason || null } }) === 'break') return 'break';
@@ -135,23 +136,23 @@ export async function runConfirmContinuationStage(ctx) {
 
   const effRatio = state.filterOverrides?.LIQUIDITY_TO_MCAP_RATIO ?? cfg.LIQUIDITY_TO_MCAP_RATIO;
   const reqLiq = Math.max(effLiqFloor, effRatio * Number(mcapForFilters || 0));
-  if (cfg.LIQ_RATIO_FILTER_ENABLED && ctx.liqUsd < reqLiq) {
+  if (!preconfirmFiltersDisabled && cfg.LIQ_RATIO_FILTER_ENABLED && ctx.liqUsd < reqLiq) {
     if (fail('liqRatioFailed', { stage: 'filters' }) === 'break') return 'break';
     return 'continue';
   }
 
-  if (!solUsdNow) {
+  if (!preconfirmFiltersDisabled && !solUsdNow) {
     if (fail('solUsdMissing', { stage: 'execution', cooldownMs: 15_000 }) === 'break') return 'break';
     return 'continue';
   }
-  if (!executionAllowed) {
+  if (!preconfirmFiltersDisabled && !executionAllowed) {
     const why = executionAllowedReason || 'unknown';
     if (fail(`executionDisabled.${why}`, { stage: 'execution', cooldownMs: 15_000 }) === 'break') return 'break';
     return 'continue';
   }
 
   const throttle = runtimeDeps.canOpenNewEntry({ state, nowMs, maxNewEntriesPerHour: cfg.MAX_NEW_ENTRIES_PER_HOUR });
-  if (!throttle.ok) {
+  if (!preconfirmFiltersDisabled && !throttle.ok) {
     if (fail('throttleBlocked', { stage: 'execution' }) === 'break') return 'break';
     return 'continue';
   }
@@ -188,7 +189,7 @@ export async function runConfirmContinuationStage(ctx) {
   counters.watchlist.executionReserveTraceLast5 ||= [];
   const reserveOk = !!softReserve?.ok;
   const adjustedUsdTarget = Number(softReserve?.adjustedUsdTarget || 0);
-  if (!reserveOk) {
+  if (!preconfirmFiltersDisabled && !reserveOk) {
     counters.watchlist.executionReserveBlocked = Number(counters.watchlist.executionReserveBlocked || 0) + 1;
     counters.watchlist.executionReserveBlockedReasons ||= {};
     counters.watchlist.executionReserveBlockedReasons[reserveReason] = Number(counters.watchlist.executionReserveBlockedReasons[reserveReason] || 0) + 1;
@@ -208,7 +209,7 @@ export async function runConfirmContinuationStage(ctx) {
     if (fail('reserveBlocked', { stage: 'execution', meta: { reserveRequired: Number(softReserve?.reserveSol || 0), reserveAvailable: Number(softReserve?.spendableSol || 0), walletBalanceUsed: Number(solForReserve || 0), reserveReason } }) === 'break') return 'break';
     return 'continue';
   }
-  if (adjustedUsdTarget < 1) {
+  if (!preconfirmFiltersDisabled && adjustedUsdTarget < 1) {
     counters.watchlist.executionTargetUsdTooSmall = Number(counters.watchlist.executionTargetUsdTooSmall || 0) + 1;
     counters.watchlist.targetUsdTooSmallLast10 ||= [];
     counters.watchlist.targetUsdTooSmallLast10.push({
