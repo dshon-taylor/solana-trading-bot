@@ -1,39 +1,45 @@
-# Carl Collaboration + Deploy Workflow
+# Deploy Workflow
 
-## Branches
-- `main` = live production bot on VM
-- `dev` = active development branch (PC/local work)
+## Branch policy
 
-## Development (PC)
-1. Work on `dev`
-2. Commit + push to `origin/dev`
-3. Open PR from `dev` -> `main`
-4. Merge when ready to go live
+- `main` is production.
+- Use feature branches for local work and merge to `main` when validated.
 
-## Production Deploy (VM)
-Run from bot directory:
+## Standard production deploy
+
+From repo root:
 
 ```bash
 ./deploy-live.sh
 ```
 
-`deploy-live.sh` does:
-1. `git fetch origin`
-2. `git checkout main`
-3. `git pull --ff-only origin main`
-4. `pm2 restart solana-momentum-bot --update-env`
-5. show PM2 status
+Expected steps:
 
-## Emergency rollback (manual)
+1. fetch latest `main`
+2. fast-forward pull
+3. PM2 restart with updated env
+4. show status
+
+## Recommended pre-deploy check
+
 ```bash
-git checkout main
-git log --oneline -n 5
-# pick previous good commit
-git reset --hard <commit_sha>
-pm2 restart solana-momentum-bot --update-env
+npm run check
+npm run test
 ```
 
-## Identity for commits from VM
-Configured as:
-- name: `Derek-Openclaw`
-- email: GitHub noreply
+## Recommended post-deploy check
+
+```bash
+pm2 status
+curl -sS http://127.0.0.1:8787/healthz | jq
+pm2 logs solana-momentum-bot --lines 120
+```
+
+## Emergency rollback
+
+```bash
+git checkout main
+git log --oneline -n 10
+git reset --hard <known_good_commit>
+pm2 restart solana-momentum-bot --update-env
+```
