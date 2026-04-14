@@ -13,9 +13,9 @@ This script is intentionally conservative in how much it changes per run:
 It edits ./trading-bot/.env (persisted config) and logs decisions to ./analysis/aggressive_autotune_log.md.
 
 Usage:
-  node scripts/aggressive_autotune.mjs            # dry-run
-  node scripts/aggressive_autotune.mjs --apply   # write .env + state file
-  node scripts/aggressive_autotune.mjs --apply --pm2-reload solana-momentum-bot
+  node scripts/research/aggressive_autotune.mjs            # dry-run
+  node scripts/research/aggressive_autotune.mjs --apply   # write .env + state file
+  node scripts/research/aggressive_autotune.mjs --apply --pm2-reload solana-momentum-bot
 
 Exit codes:
   0 success

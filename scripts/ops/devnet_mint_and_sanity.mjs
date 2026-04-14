@@ -5,8 +5,8 @@ dotenv.config({path: new URL('../.env', import.meta.url).pathname});
 
 import {Connection, LAMPORTS_PER_SOL, Keypair, PublicKey} from '@solana/web3.js';
 import {createMint, getOrCreateAssociatedTokenAccount, mintTo} from '@solana/spl-token';
-import {loadKeypairFromEnv} from '../src/wallet.mjs';
-import {getConfig} from '../src/config.mjs';
+import {loadKeypairFromEnv} from '../../src/wallet.mjs';
+import {getConfig} from '../../src/config.mjs';
 import {execSync} from 'child_process';
 
 async function main(){
@@ -57,7 +57,7 @@ async function main(){
   });
   console.log('running manual_sanity_swap.mjs');
   try{
-    const out = execSync('node scripts/manual_sanity_swap.mjs', {cwd: process.cwd(), env, stdio: 'pipe'}).toString();
+    const out = execSync('node scripts/ops/manual_sanity_swap.mjs', {cwd: process.cwd(), env, stdio: 'pipe'}).toString();
     console.log('script output:\n', out);
   }catch(e){
     console.error('manual script failed', e.stdout && e.stdout.toString(), e.stderr && e.stderr.toString());

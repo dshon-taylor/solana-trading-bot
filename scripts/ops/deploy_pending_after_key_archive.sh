@@ -11,7 +11,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ -f "keys/bot-keypair.json" ]]; then
-  echo "[deploy] BLOCKED: keys/bot-keypair.json still present. Archive it first (or wait for the 24h window and run ./scripts/archive_plaintext_key_if_stable.sh)." >&2
+  echo "[deploy] BLOCKED: keys/bot-keypair.json still present. Archive it first (or wait for the 24h window and run ./scripts/ops/archive_plaintext_key_if_stable.sh)." >&2
   exit 20
 fi
 

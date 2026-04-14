@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Snapshot npm audit (prod deps only) to a timestamped JSON file.
-# Usage: ./scripts/audit_snapshot.sh [out_dir]
+# Usage: ./scripts/ops/audit_snapshot.sh [out_dir]
 
 OUT_DIR="${1:-./analysis}"
 mkdir -p "$OUT_DIR"

@@ -20,10 +20,10 @@ OUT="$OUT_DIR/pm2_restart_context_${TS}.txt"
   echo
 
   echo "## pm2 describe (redacted via pm2_snapshot_safe.sh)"
-  if [[ -x "./scripts/pm2_snapshot_safe.sh" ]]; then
-    ./scripts/pm2_snapshot_safe.sh "$APP_NAME" || true
+  if [[ -x "./scripts/ops/pm2_snapshot_safe.sh" ]]; then
+    ./scripts/ops/pm2_snapshot_safe.sh "$APP_NAME" || true
   else
-    echo "(missing ./scripts/pm2_snapshot_safe.sh)"
+    echo "(missing ./scripts/ops/pm2_snapshot_safe.sh)"
   fi
   echo
 

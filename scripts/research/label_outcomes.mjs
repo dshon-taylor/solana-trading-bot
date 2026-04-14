@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { buildOutcomeLabels, writeOutcomeLabels } from '../src/outcome_labeler.mjs';
+import { buildOutcomeLabels, writeOutcomeLabels } from '../../src/outcome_labeler.mjs';
 
 function getArg(name, fallback = null) {
   const i = process.argv.indexOf(name);

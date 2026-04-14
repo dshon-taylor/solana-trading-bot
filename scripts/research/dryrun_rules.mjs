@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-import { getConfig } from '../src/config.mjs';
-import { paperOnSample } from '../src/paper_momentum.mjs';
+import { getConfig } from '../../src/config.mjs';
+import { paperOnSample } from '../../src/paper_momentum.mjs';
 
 dotenv.config();
 

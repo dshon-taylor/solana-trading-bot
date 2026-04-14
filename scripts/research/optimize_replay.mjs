@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { loadTrackedSeries, optimizeReplay } from '../src/replay_optimizer.mjs';
+import { loadTrackedSeries, optimizeReplay } from '../../src/replay_optimizer.mjs';
 
 function getArg(name, fallback = null) {
   const i = process.argv.indexOf(name);

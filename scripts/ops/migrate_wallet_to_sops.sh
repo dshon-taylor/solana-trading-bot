@@ -4,7 +4,7 @@ set -euo pipefail
 # Migrate a plaintext Solana keypair JSON (e.g. keys/wallet.json) to an encrypted SOPS file.
 #
 # Usage:
-#   ./scripts/migrate_wallet_to_sops.sh /path/to/wallet.json [./secrets/wallet.enc.json]
+#   ./scripts/ops/migrate_wallet_to_sops.sh /path/to/wallet.json [./secrets/wallet.enc.json]
 #
 # Notes:
 # - This script does NOT modify your .env.

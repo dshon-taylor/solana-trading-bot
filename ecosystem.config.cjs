@@ -6,7 +6,7 @@ module.exports = {
     {
       name: 'solana-momentum-bot',
       cwd: ROOT,
-      script: 'scripts/start_with_mock.sh',
+      script: 'scripts/ops/start_with_mock.sh',
       interpreter: '/bin/bash',
       exec_mode: 'fork',
       instances: 1,

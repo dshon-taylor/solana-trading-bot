@@ -131,7 +131,7 @@ Window end: 2026-02-25T09:10:02.409Z
 ## Reproducibility
 ```bash
 cd /home/dshontaylor/.openclaw/workspace/trading-bot
-CARL_LOOKBACK_DAYS=7 node scripts/carl_backfill_counterfactual_v2.mjs
+CARL_LOOKBACK_DAYS=7 node scripts/backfill/carl_backfill_counterfactual_v2.mjs
 ```
 
 ## Caveats

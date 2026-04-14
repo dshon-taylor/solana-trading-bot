@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -8,6 +9,7 @@ const STATE_DIR = path.join(ROOT, 'state');
 const CAND_DIR = path.join(STATE_DIR, 'candidates');
 const TRACK_DIR = path.join(STATE_DIR, 'track');
 const ATTEMPTS_FILE = path.join(STATE_DIR, 'paper_live_attempts.jsonl');
+const LAST_SOL_PRICE_FILE = path.join(STATE_DIR, 'last_sol_price.json');
 const ANALYSIS_DIR = path.join(ROOT, 'analysis');
 
 const now = new Date();
@@ -24,6 +26,11 @@ const cfg = {
   trailActivatePct: Number(process.env.LIVE_MOMO_TRAIL_ACTIVATE_PCT || 0.12),
   trailDistancePct: Number(process.env.LIVE_MOMO_TRAIL_DISTANCE_PCT || 0.12),
   horizonMs: Number(process.env.CARL_SIM_HORIZON_MS || (24 * 60 * 60_000)),
+  startingCapitalUsd: Number(process.env.STARTING_CAPITAL_USDC || 100),
+  liveSizeMode: String(process.env.LIVE_MOMO_SIZE_MODE || 'usd').toLowerCase(),
+  liveUsdTarget: Number(process.env.LIVE_MOMO_USD_TARGET || 20),
+  livePctOfPortfolio: Number(process.env.LIVE_MOMO_PCT_OF_PORTFOLIO || 0.20),
+  liveMaxSolPerTrade: Number(process.env.LIVE_MOMO_MAX_SOL_PER_TRADE || 1.0),
 };
 
 const REASON = {
@@ -40,9 +47,22 @@ function fmtPct(x) {
   return `${(x * 100).toFixed(2)}%`;
 }
 
-function fmtIso(ms) {
-  if (!Number.isFinite(ms)) return 'n/a';
-  return new Date(ms).toISOString();
+function fmtSignedPct(x) {
+  if (!Number.isFinite(x)) return 'n/a';
+  const pct = (x * 100).toFixed(2);
+  return `${x >= 0 ? '+' : ''}${pct}%`;
+}
+
+function fmtUsd(x) {
+  if (!Number.isFinite(x)) return 'n/a';
+  const sign = x >= 0 ? '+' : '-';
+  return `${sign}$${Math.abs(x).toFixed(2)}`;
+}
+
+function fmtSolDelta(x) {
+  if (!Number.isFinite(x)) return 'n/a';
+  const sign = x >= 0 ? '+' : '-';
+  return `${sign}${Math.abs(x).toFixed(6)} SOL`;
 }
 
 function ensureDir(p) {
@@ -232,23 +252,57 @@ function inferReason(event, context) {
     return { reason: REASON.SLIPPAGE_IMPACT, confidence: adverse ? 'medium' : 'low', evidence: evidence.join('; ') };
   }
 
-  if (!nearCand || !nearCand.reason) {
-    evidence.push('no nearby candidate decision row');
-  } else {
-    evidence.push(`nearby reason=${nearCand.reason}`);
-  }
+  if (!nearCand || !nearCand.reason) evidence.push('no nearby candidate decision row');
+  else evidence.push(`nearby reason=${nearCand.reason}`);
   return { reason: REASON.UNKNOWN, confidence: 'low', evidence: evidence.join('; ') };
+}
+
+function loadAssumedSolUsd() {
+  const override = Number(process.env.CARL_SOL_USD);
+  if (Number.isFinite(override) && override > 0) return { solUsd: override, source: 'CARL_SOL_USD override' };
+
+  try {
+    if (fs.existsSync(LAST_SOL_PRICE_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(LAST_SOL_PRICE_FILE, 'utf8'));
+      const p = Number(raw?.solUsd);
+      if (Number.isFinite(p) && p > 0) return { solUsd: p, source: `state/last_sol_price.json (${raw?.src || 'unknown'})` };
+    }
+  } catch {}
+
+  return { solUsd: 100, source: 'fallback default 100 (no override/no cache)' };
+}
+
+function deriveAssumedPosition(solUsd) {
+  const startCap = cfg.startingCapitalUsd;
+  if (cfg.liveSizeMode === 'percent') {
+    const assumedStartSol = startCap / solUsd;
+    const positionSol = Math.min(assumedStartSol * cfg.livePctOfPortfolio, cfg.liveMaxSolPerTrade);
+    return {
+      positionSol,
+      positionUsd: positionSol * solUsd,
+      detail: `mode=percent => min((STARTING_CAPITAL_USDC/solUsd)*LIVE_MOMO_PCT_OF_PORTFOLIO, LIVE_MOMO_MAX_SOL_PER_TRADE)`,
+    };
+  }
+
+  const positionUsd = cfg.liveUsdTarget;
+  return {
+    positionSol: positionUsd / solUsd,
+    positionUsd,
+    detail: 'mode=usd => LIVE_MOMO_USD_TARGET',
+  };
 }
 
 async function main() {
   ensureDir(ANALYSIS_DIR);
+
+  const { solUsd, source: solUsdSource } = loadAssumedSolUsd();
+  const assumed = deriveAssumedPosition(solUsd);
 
   const candidateFiles = pickCandidatesFiles(windowStartMs);
   const perMint = new Map();
   const candMetaByMint = new Map();
   let candRowsScanned = 0;
   let candRowsUsed = 0;
-  const candDays = new Set();
 
   for (const fp of candidateFiles) {
     await streamJsonl(fp, (row) => {
@@ -265,18 +319,12 @@ async function main() {
         metaArr = [];
         candMetaByMint.set(mint, metaArr);
       }
-      metaArr.push({
-        tMs,
-        tIso: new Date(tMs).toISOString(),
-        reason: row?.reason || null,
-        outcome: row?.outcome || null,
-      });
+      metaArr.push({ tMs, reason: row?.reason || null, outcome: row?.outcome || null });
 
       const p = Number(row?.priceUsd);
       if (!Number.isFinite(p) || p <= 0) return;
       const symbol = row?.symbol || null;
       candRowsUsed += 1;
-      candDays.add(dayFromTs(tMs));
       let arr = perMint.get(mint);
       if (!arr) {
         arr = [];
@@ -287,24 +335,13 @@ async function main() {
   }
 
   const trackFiles = pickTrackFiles(windowStartMs);
-  let trackRowsUsed = 0;
-  const trackDays = new Set();
   const trackedMintDays = new Set();
   for (const fp of trackFiles) {
     const day = fp.split(path.sep).slice(-2)[0];
     const mint = path.basename(fp, '.jsonl');
     trackedMintDays.add(`${day}|${mint}`);
-    await streamJsonl(fp, (row) => {
-      const tMs = Date.parse(row?.t || '');
-      const p = Number(row?.priceUsd);
-      if (!Number.isFinite(tMs) || tMs < windowStartMs || tMs > nowMs) return;
-      if (!Number.isFinite(p) || p <= 0) return;
-      trackRowsUsed += 1;
-      trackDays.add(dayFromTs(tMs));
-    });
   }
 
-  // Attempt logs for execution paused inference.
   const attemptsByMint = new Map();
   if (fs.existsSync(ATTEMPTS_FILE)) {
     await streamJsonl(ATTEMPTS_FILE, (row) => {
@@ -318,19 +355,14 @@ async function main() {
         arr = [];
         attemptsByMint.set(mint, arr);
       }
-      arr.push({
-        tMs,
-        liveEnabled: row?.liveEnabled,
-        tradingEnabled: row?.tradingEnabled,
-      });
+      arr.push({ tMs, liveEnabled: row?.liveEnabled, tradingEnabled: row?.tradingEnabled });
     });
   }
 
-  for (const arr of [ ...perMint.values(), ...candMetaByMint.values(), ...attemptsByMint.values() ]) {
+  for (const arr of [...perMint.values(), ...candMetaByMint.values(), ...attemptsByMint.values()]) {
     arr.sort((a, b) => a.tMs - b.tMs);
   }
 
-  // Dedup/sort per mint price series.
   for (const [mint, arr] of perMint.entries()) {
     arr.sort((a, b) => a.tMs - b.tMs || a.price - b.price);
     const dedup = [];
@@ -345,14 +377,10 @@ async function main() {
   }
 
   const rawEvents = [];
-  let consideredMints = 0;
-
   for (const [mint, series] of perMint.entries()) {
     if (series.length < 3) continue;
-    consideredMints += 1;
 
     let prevRawEventMs = null;
-
     for (let i = 0; i < series.length; i++) {
       const pt = series[i];
       const ret15 = getRet(series, i, 15 * 60_000);
@@ -377,9 +405,6 @@ async function main() {
       const minFuture2m = future2m.length ? Math.min(...future2m.map((x) => x.price)) : null;
       const minFuture2mPct = Number.isFinite(minFuture2m) ? (minFuture2m - pt.price) / pt.price : null;
 
-      const sampleGapPrevMs = i > 0 ? (pt.tMs - series[i - 1].tMs) : Number.POSITIVE_INFINITY;
-      const sampleGapNextMs = i + 1 < series.length ? (series[i + 1].tMs - pt.tMs) : Number.POSITIVE_INFINITY;
-
       rawEvents.push({
         mint,
         symbol: pt.symbol,
@@ -393,10 +418,15 @@ async function main() {
         exitPrice: sim.exitPrice,
         exitReason: sim.exitReason,
         pnlPct,
+        pnlPctStr: fmtSignedPct(pnlPct),
+        pnlUsd: assumed.positionUsd * pnlPct,
+        pnlSol: assumed.positionSol * pnlPct,
+        assumedPositionUsd: assumed.positionUsd,
+        assumedPositionSol: assumed.positionSol,
         maxRunupPct: sim.maxRunupPct,
         maxDrawdownPct: sim.maxDrawdownPct,
-        sampleGapPrevMs,
-        sampleGapNextMs,
+        sampleGapPrevMs: i > 0 ? (pt.tMs - series[i - 1].tMs) : Number.POSITIVE_INFINITY,
+        sampleGapNextMs: i + 1 < series.length ? (series[i + 1].tMs - pt.tMs) : Number.POSITIVE_INFINITY,
         minFuture2mPct,
         cooldownCollision: prevRawEventMs != null && (pt.tMs - prevRawEventMs) < cfg.cooldownMs,
         prevEventMs: prevRawEventMs,
@@ -410,12 +440,9 @@ async function main() {
   const enriched = rawEvents.map((ev) => {
     const nearCand = findNearest(candMetaByMint.get(ev.mint), ev.tMs, 90_000);
     const nearAttempt = findNearest(attemptsByMint.get(ev.mint), ev.tMs, 120_000);
-    const mintDayKey = `${dayFromTs(ev.tMs)}|${ev.mint}`;
-    const trackedSameDay = trackedMintDays.has(mintDayKey);
-
+    const trackedSameDay = trackedMintDays.has(`${dayFromTs(ev.tMs)}|${ev.mint}`);
     const inf = inferReason(ev, { nearCand, nearAttempt, trackedSameDay });
 
-    // Route/quote unavailable fallback when mint/day has no track artifact and no better evidence.
     if (inf.reason === REASON.UNKNOWN && !trackedSameDay) {
       inf.reason = REASON.ROUTE_QUOTE_UNAVAILABLE;
       inf.confidence = 'low';
@@ -433,141 +460,113 @@ async function main() {
     };
   });
 
-  const allReasonLabels = Object.values(REASON);
-  const reasonCounts = Object.fromEntries(allReasonLabels.map((k) => [k, 0]));
-  for (const e of enriched) {
-    reasonCounts[e.likelyNonFillReason] = (reasonCounts[e.likelyNonFillReason] || 0) + 1;
-  }
+  const trades = enriched.length;
+  const wins = enriched.filter((e) => e.pnlPct > 0).length;
+  const losses = enriched.filter((e) => e.pnlPct < 0).length;
+  const flats = trades - wins - losses;
 
-  const confidenceByReason = Object.fromEntries(allReasonLabels.map((k) => [k, { high: 0, medium: 0, low: 0 }]));
-  for (const e of enriched) {
-    const key = e.likelyNonFillReason;
-    confidenceByReason[key][e.confidence] = (confidenceByReason[key][e.confidence] || 0) + 1;
-  }
+  const totalPnlPctSum = enriched.reduce((a, e) => a + e.pnlPct, 0);
+  const avgPnlPct = trades ? totalPnlPctSum / trades : 0;
+  const totalPnlUsd = enriched.reduce((a, e) => a + e.pnlUsd, 0);
+  const totalPnlSol = enriched.reduce((a, e) => a + e.pnlSol, 0);
+  const portfolioPnlPct = cfg.startingCapitalUsd > 0 ? totalPnlUsd / cfg.startingCapitalUsd : 0;
+  const endingBalanceUsd = cfg.startingCapitalUsd + totalPnlUsd;
 
   const ts = new Date().toISOString().replace(/[:]/g, '').replace(/\.\d+Z$/, 'Z');
-  const reportPath = path.join(ANALYSIS_DIR, `carl-backfill-counterfactual-v2-${ts}.md`);
-  const csvPath = path.join(ANALYSIS_DIR, `carl-backfill-counterfactual-v2-${ts}.csv`);
+  const reportPath = path.join(ANALYSIS_DIR, `carl-backfill-counterfactual-v3-${ts}.md`);
+  const csvPath = path.join(ANALYSIS_DIR, `carl-backfill-counterfactual-v3-${ts}.csv`);
 
   const csvHeaders = [
-    'entryT', 'mint', 'symbol', 'entryPrice', 'ret15', 'ret5', 'greensLast5',
-    'cooldownCollision', 'sampleGapPrevMs', 'sampleGapNextMs', 'minFuture2mPct',
-    'trackedSameDay', 'nearCandOutcome', 'nearCandReason',
-    'likelyNonFillReason', 'confidence', 'confidenceNotes',
-    'proxyExitReason', 'proxyPnlPct', 'maxRunupPct', 'maxDrawdownPct',
+    'entry_time', 'mint', 'symbol', 'entry_price_usd', 'exit_time', 'exit_price_usd', 'exit_reason',
+    'pnl_percent', 'pnl_usd', 'pnl_sol', 'assumed_position_usd', 'assumed_position_sol',
+    'ret15_percent', 'ret5_percent', 'greens_last5',
+    'likely_non_fill_reason', 'confidence', 'confidence_notes',
   ];
   const csvLines = [csvHeaders.join(',')];
   for (const e of enriched) {
     const row = [
-      e.entryT, e.mint, e.symbol || '', e.entryPrice, e.ret15, e.ret5, e.greens,
-      e.cooldownCollision, Math.round(e.sampleGapPrevMs), Math.round(e.sampleGapNextMs), e.minFuture2mPct,
-      e.trackedSameDay, e.nearCandOutcome || '', e.nearCandReason || '',
+      e.entryT, e.mint, e.symbol || '', e.entryPrice, e.exitT || '', e.exitPrice, e.exitReason,
+      e.pnlPctStr, e.pnlUsd.toFixed(4), e.pnlSol.toFixed(8), e.assumedPositionUsd.toFixed(4), e.assumedPositionSol.toFixed(8),
+      fmtSignedPct(e.ret15), fmtSignedPct(e.ret5), e.greens,
       e.likelyNonFillReason, e.confidence, e.confidenceNotes,
-      e.exitReason, e.pnlPct, e.maxRunupPct, e.maxDrawdownPct,
     ].map(csvEscape);
     csvLines.push(row.join(','));
   }
   fs.writeFileSync(csvPath, csvLines.join('\n') + '\n', 'utf8');
 
-  const topByPnl = [...enriched].sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 10);
-  const bottomByPnl = [...enriched].sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 10);
-
   const lines = [];
-  lines.push('# Candle Carl backfill counterfactual v2 (non-fill reason inference)');
+  lines.push('# Candle Carl counterfactual v3 (intuitive PnL view)');
   lines.push('');
   lines.push(`Generated: ${new Date().toISOString()}`);
-  lines.push(`Window start: ${new Date(windowStartMs).toISOString()}`);
-  lines.push(`Window end: ${new Date(nowMs).toISOString()}`);
+  lines.push(`Window: ${new Date(windowStartMs).toISOString()} → ${new Date(nowMs).toISOString()} (${lookbackDays}d)`);
   lines.push('');
-  lines.push('## Profile used (same trigger as v1)');
-  lines.push(`- entry: ret15 >= ${fmtPct(cfg.entryRet15)}, ret5 >= ${fmtPct(cfg.entryRet5)}, greensLast5 >= ${cfg.greensLast5}`);
-  lines.push(`- cooldown considered for collision flag: ${Math.round(cfg.cooldownMs / 1000)}s`);
-  lines.push(`- exit proxy (for context only): stop-at-entry ${fmtPct(cfg.stopEntryBufferPct)}, trail activate ${fmtPct(cfg.trailActivatePct)}, trail distance ${fmtPct(cfg.trailDistancePct)}`);
-  lines.push(`- horizon: ${Math.round(cfg.horizonMs / 3600000)}h`);
-  lines.push('');
-  lines.push('## Coverage');
-  lines.push(`- candidate files scanned: ${candidateFiles.length}`);
-  lines.push(`- candidate rows scanned / usable-price rows: ${candRowsScanned.toLocaleString()} / ${candRowsUsed.toLocaleString()}`);
-  lines.push(`- candidate days in window: ${[...candDays].sort().join(', ') || 'none'}`);
-  lines.push(`- track files scanned: ${trackFiles.length} | usable track rows: ${trackRowsUsed.toLocaleString()}`);
-  lines.push(`- track days in window: ${[...trackDays].sort().join(', ') || 'none'}`);
-  lines.push(`- unique mints with candidate price series: ${perMint.size.toLocaleString()}`);
-  lines.push(`- mints with enough samples for momentum check: ${consideredMints.toLocaleString()}`);
-  lines.push(`- would-enter events (raw, before skipping cooldown): ${enriched.length.toLocaleString()}`);
-  lines.push('');
-  lines.push('## Non-fill reason summary (inferred)');
-  lines.push('| reason | count | confidence split (H/M/L) |');
-  lines.push('|---|---:|---|');
-  for (const [reason, count] of Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])) {
-    const c = confidenceByReason[reason] || { high: 0, medium: 0, low: 0 };
-    lines.push(`| ${reason} | ${count.toLocaleString()} | ${c.high}/${c.medium}/${c.low} |`);
-  }
-  lines.push('');
-  lines.push('### Confidence notes');
-  lines.push('- **High**: direct rule evidence (e.g., cooldown collision, explicit gate-disabled record near timestamp).');
-  lines.push('- **Medium**: nearby candidate reason hints (e.g., noPair/momentum(false)/marketData low confidence) or strong adverse micro-move evidence.');
-  lines.push('- **Low**: heuristic fallback (sampling gaps, missing track artifact, limited contextual records).');
+  lines.push('## Live-rule profile used');
+  lines.push(`- Entry trigger: ret15 >= ${fmtPct(cfg.entryRet15)}, ret5 >= ${fmtPct(cfg.entryRet5)}, greensLast5 >= ${cfg.greensLast5}`);
+  lines.push(`- Exit proxy: stop-at-entry ${fmtPct(cfg.stopEntryBufferPct)}, trail activate ${fmtPct(cfg.trailActivatePct)}, trail distance ${fmtPct(cfg.trailDistancePct)}, horizon ${Math.round(cfg.horizonMs / 3600000)}h`);
+  lines.push(`- Position sizing source: LIVE_MOMO_SIZE_MODE=${cfg.liveSizeMode}`);
+  lines.push(`- Assumed SOLUSD for conversion: $${solUsd.toFixed(2)} (${solUsdSource})`);
+  lines.push(`- Assumed position used on each event: $${assumed.positionUsd.toFixed(2)} (${assumed.positionSol.toFixed(6)} SOL) [${assumed.detail}]`);
+  lines.push(`- Starting assumed capital: $${cfg.startingCapitalUsd.toFixed(2)} (STARTING_CAPITAL_USDC)`);
   lines.push('');
 
-  lines.push('## First 60 would-enter events with inferred non-fill reason');
-  lines.push('| entryT | mint | symbol | ret15 | ret5 | cooldown? | inferred reason | conf | notes |');
-  lines.push('|---|---|---:|---:|---:|---:|---|---|---|');
+  lines.push('## Summary totals');
+  lines.push(`- Total entries: ${trades.toLocaleString()}`);
+  lines.push(`- Wins / Losses / Flat: ${wins} / ${losses} / ${flats}`);
+  lines.push(`- Total PnL % (portfolio-style, vs starting capital): ${fmtSignedPct(portfolioPnlPct)}`);
+  lines.push(`- Total PnL % (sum of trade %s): ${fmtSignedPct(totalPnlPctSum)}`);
+  lines.push(`- Avg PnL % per trade: ${fmtSignedPct(avgPnlPct)}`);
+  lines.push(`- Total PnL in USD: ${fmtUsd(totalPnlUsd)}`);
+  lines.push(`- Total PnL in SOL: ${fmtSolDelta(totalPnlSol)}`);
+  lines.push(`- Ending balance (assumed): $${endingBalanceUsd.toFixed(2)} (net ${fmtUsd(totalPnlUsd)})`);
+  lines.push('');
+
+  lines.push('## First 60 would-enter events (money terms)');
+  lines.push('| entryT | mint | symbol | pnl % | pnl USD | pnl SOL | assumed size | exit | inferred non-fill |');
+  lines.push('|---|---|---:|---:|---:|---:|---:|---|---|');
   for (const e of enriched.slice(0, 60)) {
-    lines.push(`| ${e.entryT} | ${e.mint} | ${e.symbol || ''} | ${fmtPct(e.ret15)} | ${fmtPct(e.ret5)} | ${e.cooldownCollision ? 'yes' : 'no'} | ${e.likelyNonFillReason} | ${e.confidence} | ${e.confidenceNotes.replaceAll('|', '/')} |`);
-  }
-  lines.push('');
-
-  lines.push('## Context: proxy best/worst outcomes (not fill-realized)');
-  lines.push('### Best 10 by proxy PnL');
-  lines.push('| entryT | mint | symbol | proxy pnl | inferred reason | conf |');
-  lines.push('|---|---|---:|---:|---|---|');
-  for (const e of topByPnl) {
-    lines.push(`| ${e.entryT} | ${e.mint} | ${e.symbol || ''} | ${fmtPct(e.pnlPct)} | ${e.likelyNonFillReason} | ${e.confidence} |`);
-  }
-  lines.push('');
-
-  lines.push('### Worst 10 by proxy PnL');
-  lines.push('| entryT | mint | symbol | proxy pnl | inferred reason | conf |');
-  lines.push('|---|---|---:|---:|---|---|');
-  for (const e of bottomByPnl) {
-    lines.push(`| ${e.entryT} | ${e.mint} | ${e.symbol || ''} | ${fmtPct(e.pnlPct)} | ${e.likelyNonFillReason} | ${e.confidence} |`);
+    lines.push(`| ${e.entryT} | ${e.mint} | ${e.symbol || ''} | ${e.pnlPctStr} | ${fmtUsd(e.pnlUsd)} | ${fmtSolDelta(e.pnlSol)} | $${e.assumedPositionUsd.toFixed(2)} / ${e.assumedPositionSol.toFixed(4)} SOL | ${e.exitReason} | ${e.likelyNonFillReason} (${e.confidence}) |`);
   }
   lines.push('');
 
   lines.push('## Reproducibility');
   lines.push('```bash');
   lines.push('cd /home/dshontaylor/.openclaw/workspace/trading-bot');
-  lines.push('CARL_LOOKBACK_DAYS=7 node scripts/carl_backfill_counterfactual_v2.mjs');
+  lines.push('CARL_LOOKBACK_DAYS=7 node scripts/backfill/carl_backfill_counterfactual_v3.mjs');
+  lines.push('# optional override for conversion basis: CARL_SOL_USD=<price>');
   lines.push('```');
   lines.push('');
-  lines.push('## Caveats');
-  lines.push('- Inference is best-effort from sampled candidate/track artifacts; no full orderbook or exact quote/fill telemetry.');
-  lines.push('- Reason assignment is single-label per event for readability; multiple contributing factors can coexist.');
-  lines.push('- execution gate/risk gate paused only reaches high confidence when explicit nearby gate-disabled records exist.');
-  lines.push('- Slippage/impact category is heuristic and may over/under-tag highly volatile tokens.');
+
+  lines.push('## Caveats (short)');
+  lines.push('- Counterfactual only: sampled candidate/track data, no exact orderbook/fill telemetry.');
+  lines.push('- USD/SOL PnL uses one assumed position size from current env rules; real live size can vary per-wallet balance and runtime checks.');
+  lines.push('- Fees, latency, route failures, and slippage are not applied to PnL math (reason labels remain best-effort inference).');
 
   fs.writeFileSync(reportPath, lines.join('\n') + '\n', 'utf8');
 
-  const summary = {
+  console.log(JSON.stringify({
     reportPath,
     csvPath,
+    assumptions: {
+      startingCapitalUsd: cfg.startingCapitalUsd,
+      liveSizeMode: cfg.liveSizeMode,
+      assumedPositionUsd: assumed.positionUsd,
+      assumedPositionSol: assumed.positionSol,
+      solUsd,
+      solUsdSource,
+    },
     totals: {
-      events: enriched.length,
-      reasonCounts,
-      confidenceByReason,
+      entries: trades,
+      wins,
+      losses,
+      flats,
+      portfolioPnlPct,
+      totalPnlPctSum,
+      avgPnlPct,
+      totalPnlUsd,
+      totalPnlSol,
+      endingBalanceUsd,
     },
-    coverage: {
-      candidateFiles: candidateFiles.length,
-      candRowsScanned,
-      candRowsUsed,
-      trackFiles: trackFiles.length,
-      trackRowsUsed,
-      mints: perMint.size,
-      consideredMints,
-    },
-  };
-
-  console.log(JSON.stringify(summary, null, 2));
+  }, null, 2));
 }
 
 main().catch((err) => {

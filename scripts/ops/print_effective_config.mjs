@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 
-import { getConfig, summarizeConfigForBoot } from '../src/config.mjs';
+import { getConfig, summarizeConfigForBoot } from '../../src/config.mjs';
 
 try {
   const cfg = getConfig();

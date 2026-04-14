@@ -1,6 +1,6 @@
 # Aggressive Autotune Controller (10–15m loop)
 
-Script: `scripts/aggressive_autotune_controller.mjs`
+Script: `scripts/research/aggressive_autotune_controller.mjs`
 
 ## What it does each run
 1. Reads current diagnostics proxy from:
@@ -25,9 +25,9 @@ Script: `scripts/aggressive_autotune_controller.mjs`
 
 ## Modes
 - Dry run (no `.env` changes):
-  - `node scripts/aggressive_autotune_controller.mjs --mode dry-run --window-min 20`
+  - `node scripts/research/aggressive_autotune_controller.mjs --mode dry-run --window-min 20`
 - Apply (writes `.env`):
-  - `node scripts/aggressive_autotune_controller.mjs --mode apply --window-min 20`
+  - `node scripts/research/aggressive_autotune_controller.mjs --mode apply --window-min 20`
 
 NPM aliases:
 - `npm run autotune:aggressive`
@@ -36,7 +36,7 @@ NPM aliases:
 ## Manual run now (apply)
 ```bash
 cd /home/dshontaylor/.openclaw/workspace/trading-bot
-node scripts/aggressive_autotune_controller.mjs --mode apply --window-min 20
+node scripts/research/aggressive_autotune_controller.mjs --mode apply --window-min 20
 # then restart process to pick up env changes
 pm2 restart solana-momentum-bot
 ```
@@ -45,7 +45,7 @@ pm2 restart solana-momentum-bot
 > Optional; only while running aggressive push.
 
 ```cron
-*/15 * * * * cd /home/dshontaylor/.openclaw/workspace/trading-bot && /usr/bin/node scripts/aggressive_autotune_controller.mjs --mode apply --window-min 20 >> analysis/aggressive_autotune_cron.log 2>&1 && /usr/bin/pm2 restart solana-momentum-bot >/dev/null 2>&1
+*/15 * * * * cd /home/dshontaylor/.openclaw/workspace/trading-bot && /usr/bin/node scripts/research/aggressive_autotune_controller.mjs --mode apply --window-min 20 >> analysis/aggressive_autotune_cron.log 2>&1 && /usr/bin/pm2 restart solana-momentum-bot >/dev/null 2>&1
 ```
 
 ## First 60-minute recommended sequence

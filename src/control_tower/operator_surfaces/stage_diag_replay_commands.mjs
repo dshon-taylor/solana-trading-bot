@@ -28,7 +28,7 @@ export async function handleDiagReplayCommands(ctx) {
     delete state.flags.runReplay;
     try { await saveState(cfg.STATE_PATH, state); } catch {}
     try {
-      const args = ['scripts/replay_historical.mjs', '--json', '--days', String(req.days)];
+      const args = ['scripts/research/replay_historical.mjs', '--json', '--days', String(req.days)];
       if (req.windowHours != null) args.push('--window-hours', String(req.windowHours));
       if (req.trailActivatePct != null) args.push('--trail-activate-pct', String(req.trailActivatePct));
       if (req.trailDistancePct != null) args.push('--trail-distance-pct', String(req.trailDistancePct));
@@ -57,7 +57,7 @@ export async function handleDiagReplayCommands(ctx) {
     try { await saveState(cfg.STATE_PATH, state); } catch {}
     try {
       const args = [
-        'scripts/optimize_replay.mjs',
+        'scripts/research/optimize_replay.mjs',
         '--json',
         '--days',
         String(req.days),

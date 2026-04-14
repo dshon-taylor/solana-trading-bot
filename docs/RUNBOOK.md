@@ -51,7 +51,7 @@ If confirm pass rate drops unexpectedly:
 
 ```bash
 pm2 logs solana-momentum-bot --lines 200
-./scripts/preflight_live.sh
+./scripts/ops/preflight_live.sh
 ```
 
 If unstable and you need to pause entries immediately:

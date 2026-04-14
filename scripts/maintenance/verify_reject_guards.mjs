@@ -1,7 +1,7 @@
 import fs from 'fs';
-import { isTokenSafe, getConcentrationMetrics } from '../src/rugcheck.mjs';
-import { passesBaseFilters, evaluateMomentumSignal } from '../src/strategy.mjs';
-import { buildTrackSampleRow, evaluateTrackerIngestionHealth } from '../src/tracker.mjs';
+import { isTokenSafe, getConcentrationMetrics } from '../../src/rugcheck.mjs';
+import { passesBaseFilters, evaluateMomentumSignal } from '../../src/strategy.mjs';
+import { buildTrackSampleRow, evaluateTrackerIngestionHealth } from '../../src/tracker.mjs';
 import { config } from 'process';
 
 const results = {};

@@ -5,7 +5,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 JOB_TAG="# candle-carl-weekly-propose-only"
 CRON_TZ_LINE='CRON_TZ=America/Chicago'
 CRON_EXPR='0 9 * * 0'
-CMD="cd ${REPO_DIR} && /usr/bin/env node scripts/weekly_optimizer_report.mjs >> state/weekly_optimizer_report.log 2>&1 ${JOB_TAG}"
+CMD="cd ${REPO_DIR} && /usr/bin/env node scripts/research/weekly_optimizer_report.mjs >> state/weekly_optimizer_report.log 2>&1 ${JOB_TAG}"
 
 current="$(crontab -l 2>/dev/null || true)"
 

@@ -88,7 +88,7 @@ Window: 2026-02-18T09:24:14.323Z → 2026-02-25T09:24:14.323Z (7d)
 ## Reproducibility
 ```bash
 cd /home/dshontaylor/.openclaw/workspace/trading-bot
-CARL_LOOKBACK_DAYS=7 node scripts/carl_backfill_counterfactual_v3.mjs
+CARL_LOOKBACK_DAYS=7 node scripts/backfill/carl_backfill_counterfactual_v3.mjs
 # optional override for conversion basis: CARL_SOL_USD=<price>
 ```
 

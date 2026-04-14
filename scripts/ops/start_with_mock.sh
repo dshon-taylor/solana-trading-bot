@@ -7,7 +7,7 @@ LOG="$ROOT/state/mock_startup.log"
 cd "$ROOT"
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] startup mock check begin" >> "$LOG"
-if node scripts/mock_lifecycle_check.mjs >> "$LOG" 2>&1; then
+if node scripts/maintenance/mock_lifecycle_check.mjs >> "$LOG" 2>&1; then
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] startup mock check PASS" >> "$LOG"
 else
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] startup mock check FAIL (continuing bot startup fail-open)" >> "$LOG"
