@@ -532,6 +532,7 @@ export async function runConfirmContinuationStage(ctx) {
       votingWindowPasses: { trade: 0, ohlcv: 0, none: 0 },
       netMoveFloorPasses: { yes: 0, no: 0 },
       epsilonFilteredTicksSeen: { trade: 0, ohlcv: 0 },
+      liveSourceBlocks: 0,
       last10: [],
     };
     const cc = counters.watchlist.confirmContinuation;
@@ -549,6 +550,8 @@ export async function runConfirmContinuationStage(ctx) {
     const netMovePassedFloor = !!diag?.netMovePassedFloor;
     const epsilonTradeCount = Number(diag?.epsilonFilteredTradeCount || 0) || 0;
     const epsilonOhlcvCount = Number(diag?.epsilonFilteredOhlcvCount || 0) || 0;
+    const liveSourceBlockedAtRunup = !!diag?.liveSourceBlockedAtRunup;
+    const liveSourceBlockCount = Number(diag?.liveSourceBlockCount || 0) || 0;
     const twoGreenEvidence = Math.max(maxTradeUpticks, maxOhlcvUpticks) >= minUpticks;
 
     cc.evaluated = Number(cc.evaluated || 0) + 1;
@@ -580,6 +583,7 @@ export async function runConfirmContinuationStage(ctx) {
     // Accumulate epsilon-filtered tick counts
     cc.epsilonFilteredTicksSeen.trade = Number(cc.epsilonFilteredTicksSeen.trade || 0) + epsilonTradeCount;
     cc.epsilonFilteredTicksSeen.ohlcv = Number(cc.epsilonFilteredTicksSeen.ohlcv || 0) + epsilonOhlcvCount;
+    cc.liveSourceBlocks = Number(cc.liveSourceBlocks || 0) + liveSourceBlockCount;
     
     cc.last10.push({
       t: nowIso(),
@@ -599,6 +603,8 @@ export async function runConfirmContinuationStage(ctx) {
       netMovePassedFloor,
       epsilonTradeCount,
       epsilonOhlcvCount,
+      liveSourceBlockedAtRunup,
+      liveSourceBlockCount,
     });
     if (cc.last10.length > 10) cc.last10 = cc.last10.slice(-10);
   }
@@ -663,6 +669,9 @@ export async function runConfirmContinuationStage(ctx) {
       continuationRequireTradeUpticks: !!confirmGate?.diag?.requireTradeUpticks,
       continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,
       continuationSelectedOhlcvReads: Number(confirmGate?.diag?.selectedOhlcvReads || 0) || 0,
+      continuationPassRequiresLiveSource: !!confirmGate?.diag?.passRequiresLiveSource,
+      continuationLiveSourceBlockedAtRunup: !!confirmGate?.diag?.liveSourceBlockedAtRunup,
+      continuationLiveSourceBlockCount: Number(confirmGate?.diag?.liveSourceBlockCount || 0) || 0,
       continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
       continuationWsUpdatePrices: Array.isArray(confirmGate?.diag?.wsUpdatePrices) ? confirmGate.diag.wsUpdatePrices.slice(0, 24) : [],
       continuationTradeUpdateTimestamps: Array.isArray(confirmGate?.diag?.tradeUpdateTimestamps) ? confirmGate.diag.tradeUpdateTimestamps.slice(0, 24) : [],
@@ -765,6 +774,9 @@ export async function runConfirmContinuationStage(ctx) {
     continuationRequireTradeUpticks: !!confirmGate?.diag?.requireTradeUpticks,
     continuationSelectedTradeReads: Number(confirmGate?.diag?.selectedTradeReads || 0) || 0,
     continuationSelectedOhlcvReads: Number(confirmGate?.diag?.selectedOhlcvReads || 0) || 0,
+    continuationPassRequiresLiveSource: !!confirmGate?.diag?.passRequiresLiveSource,
+    continuationLiveSourceBlockedAtRunup: !!confirmGate?.diag?.liveSourceBlockedAtRunup,
+    continuationLiveSourceBlockCount: Number(confirmGate?.diag?.liveSourceBlockCount || 0) || 0,
     continuationWsUpdateTimestamps: Array.isArray(confirmGate?.diag?.wsUpdateTimestamps) ? confirmGate.diag.wsUpdateTimestamps.slice(0, 24) : [],
     continuationWsUpdatePrices: Array.isArray(confirmGate?.diag?.wsUpdatePrices) ? confirmGate.diag.wsUpdatePrices.slice(0, 24) : [],
     continuationTradeUpdateTimestamps: Array.isArray(confirmGate?.diag?.tradeUpdateTimestamps) ? confirmGate.diag.tradeUpdateTimestamps.slice(0, 24) : [],

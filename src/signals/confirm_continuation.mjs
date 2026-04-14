@@ -30,7 +30,7 @@ function readRuntimeTuning() {
   };
 }
 
-function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, consecutiveOhlcvUpticks = 0, maxConsecutiveOhlcvUpticks = 0, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup, tradeVotePassed = false, ohlcvVotePassed = false, netMovePassedFloor = false, epsilonFilteredTradeCount = 0, epsilonFilteredOhlcvCount = 0 }) {
+function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, initialSourceUsed, dominantSourceUsed, passReason, failReason, timeToRunupPassMs, timeoutWasFlatOrNegative, wsReads, wsFreshReads, wsObservedTicks, snapshotReads, confirmStartedAtMs, wsUpdateTimestamps, wsUpdatePrices, tradeUpdateTimestamps, tradeUpdatePrices, selectedTradeReads, selectedOhlcvReads, consecutiveTradeUpticks, maxConsecutiveTradeUpticks, consecutiveOhlcvUpticks = 0, maxConsecutiveOhlcvUpticks = 0, requireTradeUpticks, minConsecutiveTradeUpticks, runupSourceUsed, tradeSequenceSourceUsed, tradeTickCountAtRunupMoment, tradeSequenceEligibleAtRunup, tradeVotePassed = false, ohlcvVotePassed = false, netMovePassedFloor = false, epsilonFilteredTradeCount = 0, epsilonFilteredOhlcvCount = 0, passRequiresLiveSource = false, liveSourceBlockedAtRunup = false, liveSourceBlockCount = 0 }) {
   return {
     startPrice,
     highPrice,
@@ -75,6 +75,9 @@ function mkDiagBase({ startPrice, highPrice, lowPrice, finalPrice, priceSource, 
     netMovePassedFloor: !!netMovePassedFloor,
     epsilonFilteredTradeCount: Number(epsilonFilteredTradeCount || 0),
     epsilonFilteredOhlcvCount: Number(epsilonFilteredOhlcvCount || 0),
+    passRequiresLiveSource: !!passRequiresLiveSource,
+    liveSourceBlockedAtRunup: !!liveSourceBlockedAtRunup,
+    liveSourceBlockCount: Number(liveSourceBlockCount || 0),
   };
 }
 
@@ -99,6 +102,7 @@ export async function confirmContinuationGate({
   const ensureSub = () => {
     try {
       cacheImpl.set(`birdeye:sub:${mint}`, true, ensureSubTtlSec);
+      cacheImpl.set(`birdeye:sub:priority:${mint}`, true, ensureSubTtlSec);
       return true;
     } catch {
       return false;
@@ -139,6 +143,8 @@ export async function confirmContinuationGate({
   let netMovePassedFloor = false;
   let epsilonFilteredTradeCount = 0;
   let epsilonFilteredOhlcvCount = 0;
+  let liveSourceBlockedAtRunup = false;
+  let liveSourceBlockCount = 0;
 
   const getDominantSourceUsed = () => {
     const trade = Number(selectedTradeReads || 0);
@@ -474,6 +480,8 @@ export async function confirmContinuationGate({
     if (runupPct >= rt.passPct || p >= (startPrice * (1 + rt.passPct))) {
       const liveSourceForPass = tick?.source === 'ws_trade' || tick?.source === 'ws_ohlcv';
       if (rt.passRequiresLiveSource && !liveSourceForPass) {
+        liveSourceBlockedAtRunup = true;
+        liveSourceBlockCount += 1;
         await sleepFn(rt.sleepMs);
         continue;
       }
@@ -550,6 +558,9 @@ export async function confirmContinuationGate({
           netMovePassedFloor,
           epsilonFilteredTradeCount,
           epsilonFilteredOhlcvCount,
+          passRequiresLiveSource: rt.passRequiresLiveSource,
+          liveSourceBlockedAtRunup,
+          liveSourceBlockCount,
         }),
       };
     }
@@ -568,7 +579,9 @@ export async function confirmContinuationGate({
   const noLiveDataEvidence = Number(selectedTradeReads || 0) <= 0 && Number(selectedOhlcvReads || 0) <= 0;
   failReason = tradeTrendMissing
     ? 'runupNoTradeTrendConfirm'
-    : (noLiveDataEvidence ? 'dataUnavailable' : (timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired'));
+    : ((rt.passRequiresLiveSource && liveSourceBlockedAtRunup)
+      ? 'runupNoLiveSource'
+      : (noLiveDataEvidence ? 'dataUnavailable' : (timeoutWasFlatOrNegative ? 'windowExpiredStall' : 'windowExpired')));
   if (!runupSeenInWindow) runupSourceUsed = 'no_runup';
   return {
     ok: false,
@@ -612,6 +625,9 @@ export async function confirmContinuationGate({
       netMovePassedFloor,
       epsilonFilteredTradeCount,
       epsilonFilteredOhlcvCount,
+      passRequiresLiveSource: rt.passRequiresLiveSource,
+      liveSourceBlockedAtRunup,
+      liveSourceBlockCount,
     }),
   };
 }
