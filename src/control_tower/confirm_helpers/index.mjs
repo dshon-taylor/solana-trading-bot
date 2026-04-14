@@ -8,9 +8,9 @@ export function confirmQualityGate({ cfg, sigReasons, snapshot }) {
   const txMetricsMissing = !(Number.isFinite(tx1m) && Number.isFinite(tx5mAvg) && tx1m > 0 && tx5mAvg > 0);
   if (txMetricsMissing) return { ok: false, reason: 'txMetricMissing' };
   const confirmBuySellMin = Number(cfg?.CONFIRM_BUY_SELL_MIN || 1.2);
-  if (!(buySellRatio > confirmBuySellMin)) return { ok: false, reason: 'confirmWeakBuyDominance' };
+  if (!(buySellRatio >= confirmBuySellMin)) return { ok: false, reason: 'confirmWeakBuyDominance' };
   const txAccelMin = Number(cfg?.CONFIRM_TX_ACCEL_MIN || 1.0);
-  if (!((tx1m / Math.max(1, tx5mAvg)) > txAccelMin)) return { ok: false, reason: 'confirmNoTxAcceleration' };
+  if (!((tx1m / Math.max(1, tx5mAvg)) >= txAccelMin)) return { ok: false, reason: 'confirmNoTxAcceleration' };
 
   const freshnessMs = Number(snapshot?.freshnessMs ?? Infinity);
   if (!Number.isFinite(freshnessMs) || freshnessMs > Number(cfg.CONFIRM_SNAPSHOT_MAX_AGE_MS || 5000)) {
@@ -44,38 +44,74 @@ export function recordConfirmCarryTrace(state, mint, stage, payload = {}) {
 }
 
 export async function resolveConfirmTxMetrics({ state, row, snapshot, pair, mint, birdseye = null, snapshotFromBirdseye }) {
+  const readMetric = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const buildCandidate = (source, values = {}) => ({
+    source,
+    tx1m: readMetric(values.tx1m),
+    tx5mAvg: readMetric(values.tx5mAvg),
+    tx30mAvg: readMetric(values.tx30mAvg),
+    buySellRatio: readMetric(values.buySellRatio),
+  });
+
+  const hasTxCore = (m) => Number(m?.tx1m || 0) > 0 && Number(m?.tx5mAvg || 0) > 0;
+
+  const mergeMissing = (base, incoming) => ({
+    ...base,
+    tx1m: Number(base.tx1m || 0) > 0 ? Number(base.tx1m || 0) : Number(incoming.tx1m || 0),
+    tx5mAvg: Number(base.tx5mAvg || 0) > 0 ? Number(base.tx5mAvg || 0) : Number(incoming.tx5mAvg || 0),
+    tx30mAvg: Number(base.tx30mAvg || 0) > 0 ? Number(base.tx30mAvg || 0) : Number(incoming.tx30mAvg || 0),
+    buySellRatio: Number(base.buySellRatio || 0) > 0 ? Number(base.buySellRatio || 0) : Number(incoming.buySellRatio || 0),
+  });
+
   const stateRowCarry = state?.watchlist?.mints?.[mint]?.meta?.confirmTxCarry || null;
   const carryByMint = state?.runtime?.confirmTxCarryByMint?.[mint] || null;
-  const carryTx1m = Number(carryByMint?.tx1m ?? row?.meta?.confirmTxCarry?.tx1m ?? stateRowCarry?.tx1m ?? 0);
-  const carryTx5mAvg = Number(carryByMint?.tx5mAvg ?? row?.meta?.confirmTxCarry?.tx5mAvg ?? stateRowCarry?.tx5mAvg ?? 0);
-  const carryTx30mAvg = Number(carryByMint?.tx30mAvg ?? row?.meta?.confirmTxCarry?.tx30mAvg ?? stateRowCarry?.tx30mAvg ?? 0);
-  const carryBsr = Number(carryByMint?.buySellRatio ?? row?.meta?.confirmTxCarry?.buySellRatio ?? stateRowCarry?.buySellRatio ?? 0);
-  if (carryTx1m > 0 || carryTx5mAvg > 0 || carryTx30mAvg > 0 || carryBsr > 0) {
-    return { tx1m: carryTx1m, tx5mAvg: carryTx5mAvg, tx30mAvg: carryTx30mAvg, buySellRatio: carryBsr, source: 'momentum.carried' };
-  }
+  const candidates = [
+    buildCandidate('momentum.carried', {
+      tx1m: carryByMint?.tx1m ?? row?.meta?.confirmTxCarry?.tx1m ?? stateRowCarry?.tx1m,
+      tx5mAvg: carryByMint?.tx5mAvg ?? row?.meta?.confirmTxCarry?.tx5mAvg ?? stateRowCarry?.tx5mAvg,
+      tx30mAvg: carryByMint?.tx30mAvg ?? row?.meta?.confirmTxCarry?.tx30mAvg ?? stateRowCarry?.tx30mAvg,
+      buySellRatio: carryByMint?.buySellRatio ?? row?.meta?.confirmTxCarry?.buySellRatio ?? stateRowCarry?.buySellRatio,
+    }),
+    buildCandidate('row.latest', {
+      tx1m: row?.latest?.tx1m,
+      tx5mAvg: row?.latest?.tx5mAvg,
+      tx30mAvg: row?.latest?.tx30mAvg,
+      buySellRatio: row?.latest?.buySellRatio,
+    }),
+    buildCandidate('snapshot', {
+      tx1m: snapshot?.tx_1m ?? snapshot?.pair?.birdeye?.tx_1m,
+      tx5mAvg: snapshot?.tx_5m_avg ?? snapshot?.pair?.birdeye?.tx_5m_avg,
+      tx30mAvg: snapshot?.tx_30m_avg ?? snapshot?.pair?.birdeye?.tx_30m_avg,
+      buySellRatio: snapshot?.buySellRatio ?? snapshot?.pair?.birdeye?.buySellRatio,
+    }),
+    buildCandidate('pair.ws', {
+      tx1m: pair?.wsCache?.birdeye?.tx_1m ?? pair?.birdeye?.tx_1m,
+      tx5mAvg: pair?.wsCache?.birdeye?.tx_5m_avg ?? pair?.birdeye?.tx_5m_avg,
+      tx30mAvg: pair?.wsCache?.birdeye?.tx_30m_avg ?? pair?.birdeye?.tx_30m_avg,
+      buySellRatio: pair?.wsCache?.birdeye?.buySellRatio ?? pair?.birdeye?.buySellRatio,
+    }),
+  ];
 
-  const latestTx1m = Number(row?.latest?.tx1m || 0);
-  const latestTx5mAvg = Number(row?.latest?.tx5mAvg || 0);
-  const latestTx30mAvg = Number(row?.latest?.tx30mAvg || 0);
-  const latestBsr = Number(row?.latest?.buySellRatio || 0);
-  if (latestTx1m > 0 || latestTx5mAvg > 0 || latestTx30mAvg > 0 || latestBsr > 0) {
-    return { tx1m: latestTx1m, tx5mAvg: latestTx5mAvg, tx30mAvg: latestTx30mAvg, buySellRatio: latestBsr, source: 'row.latest' };
-  }
-
-  const snapTx1m = Number(snapshot?.tx_1m ?? snapshot?.pair?.birdeye?.tx_1m ?? 0);
-  const snapTx5mAvg = Number(snapshot?.tx_5m_avg ?? snapshot?.pair?.birdeye?.tx_5m_avg ?? 0);
-  const snapTx30mAvg = Number(snapshot?.tx_30m_avg ?? snapshot?.pair?.birdeye?.tx_30m_avg ?? 0);
-  const snapBsr = Number(snapshot?.buySellRatio ?? snapshot?.pair?.birdeye?.buySellRatio ?? 0);
-  if (snapTx1m > 0 || snapTx5mAvg > 0 || snapTx30mAvg > 0 || snapBsr > 0) {
-    return { tx1m: snapTx1m, tx5mAvg: snapTx5mAvg, tx30mAvg: snapTx30mAvg, buySellRatio: snapBsr, source: 'snapshot' };
-  }
-
-  const pairTx1m = Number(pair?.wsCache?.birdeye?.tx_1m ?? pair?.birdeye?.tx_1m ?? 0);
-  const pairTx5mAvg = Number(pair?.wsCache?.birdeye?.tx_5m_avg ?? pair?.birdeye?.tx_5m_avg ?? 0);
-  const pairTx30mAvg = Number(pair?.wsCache?.birdeye?.tx_30m_avg ?? pair?.birdeye?.tx_30m_avg ?? 0);
-  const pairBsr = Number(pair?.wsCache?.birdeye?.buySellRatio ?? pair?.birdeye?.buySellRatio ?? 0);
-  if (pairTx1m > 0 || pairTx5mAvg > 0 || pairTx30mAvg > 0 || pairBsr > 0) {
-    return { tx1m: pairTx1m, tx5mAvg: pairTx5mAvg, tx30mAvg: pairTx30mAvg, buySellRatio: pairBsr, source: 'pair.ws' };
+  let merged = { tx1m: 0, tx5mAvg: 0, tx30mAvg: 0, buySellRatio: 0 };
+  const sourceUsed = [];
+  for (const c of candidates) {
+    const before = { ...merged };
+    merged = mergeMissing(merged, c);
+    if (
+      before.tx1m !== merged.tx1m
+      || before.tx5mAvg !== merged.tx5mAvg
+      || before.tx30mAvg !== merged.tx30mAvg
+      || before.buySellRatio !== merged.buySellRatio
+    ) {
+      sourceUsed.push(c.source);
+    }
+    if (hasTxCore(merged) && Number(merged.buySellRatio || 0) > 0) {
+      return { ...merged, source: sourceUsed.join('+') || c.source };
+    }
   }
 
   if (birdseye?.enabled && typeof birdseye?.getTokenSnapshot === 'function' && mint) {
@@ -86,10 +122,21 @@ export async function resolveConfirmTxMetrics({ state, row, snapshot, pair, mint
       const beTx5mAvg = Number(liteSnapshot?.tx_5m_avg ?? lite?.tx_5m_avg ?? lite?.pair?.birdeye?.tx_5m_avg ?? 0);
       const beTx30mAvg = Number(liteSnapshot?.tx_30m_avg ?? lite?.tx_30m_avg ?? lite?.pair?.birdeye?.tx_30m_avg ?? 0);
       const beBsr = Number(liteSnapshot?.buySellRatio ?? lite?.buySellRatio ?? lite?.pair?.birdeye?.buySellRatio ?? 0);
-      if (beTx1m > 0 || beTx5mAvg > 0 || beTx30mAvg > 0 || beBsr > 0) {
-        return { tx1m: beTx1m, tx5mAvg: beTx5mAvg, tx30mAvg: beTx30mAvg, buySellRatio: beBsr, source: 'birdeyeFallback.normalized' };
+      const withBirdseye = mergeMissing(merged, {
+        tx1m: beTx1m,
+        tx5mAvg: beTx5mAvg,
+        tx30mAvg: beTx30mAvg,
+        buySellRatio: beBsr,
+      });
+      if (hasTxCore(withBirdseye) || Number(withBirdseye.buySellRatio || 0) > 0) {
+        const src = sourceUsed.length ? `${sourceUsed.join('+')}+birdeyeFallback.normalized` : 'birdeyeFallback.normalized';
+        return { ...withBirdseye, source: src };
       }
     } catch {}
+  }
+
+  if (hasTxCore(merged) || Number(merged.buySellRatio || 0) > 0) {
+    return { ...merged, source: sourceUsed.join('+') || 'partial' };
   }
 
   return { tx1m: 0, tx5mAvg: 0, tx30mAvg: 0, buySellRatio: 0, source: 'unknown' };

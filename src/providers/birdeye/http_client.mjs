@@ -109,7 +109,11 @@ export function createBirdseyeLiteClient({
   }
 
   async function fetchTokenSnapshot(mint) {
-    const json = await fetchBirdeye('/defi/token_overview', { address: mint });
+    const json = await fetchBirdeye('/defi/token_overview', {
+      address: mint,
+      // Explicit frames helps guarantee micro windows (1m/5m/30m) are returned consistently.
+      frames: '1m,5m,30m,1h,24h',
+    });
 
     const data = json?.data || null;
     if (!data) return null;
@@ -407,7 +411,7 @@ export function createBirdseyeLiteClient({
       ['/defi/price', { address: mint, time: tsSec }],
       ['/defi/history_price', { address: mint, address_type: 'token', type: '1m', time_from: fromSec, time_to: toSec }],
       ['/defi/ohlcv', { address: mint, type: '1m', time_from: fromSec, time_to: toSec }],
-      ['/defi/token_overview', { address: mint }],
+      ['/defi/token_overview', { address: mint, frames: '1m,5m,30m,1h,24h' }],
     ];
 
     let lastErr = null;

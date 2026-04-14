@@ -341,7 +341,25 @@ export function snapshotFromBirdseye(bird, nowMs) {
       bird?.raw?.volume30mAvg,
       volume30mAvgFromTotal,
     ),
-    buySellRatio: pickNum(bird?.buySellRatio, bird?.raw?.buySellRatio, Number(txns?.h1?.sells || 0) > 0 ? (Number(txns?.h1?.buys || 0) / Number(txns?.h1?.sells || 1)) : 0),
+    buySellRatio: (() => {
+      const h1Buys = Number(txns?.h1?.buys || 0);
+      const h1Sells = Number(txns?.h1?.sells || 0);
+      const rawBuy1m = pickNumPositive(bird?.raw?.buy1m, bird?.buy1m);
+      const rawSell1m = pickNumPositive(bird?.raw?.sell1m, bird?.sell1m);
+      const ratioFrom1m = rawSell1m > 0
+        ? (rawBuy1m / rawSell1m)
+        : (rawBuy1m > 0 ? 99 : 0);
+      const ratioFromH1 = h1Sells > 0
+        ? (h1Buys / h1Sells)
+        : (h1Buys > 0 ? 99 : 0);
+      const direct = pickNumPositive(
+        bird?.buySellRatio,
+        bird?.raw?.buySellRatio,
+        ratioFrom1m,
+        ratioFromH1,
+      );
+      return direct > 0 ? direct : pickNum(bird?.buySellRatio, bird?.raw?.buySellRatio, ratioFrom1m, ratioFromH1);
+    })(),
     tx_1m: pickNumPositive(bird?.tx_1m, bird?.raw?.tx_1m, tx1mFallback),
     tx_5m_avg: pickNumPositive(bird?.tx_5m_avg, bird?.raw?.tx_5m_avg, tx5mAvgFallback),
     tx_30m_avg: pickNumPositive(bird?.tx_30m_avg, bird?.raw?.tx_30m_avg, tx30mAvgFallback),
