@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { formatLifecycleSummary, summarizeTradeLifecycle } from '../../src/trade_lifecycle_analytics.mjs';
+import { formatLifecycleSummary, summarizeTradeLifecycle } from '../../src/analytics/trade_lifecycle_analytics.mjs';
 
 function parseArgs(argv) {
   const args = {

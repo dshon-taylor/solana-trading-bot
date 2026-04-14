@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { createLaserstreamDevnetClient } from '../../src/laserstream_devnet.mjs';
+import { createLaserstreamDevnetClient } from '../../src/providers/laserstream_devnet.mjs';
 
 const durationMin = Math.max(1, Number(process.env.LASERSTREAM_SOAK_MINUTES || process.argv[2] || 10));
 const durationMs = durationMin * 60_000;

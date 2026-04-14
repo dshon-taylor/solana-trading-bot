@@ -5,7 +5,7 @@ dotenv.config({path: new URL('../.env', import.meta.url).pathname});
 
 import {Connection, LAMPORTS_PER_SOL, Keypair, PublicKey} from '@solana/web3.js';
 import {createMint, getOrCreateAssociatedTokenAccount, mintTo} from '@solana/spl-token';
-import {loadKeypairFromEnv} from '../../src/wallet.mjs';
+import {loadKeypairFromEnv} from '../../src/trading/wallet.mjs';
 import {getConfig} from '../../src/config.mjs';
 import {execSync} from 'child_process';
 

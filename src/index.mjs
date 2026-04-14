@@ -128,7 +128,7 @@ import cache from './lib/cache/global_cache.mjs';
 import birdEyeWs from './providers/birdeye/ws_client.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const wsmgr = require('../../src/services/wsSubscriptionManager.js');
+const wsmgr = require('./services/wsSubscriptionManager.js');
 let runtimeStateRef = null;
 
 // Global timer registry for proper cleanup

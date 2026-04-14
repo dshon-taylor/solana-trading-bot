@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { getConfig } from '../../src/config.mjs';
 import { tgSend } from '../../src/telegram/index.mjs';
-import { loadTrackedSeries, evaluateReplay, optimizeReplay } from '../../src/replay_optimizer.mjs';
+import { loadTrackedSeries, evaluateReplay, optimizeReplay } from '../../src/analytics/replay_optimizer.mjs';
 
 function getArg(name, fallback = null) {
   const i = process.argv.indexOf(name);

@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { getConfig } from '../../src/config.mjs';
-import { loadKeypairFromSopsFile, loadKeypairFromEnv } from '../../src/wallet.mjs';
-import { makeConnection } from '../../src/portfolio.mjs';
-import { executeSwap, toBaseUnits, DECIMALS } from '../../src/trader.mjs';
-import { appendTradingLog, nowIso } from '../../src/logger.mjs';
+import { loadKeypairFromSopsFile, loadKeypairFromEnv } from '../../src/trading/wallet.mjs';
+import { makeConnection } from '../../src/trading/portfolio.mjs';
+import { executeSwap, toBaseUnits, DECIMALS } from '../../src/trading/trader.mjs';
+import { appendTradingLog, nowIso } from '../../src/observability/logger.mjs';
 import { tgSend } from '../../src/telegram/index.mjs';
-import { getTokenPairs, pickBestPair } from '../../src/dexscreener.mjs';
+import { getTokenPairs, pickBestPair } from '../../src/providers/dexscreener.mjs';
 
 async function getSolUsd() {
   const SOL_MINT = 'So11111111111111111111111111111111111111112';

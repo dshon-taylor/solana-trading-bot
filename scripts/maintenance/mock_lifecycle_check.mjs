@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../../src/lib/trailing.mjs';
+import { computeTrailPct, computeStopFromAnchor, updateTrailingAnchor } from '../../src/signals/trailing.mjs';
 
 function must(cond, msg) { if (!cond) throw new Error(msg); }
 function fmtUsd(n) { return `$${Number(n || 0).toFixed(2)}`; }

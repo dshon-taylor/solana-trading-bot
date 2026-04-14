@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import 'dotenv/config';
-import { createBirdseyeLiteClient } from '../../src/birdeye_lite.mjs';
+import { createBirdseyeLiteClient } from '../../src/providers/birdeye/http_client.mjs';
 
 const ROOT = process.cwd();
 const TRADES = path.join(ROOT, 'state', 'trades.jsonl');

@@ -258,7 +258,7 @@ export async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapU
   };
 
   if (process.env.TIMESCALE_ENABLED === 'true') {
-    import('../../timeseries_db.mjs').then(({ insertTradeEntry }) => {
+    import('../../analytics/timeseries_db.mjs').then(({ insertTradeEntry }) => {
       insertTradeEntry({
         timestamp: now,
         mint,
