@@ -10,7 +10,7 @@
 From repo root:
 
 ```bash
-./deploy-live.sh
+./scripts/ops/deploy-live.sh
 ```
 
 Expected steps:

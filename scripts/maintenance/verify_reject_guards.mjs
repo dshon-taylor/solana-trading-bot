@@ -74,7 +74,7 @@ results.tracker_health_after = healthAfter;
 let aggressiveFromEnvFile = null;
 try{
   let envtxt = null;
-  const candidates = ['./.env','../.env','./trading-bot/.env','trading-bot/.env','./src/.env'];
+  const candidates = ['./.env','../.env','../../.env','./src/.env'];
   for(const c of candidates){
     try{ if(fs.existsSync(c)){ envtxt = fs.readFileSync(c,'utf8'); break; } }catch(e){}
   }

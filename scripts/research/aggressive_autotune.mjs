@@ -10,7 +10,7 @@ This script is intentionally conservative in how much it changes per run:
 - At most one "level" up/down per invocation.
 - Always keeps values within known validation bounds (see src/config.mjs).
 
-It edits ./trading-bot/.env (persisted config) and logs decisions to ./analysis/aggressive_autotune_log.md.
+It edits ./.env (persisted config) and logs decisions to ./analysis/aggressive_autotune_log.md.
 
 Usage:
   node scripts/research/aggressive_autotune.mjs            # dry-run

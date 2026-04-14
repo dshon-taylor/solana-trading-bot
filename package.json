@@ -23,7 +23,10 @@
     "report:carl:v3": "node scripts/backfill/carl_backfill_counterfactual_v3.mjs",
     "autotune:aggressive": "node scripts/research/aggressive_autotune_controller.mjs --mode dry-run",
     "autotune:aggressive:apply": "node scripts/research/aggressive_autotune_controller.mjs --mode apply",
-    "soak:laserstream:staging": "node scripts/research/laserstream_staging_soak.mjs"
+    "soak:laserstream:staging": "node scripts/research/laserstream_staging_soak.mjs",
+    "deploy:live": "bash scripts/ops/deploy-live.sh",
+    "push:dev": "bash scripts/ops/push-dev.sh",
+    "devnet:swap:test": "bash scripts/ops/run-devnet-swap-test.sh"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.14",

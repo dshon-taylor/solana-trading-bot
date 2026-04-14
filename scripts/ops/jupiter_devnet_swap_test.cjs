@@ -7,7 +7,7 @@ const { Connection, Keypair, VersionedTransaction, PublicKey } = require("@solan
 const { getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } = require("@solana/spl-token");
 
 const LOG_PATH = "/tmp/jupiter_swap_run.log";
-const LEDGER_PATH = "trading-bot/state/trades.jsonl";
+const LEDGER_PATH = "state/trades.jsonl";
 
 function logLine(s) {
   const line = `[${new Date().toISOString()}] ${s}`;
@@ -20,7 +20,7 @@ function appendLedger(obj) {
   fs.appendFileSync(LEDGER_PATH, JSON.stringify(obj) + "\n");
 }
 
-dotenv.config({ path: "trading-bot/.env" });
+dotenv.config({ path: ".env" });
 
 const RPC = process.env.SOLANA_RPC_URL || "";
 const API_KEY = process.env.JUPITER_API_KEY || "";
@@ -28,12 +28,12 @@ const SOPS_WALLET_FILE = process.env.SOPS_WALLET_FILE || "";
 
 if (!RPC.includes("devnet")) {
   logLine("STATUS:BLOCKED");
-  logLine("NEXT_STEP:Set SOLANA_RPC_URL to a devnet RPC in trading-bot/.env");
+  logLine("NEXT_STEP:Set SOLANA_RPC_URL to a devnet RPC in .env");
   process.exit(1);
 }
 if (!API_KEY) {
   logLine("STATUS:BLOCKED");
-  logLine("NEXT_STEP:Set JUPITER_API_KEY in trading-bot/.env and restart with --update-env if using PM2");
+  logLine("NEXT_STEP:Set JUPITER_API_KEY in .env and restart with --update-env if using PM2");
   process.exit(1);
 }
 if (!SOPS_WALLET_FILE || !fs.existsSync(SOPS_WALLET_FILE)) {

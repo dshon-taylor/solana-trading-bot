@@ -54,6 +54,14 @@ npm run summarize:attempts
 npm run summarize:lifecycle -- --since-hours 168
 ```
 
+## Canonical ops commands
+
+```bash
+npm run deploy:live
+npm run push:dev -- "your commit message"
+npm run devnet:swap:test
+```
+
 Telegram controls: `/status`, `/positions`, `/diag`, `/halt`, `/resume`.
 
 ## Security note
