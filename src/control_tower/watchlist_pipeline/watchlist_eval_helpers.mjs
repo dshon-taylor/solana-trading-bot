@@ -126,19 +126,131 @@ export function buildNormalizedMomentumInput({ snapshot, latest, pair }) {
   const rawTrade1h = Number(s?.raw?.trade1h ?? 0);
   const rawBuySellRatio = (rawBuy1m > 0 || rawSell1m > 0)
     ? (rawBuy1m / Math.max(1, rawSell1m))
-    : 0;
+    : null;
+
+  const avgFromTotal = (total, divisor) => {
+    const n = Number(total ?? 0);
+    return Number.isFinite(n) && n > 0 ? (n / Math.max(1, Number(divisor || 1))) : null;
+  };
+  const v30FromRaw = avgFromTotal((s?.raw?.v30mUSD ?? s?.raw?.v30m), 6);
+  const tx5FromTrades = avgFromTotal(rawTrade5m, 5);
+  const tx5FromBuySell = avgFromTotal((Number(s?.raw?.buy5m ?? 0) + Number(s?.raw?.sell5m ?? 0)), 5);
+  const tx30FromTrades = avgFromTotal(rawTrade30m, 30);
+  const tx30FromBuySell = avgFromTotal((Number(s?.raw?.buy30m ?? 0) + Number(s?.raw?.sell30m ?? 0)), 30);
+  const tx1FromSides = (rawBuy1m > 0 || rawSell1m > 0) ? (rawBuy1m + rawSell1m) : null;
+
+  const withSource = (entries = [], fallbackValue = 0, fallbackSource = 'missing') => {
+    for (const entry of entries) {
+      const n = Number(entry?.value);
+      if (Number.isFinite(n) && n > 0) return { value: n, source: String(entry?.source || 'unknown') };
+    }
+    return { value: Number(fallbackValue || 0), source: String(fallbackSource) };
+  };
+
+  const volume5mResolved = withSource([
+    { value: l.volume5m, source: 'latest.volume5m' },
+    { value: s?.volume_5m, source: 'snapshot.volume_5m' },
+    { value: s?.raw?.volume_5m, source: 'snapshot.raw.volume_5m' },
+    { value: s?.raw?.v5mUSD, source: 'snapshot.raw.v5mUSD' },
+    { value: s?.raw?.v5m, source: 'snapshot.raw.v5m' },
+    { value: p?.birdeye?.volume_5m, source: 'pair.birdeye.volume_5m' },
+    { value: wsBe?.volume_5m, source: 'ws.birdeye.volume_5m' },
+  ]);
+  const volume30mAvgResolved = withSource([
+    { value: l.volume30mAvg, source: 'latest.volume30mAvg' },
+    { value: s?.volume_30m_avg, source: 'snapshot.volume_30m_avg' },
+    { value: s?.raw?.volume_30m_avg, source: 'snapshot.raw.volume_30m_avg' },
+    { value: v30FromRaw, source: 'snapshot.raw.v30m/6' },
+    { value: p?.birdeye?.volume_30m_avg, source: 'pair.birdeye.volume_30m_avg' },
+    { value: wsBe?.volume_30m_avg, source: 'ws.birdeye.volume_30m_avg' },
+  ]);
+  const buySellRatioResolved = withSource([
+    { value: l.buySellRatio, source: 'latest.buySellRatio' },
+    { value: s?.buySellRatio, source: 'snapshot.buySellRatio' },
+    { value: s?.raw?.buySellRatio, source: 'snapshot.raw.buySellRatio' },
+    { value: rawBuySellRatio, source: 'snapshot.raw.buy1m/sell1m' },
+    { value: p?.birdeye?.buySellRatio, source: 'pair.birdeye.buySellRatio' },
+    { value: wsBe?.buySellRatio, source: 'ws.birdeye.buySellRatio' },
+  ], 1, 'neutral_default');
+  const tx1mResolved = withSource([
+    { value: l.tx1m, source: 'latest.tx1m' },
+    { value: s?.tx_1m, source: 'snapshot.tx_1m' },
+    { value: s?.raw?.tx_1m, source: 'snapshot.raw.tx_1m' },
+    { value: rawTrade1m, source: 'snapshot.raw.trade1m' },
+    { value: tx1FromSides, source: 'snapshot.raw.buy1m+sell1m' },
+    { value: p?.birdeye?.tx_1m, source: 'pair.birdeye.tx_1m' },
+    { value: wsBe?.tx_1m, source: 'ws.birdeye.tx_1m' },
+  ]);
+  const tx5mAvgResolved = withSource([
+    { value: l.tx5mAvg, source: 'latest.tx5mAvg' },
+    { value: s?.tx_5m_avg, source: 'snapshot.tx_5m_avg' },
+    { value: s?.raw?.tx_5m_avg, source: 'snapshot.raw.tx_5m_avg' },
+    { value: tx5FromTrades, source: 'snapshot.raw.trade5m/5' },
+    { value: tx5FromBuySell, source: 'snapshot.raw.buy5m+sell5m/5' },
+    { value: p?.birdeye?.tx_5m_avg, source: 'pair.birdeye.tx_5m_avg' },
+    { value: wsBe?.tx_5m_avg, source: 'ws.birdeye.tx_5m_avg' },
+  ]);
+  const tx30mAvgResolved = withSource([
+    { value: l.tx30mAvg, source: 'latest.tx30mAvg' },
+    { value: s?.tx_30m_avg, source: 'snapshot.tx_30m_avg' },
+    { value: s?.raw?.tx_30m_avg, source: 'snapshot.raw.tx_30m_avg' },
+    { value: tx30FromTrades, source: 'snapshot.raw.trade30m/30' },
+    { value: tx30FromBuySell, source: 'snapshot.raw.buy30m+sell30m/30' },
+    { value: p?.birdeye?.tx_30m_avg, source: 'pair.birdeye.tx_30m_avg' },
+    { value: wsBe?.tx_30m_avg, source: 'ws.birdeye.tx_30m_avg' },
+  ]);
+  const rollingHigh5mResolved = withSource([
+    { value: l.rollingHigh5m, source: 'latest.rollingHigh5m' },
+    { value: s?.rolling_high_5m, source: 'snapshot.rolling_high_5m' },
+    { value: s?.raw?.rolling_high_5m, source: 'snapshot.raw.rolling_high_5m' },
+    { value: s?.raw?.history5mPrice, source: 'snapshot.raw.history5mPrice' },
+    { value: p?.birdeye?.rolling_high_5m, source: 'pair.birdeye.rolling_high_5m' },
+    { value: wsBe?.rolling_high_5m, source: 'ws.birdeye.rolling_high_5m' },
+  ]);
+  const tx1hResolved = withSource([
+    { value: l.tx1h, source: 'latest.tx1h' },
+    { value: s?.tx_1h, source: 'snapshot.tx_1h' },
+    { value: s?.raw?.tx_1h, source: 'snapshot.raw.tx_1h' },
+    { value: rawTrade1h, source: 'snapshot.raw.trade1h' },
+    { value: p?.birdeye?.tx_1h, source: 'pair.birdeye.tx_1h' },
+    { value: wsBe?.tx_1h, source: 'ws.birdeye.tx_1h' },
+  ]);
+  const uniqueBuyers1mResolved = withSource([
+    { value: l.uniqueBuyers1m, source: 'latest.uniqueBuyers1m' },
+    { value: s?.uniqueBuyers1m, source: 'snapshot.uniqueBuyers1m' },
+    { value: s?.raw?.uniqueBuyers1m, source: 'snapshot.raw.uniqueBuyers1m' },
+    { value: s?.raw?.uniqueWallet1m, source: 'snapshot.raw.uniqueWallet1m' },
+    { value: s?.raw?.uniqueWalletHistory1m, source: 'snapshot.raw.uniqueWalletHistory1m' },
+    { value: p?.birdeye?.uniqueBuyers1m, source: 'pair.birdeye.uniqueBuyers1m' },
+    { value: p?.birdeye?.uniqueWallet1m, source: 'pair.birdeye.uniqueWallet1m' },
+    { value: p?.birdeye?.uniqueWalletHistory1m, source: 'pair.birdeye.uniqueWalletHistory1m' },
+    { value: wsBe?.uniqueBuyers1m, source: 'ws.birdeye.uniqueBuyers1m' },
+    { value: wsBe?.uniqueWallet1m, source: 'ws.birdeye.uniqueWallet1m' },
+  ]);
+  const uniqueBuyers5mResolved = withSource([
+    { value: l.uniqueBuyers5m, source: 'latest.uniqueBuyers5m' },
+    { value: s?.uniqueBuyers5m, source: 'snapshot.uniqueBuyers5m' },
+    { value: s?.raw?.uniqueBuyers5m, source: 'snapshot.raw.uniqueBuyers5m' },
+    { value: s?.raw?.uniqueWallet5m, source: 'snapshot.raw.uniqueWallet5m' },
+    { value: s?.raw?.uniqueWalletHistory5m, source: 'snapshot.raw.uniqueWalletHistory5m' },
+    { value: p?.birdeye?.uniqueBuyers5m, source: 'pair.birdeye.uniqueBuyers5m' },
+    { value: p?.birdeye?.uniqueWallet5m, source: 'pair.birdeye.uniqueWallet5m' },
+    { value: p?.birdeye?.uniqueWalletHistory5m, source: 'pair.birdeye.uniqueWalletHistory5m' },
+    { value: wsBe?.uniqueBuyers5m, source: 'ws.birdeye.uniqueBuyers5m' },
+    { value: wsBe?.uniqueWallet5m, source: 'ws.birdeye.uniqueWallet5m' },
+  ]);
 
   const birdeye = {
-    volume_5m: Number(l.volume5m ?? s?.volume_5m ?? s?.raw?.volume_5m ?? s?.raw?.v5mUSD ?? s?.raw?.v5m ?? p?.birdeye?.volume_5m ?? wsBe?.volume_5m ?? 0) || 0,
-    volume_30m_avg: Number(l.volume30mAvg ?? s?.volume_30m_avg ?? s?.raw?.volume_30m_avg ?? ((Number(s?.raw?.v30mUSD ?? s?.raw?.v30m ?? 0) > 0) ? (Number(s?.raw?.v30mUSD ?? s?.raw?.v30m) / 6) : null) ?? p?.birdeye?.volume_30m_avg ?? wsBe?.volume_30m_avg ?? 0) || 0,
-    buySellRatio: Number(l.buySellRatio ?? s?.buySellRatio ?? s?.raw?.buySellRatio ?? (rawBuySellRatio > 0 ? rawBuySellRatio : null) ?? p?.birdeye?.buySellRatio ?? wsBe?.buySellRatio ?? 0) || 0,
-    tx_1m: Number(l.tx1m ?? s?.tx_1m ?? s?.raw?.tx_1m ?? (rawTrade1m > 0 ? rawTrade1m : (rawBuy1m + rawSell1m)) ?? p?.birdeye?.tx_1m ?? wsBe?.tx_1m ?? 0) || 0,
-    tx_5m_avg: Number(l.tx5mAvg ?? s?.tx_5m_avg ?? s?.raw?.tx_5m_avg ?? (rawTrade5m > 0 ? (rawTrade5m / 5) : null) ?? ((Number(s?.raw?.buy5m ?? 0) + Number(s?.raw?.sell5m ?? 0)) > 0 ? ((Number(s?.raw?.buy5m ?? 0) + Number(s?.raw?.sell5m ?? 0)) / 5) : null) ?? p?.birdeye?.tx_5m_avg ?? wsBe?.tx_5m_avg ?? 0) || 0,
-    tx_30m_avg: Number(l.tx30mAvg ?? s?.tx_30m_avg ?? s?.raw?.tx_30m_avg ?? (rawTrade30m > 0 ? (rawTrade30m / 30) : null) ?? ((Number(s?.raw?.buy30m ?? 0) + Number(s?.raw?.sell30m ?? 0)) > 0 ? ((Number(s?.raw?.buy30m ?? 0) + Number(s?.raw?.sell30m ?? 0)) / 30) : null) ?? p?.birdeye?.tx_30m_avg ?? wsBe?.tx_30m_avg ?? 0) || 0,
-    rolling_high_5m: Number(l.rollingHigh5m ?? s?.rolling_high_5m ?? s?.raw?.rolling_high_5m ?? s?.raw?.history5mPrice ?? p?.birdeye?.rolling_high_5m ?? wsBe?.rolling_high_5m ?? 0) || 0,
-    tx_1h: Number(l.tx1h ?? s?.tx_1h ?? s?.raw?.tx_1h ?? (rawTrade1h > 0 ? rawTrade1h : null) ?? p?.birdeye?.tx_1h ?? wsBe?.tx_1h ?? 0) || 0,
-    uniqueBuyers1m: Number(l.uniqueBuyers1m ?? s?.uniqueBuyers1m ?? s?.raw?.uniqueBuyers1m ?? s?.raw?.uniqueWallet1m ?? s?.raw?.uniqueWalletHistory1m ?? p?.birdeye?.uniqueBuyers1m ?? p?.birdeye?.uniqueWallet1m ?? p?.birdeye?.uniqueWalletHistory1m ?? wsBe?.uniqueBuyers1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
-    uniqueBuyers5m: Number(l.uniqueBuyers5m ?? s?.uniqueBuyers5m ?? s?.raw?.uniqueBuyers5m ?? s?.raw?.uniqueWallet5m ?? s?.raw?.uniqueWalletHistory5m ?? p?.birdeye?.uniqueBuyers5m ?? p?.birdeye?.uniqueWallet5m ?? p?.birdeye?.uniqueWalletHistory5m ?? wsBe?.uniqueBuyers5m ?? wsBe?.uniqueWallet5m ?? 0) || 0,
+    volume_5m: Number(volume5mResolved.value || 0) || 0,
+    volume_30m_avg: Number(volume30mAvgResolved.value || 0) || 0,
+    buySellRatio: Number(buySellRatioResolved.value || 0) || 0,
+    tx_1m: Number(tx1mResolved.value || 0) || 0,
+    tx_5m_avg: Number(tx5mAvgResolved.value || 0) || 0,
+    tx_30m_avg: Number(tx30mAvgResolved.value || 0) || 0,
+    rolling_high_5m: Number(rollingHigh5mResolved.value || 0) || 0,
+    tx_1h: Number(tx1hResolved.value || 0) || 0,
+    uniqueBuyers1m: Number(uniqueBuyers1mResolved.value || 0) || 0,
+    uniqueBuyers5m: Number(uniqueBuyers5mResolved.value || 0) || 0,
     uniqueWallet1m: Number(s?.raw?.uniqueWallet1m ?? p?.birdeye?.uniqueWallet1m ?? wsBe?.uniqueWallet1m ?? 0) || 0,
     uniqueWallet5m: Number(s?.raw?.uniqueWallet5m ?? p?.birdeye?.uniqueWallet5m ?? wsBe?.uniqueWallet5m ?? 0) || 0,
   };
@@ -192,6 +304,18 @@ export function buildNormalizedMomentumInput({ snapshot, latest, pair }) {
     snapshot: { priceUsd: s?.priceUsd ?? null, liquidityUsd: s?.liquidityUsd ?? null, marketCapUsd: s?.marketCapUsd ?? null, freshnessMs: s?.freshnessMs ?? null },
     latest: { priceUsd: l?.priceUsd ?? null, liqUsd: l?.liqUsd ?? null, mcapUsd: l?.mcapUsd ?? null, freshnessMs: l?.marketDataFreshnessMs ?? null },
     pair: { priceUsd: p?.priceUsd ?? p?.price ?? null, liqUsd: p?.liquidity?.usd ?? null, mcapUsd: p?.marketCap ?? p?.fdv ?? null },
+    microSources: {
+      volume_5m: volume5mResolved.source,
+      volume_30m_avg: volume30mAvgResolved.source,
+      buySellRatio: buySellRatioResolved.source,
+      tx_1m: tx1mResolved.source,
+      tx_5m_avg: tx5mAvgResolved.source,
+      tx_30m_avg: tx30mAvgResolved.source,
+      rolling_high_5m: rollingHigh5mResolved.source,
+      tx_1h: tx1hResolved.source,
+      uniqueBuyers1m: uniqueBuyers1mResolved.source,
+      uniqueBuyers5m: uniqueBuyers5mResolved.source,
+    },
   };
   return { normalized, presentFields, sourceUsed, rawAvail, microPresent, microSourceUsed };
 }

@@ -65,6 +65,22 @@ export async function runMomentumEvalStage(ctx) {
   else counters.watchlist.momentumInputCompletenessMissing = Number(counters.watchlist.momentumInputCompletenessMissing || 0) + 1;
   counters.watchlist.momentumMicroSourceUsed ||= {};
   counters.watchlist.momentumMicroSourceUsed[momentumMicroSourceUsed] = Number(counters.watchlist.momentumMicroSourceUsed[momentumMicroSourceUsed] || 0) + 1;
+  const microMetricSources = momentumRawAvail?.microSources || {};
+  counters.watchlist.momentumMicroMetricSourceUsed ||= {
+    volume_5m: {},
+    volume_30m_avg: {},
+    buySellRatio: {},
+    tx_1m: {},
+    tx_5m_avg: {},
+  };
+  for (const metricName of Object.keys(counters.watchlist.momentumMicroMetricSourceUsed)) {
+    const src = String(microMetricSources?.[metricName] || 'missing');
+    counters.watchlist.momentumMicroMetricSourceUsed[metricName][src] = Number(counters.watchlist.momentumMicroMetricSourceUsed[metricName][src] || 0) + 1;
+  }
+  counters.watchlist.momentumDataNeutralFallback ||= { buySellRatio: 0 };
+  if (String(microMetricSources?.buySellRatio || '') === 'neutral_default') {
+    counters.watchlist.momentumDataNeutralFallback.buySellRatio = Number(counters.watchlist.momentumDataNeutralFallback.buySellRatio || 0) + 1;
+  }
   if (Number(momentumMicroPresent || 0) >= 3) counters.watchlist.momentumMicroFieldsPresent = Number(counters.watchlist.momentumMicroFieldsPresent || 0) + 1;
   else counters.watchlist.momentumMicroFieldsMissing = Number(counters.watchlist.momentumMicroFieldsMissing || 0) + 1;
 
@@ -264,6 +280,7 @@ export async function runMomentumEvalStage(ctx) {
         mint,
         failedChecks: combinedFailed.slice(0, 8),
         raw: momentumRawAvail,
+        microSources: microMetricSources,
         normalizedUsed: {
           priceUsd: momentumInput?.priceUsd ?? null,
           liqUsd: momentumInput?.liquidity?.usd ?? null,
@@ -298,6 +315,13 @@ export async function runMomentumEvalStage(ctx) {
         tx1m: Number(sig?.reasons?.tx_1m ?? momentumInput?.birdeye?.tx_1m ?? 0),
         tx5mAvg: Number(sig?.reasons?.tx_5m_avg ?? momentumInput?.birdeye?.tx_5m_avg ?? 0),
         tx30mAvg: Number(sig?.reasons?.tx_30m_avg ?? momentumInput?.birdeye?.tx_30m_avg ?? 0),
+        microSources: {
+          volume_5m: String(microMetricSources?.volume_5m || 'missing'),
+          volume_30m_avg: String(microMetricSources?.volume_30m_avg || 'missing'),
+          buySellRatio: String(microMetricSources?.buySellRatio || 'missing'),
+          tx_1m: String(microMetricSources?.tx_1m || 'missing'),
+          tx_5m_avg: String(microMetricSources?.tx_5m_avg || 'missing'),
+        },
         txThreshold: Number(cfg.MOMENTUM_TX_ACCEL_MIN_RATIO || 1.0),
         volThreshold: Number(cfg.MOMENTUM_VOLUME_EXPANSION_MIN_RATIO || 1.0),
         walletThreshold: Number(cfg.MOMENTUM_WALLET_EXPANSION_MIN_RATIO || 1.25),

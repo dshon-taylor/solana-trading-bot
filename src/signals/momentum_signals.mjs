@@ -41,6 +41,9 @@ export function computeBirdEyeSignals(pair, wsCache = {}) {
   const pairVolH1 = toPositiveNumber(pair?.volume?.h1 || pair?.volume?.h24);
   const pairTxH1 = toNumber(pair?.txns?.h1?.buys) + toNumber(pair?.txns?.h1?.sells);
   const pairVolH4 = toPositiveNumber(pair?.volume?.h4);
+  const pairVolH4Derived = pairVolH4 > 0
+    ? pairVolH4
+    : (pairVolH1 > 0 ? (pairVolH1 * 4) : 0);
   const pairPriceChangeH1 = toNumber(pair?.priceChange?.h1);
 
   // If BirdEye doesn't provide short-window fields, derive reasonable fallbacks.
@@ -52,13 +55,15 @@ export function computeBirdEyeSignals(pair, wsCache = {}) {
   // Prefer comparable real micro windows (5m vs 30m/6).
   // Avoid paired h1-derived defaults that can force volStrength ~= 0.50.
   const volume5mFromH1 = Math.round(pairVolH1 / 12);
-  const volume30mAvgFromH4 = Math.round(pairVolH4 / 8);
+  const volume30mAvgFromH4 = Math.round(pairVolH4Derived / 8);
   const effectiveVolume5m = volume_5m || (volume5mFromH1 > 0 ? volume5mFromH1 : 0);
   const effectiveVolume30mAvg = volume_30m_avg || (volume30mAvgFromH4 > 0 ? volume30mAvgFromH4 : 0);
   const effectiveBuySellRatio = buySellRatio || (() => {
     const buys = toNumber(pair?.txns?.h1?.buys);
-    const sells = toNumber(pair?.txns?.h1?.sells) || 1;
-    return sells === 0 ? (buys > 0 ? Infinity : 0) : (buys / sells);
+    const sells = toNumber(pair?.txns?.h1?.sells);
+    if (buys <= 0 && sells <= 0) return 1;
+    if (sells <= 0) return buys > 0 ? 99 : 1;
+    return buys / Math.max(1, sells);
   })();
   const effectiveTx1m = tx_1m || Math.round(pairTxH1 / 60);
   const tx30Baseline = tx_30m_avg || Math.max(1, Math.round(pairTxH1 / 60));
