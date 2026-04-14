@@ -43,15 +43,34 @@ const REPLAY_PRESETS = {
 };
 
 export async function tgGetUpdates(cfg, offset) {
-  const url = new URL(`https://api.telegram.org/bot${cfg.TELEGRAM_BOT_TOKEN}/getUpdates`);
-  if (typeof offset === 'number') url.searchParams.set('offset', String(offset));
-  url.searchParams.set('timeout', '0');
+  const attempts = Math.max(1, Number(process.env.TG_GETUPDATES_RETRY_ATTEMPTS || 3));
+  const baseDelayMs = Math.max(100, Number(process.env.TG_GETUPDATES_RETRY_BASE_MS || 700));
+  const timeoutSec = Math.max(0, Number(process.env.TG_GETUPDATES_TIMEOUT_SEC || 10));
+  const fetchTimeoutMs = Math.max(3_000, Number(process.env.TG_GETUPDATES_FETCH_TIMEOUT_MS || 15_000));
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Telegram getUpdates failed: ${res.status}`);
-  const json = await res.json();
-  if (!json.ok) throw new Error('Telegram getUpdates not ok');
-  return json.result || [];
+  for (let i = 0; i < attempts; i += 1) {
+    const url = new URL(`https://api.telegram.org/bot${cfg.TELEGRAM_BOT_TOKEN}/getUpdates`);
+    if (typeof offset === 'number') url.searchParams.set('offset', String(offset));
+    url.searchParams.set('timeout', String(timeoutSec));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`Telegram getUpdates failed: ${res.status}`);
+      const json = await res.json();
+      if (!json.ok) throw new Error('Telegram getUpdates not ok');
+      return json.result || [];
+    } catch (err) {
+      const last = i >= (attempts - 1);
+      if (last) throw err;
+      const waitMs = Math.min(5_000, baseDelayMs * (2 ** i));
+      await new Promise((r) => setTimeout(r, waitMs));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return [];
 }
 
 function normalizeText(msg) {
