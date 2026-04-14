@@ -1,8 +1,11 @@
+const path = require('path');
+const ROOT = process.env.BOT_ROOT || __dirname;
+
 module.exports = {
   apps: [
     {
       name: 'solana-momentum-bot',
-      cwd: '/home/dshontaylor/.openclaw/workspace/trading-bot',
+      cwd: ROOT,
       script: 'scripts/start_with_mock.sh',
       interpreter: '/bin/bash',
       exec_mode: 'fork',
@@ -32,9 +35,9 @@ module.exports = {
         BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000'
       },
 
-      env_file: '/home/dshontaylor/.openclaw/workspace/trading-bot/.env',
-      out_file: '/home/dshontaylor/.openclaw/workspace/trading-bot/state/pm2-out.log',
-      error_file: '/home/dshontaylor/.openclaw/workspace/trading-bot/state/pm2-err.log',
+      env_file: path.join(ROOT, '.env'),
+      out_file: path.join(ROOT, 'state/pm2-out.log'),
+      error_file: path.join(ROOT, 'state/pm2-err.log'),
       time: true,
     },
   ],

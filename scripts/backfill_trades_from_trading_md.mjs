@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const TRADING_MD = path.join(ROOT, 'trading.md');
+const TRADING_MD_CANDIDATES = [
+  path.join(ROOT, 'state', 'trading_log.md'),
+  path.join(ROOT, 'trading.md'),
+];
+const TRADING_MD = TRADING_MD_CANDIDATES.find((p) => fs.existsSync(p)) || TRADING_MD_CANDIDATES[0];
 const TRADES_JSONL = path.join(ROOT, 'state', 'trades.jsonl');
 
 function parseBlocks(text) {
@@ -68,7 +72,7 @@ function readJsonl(p) {
 }
 
 if (!fs.existsSync(TRADING_MD)) {
-  console.error(`missing trading.md at ${TRADING_MD}`);
+  console.error(`missing trading log at ${TRADING_MD}`);
   process.exit(1);
 }
 

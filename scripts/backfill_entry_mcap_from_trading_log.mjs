@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
 const STATE_PATH = './state/state.json';
-const LOG_PATH = './trading.md';
+const LOG_PATH = fs.existsSync('./state/trading_log.md') ? './state/trading_log.md' : './trading.md';
 
 function parseEntries(md) {
   const out = [];

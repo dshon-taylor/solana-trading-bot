@@ -23,10 +23,18 @@ Live Solana momentum bot with staged gating, WS-first confirm, and operator diag
 
 ## Key runtime docs
 
-- [RUNBOOK.md](RUNBOOK.md)
-- [DEPLOY_WORKFLOW.md](DEPLOY_WORKFLOW.md)
-- [LASERSTREAM_STAGING_RUNBOOK.md](LASERSTREAM_STAGING_RUNBOOK.md)
-- [TRADING_LEARNINGS.md](TRADING_LEARNINGS.md)
+- [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- [docs/DEPLOY_WORKFLOW.md](docs/DEPLOY_WORKFLOW.md)
+- [docs/LASERSTREAM_STAGING_RUNBOOK.md](docs/LASERSTREAM_STAGING_RUNBOOK.md)
+- [docs/TRADING_LEARNINGS.md](docs/TRADING_LEARNINGS.md)
+
+## Root folder map
+
+- [src/](src/) — runtime code
+- [docs/](docs/) — operator and architecture docs
+- [scripts/](scripts/) — operational/research tooling
+- [state/](state/) — runtime mutable files and ledgers
+- [analysis/](analysis/) — generated analysis artifacts
 
 ## Quick start
 

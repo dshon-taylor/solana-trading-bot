@@ -6,7 +6,9 @@ import { createBirdseyeLiteClient } from '../src/birdeye_lite.mjs';
 
 const ROOT = process.cwd();
 const TRADES = path.join(ROOT, 'state', 'trades.jsonl');
-const TRADING_MD = path.join(ROOT, 'trading.md');
+const TRADING_MD = fs.existsSync(path.join(ROOT, 'state', 'trading_log.md'))
+  ? path.join(ROOT, 'state', 'trading_log.md')
+  : path.join(ROOT, 'trading.md');
 
 const LOOKBACK_HOURS = Number(process.argv[2] || 72);
 const fromMs = Date.now() - LOOKBACK_HOURS * 3600 * 1000;

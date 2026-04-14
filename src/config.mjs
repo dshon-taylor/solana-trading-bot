@@ -293,7 +293,7 @@ export function getConfig() {
   const DEBUG_REJECTIONS_EVERY_MS = Number(process.env.DEBUG_REJECTIONS_EVERY_MS || 300_000);
 
   const STATE_PATH = process.env.STATE_PATH || './state/state.json';
-  const TRADING_LOG_PATH = process.env.TRADING_LOG_PATH || './trading.md';
+  const TRADING_LOG_PATH = process.env.TRADING_LOG_PATH || './state/trading_log.md';
   const LEDGER_PATH = process.env.LEDGER_PATH || './state/cost.jsonl';
 
   const TELEGRAM_POLL_EVERY_MS = Number(process.env.TELEGRAM_POLL_EVERY_MS || 3000);
