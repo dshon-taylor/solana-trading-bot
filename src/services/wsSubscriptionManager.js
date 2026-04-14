@@ -1,4 +1,4 @@
-const { EventEmitter } = require('events');
+import { EventEmitter } from 'node:events';
 
 class WsSubscriptionManager extends EventEmitter {
   constructor() {
@@ -90,4 +90,4 @@ class WsSubscriptionManager extends EventEmitter {
   }
 }
 
-module.exports = new WsSubscriptionManager();
+export default new WsSubscriptionManager();
