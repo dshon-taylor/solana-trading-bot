@@ -213,7 +213,8 @@ export function parseOptimizeRequest(args) {
 export function parseCommand(text) {
   if (!text.startsWith('/')) return null;
   const [cmdRaw, ...rest] = text.split(/\s+/);
-  const cmd = cmdRaw.toLowerCase();
+  const cmdBase = String(cmdRaw || '').toLowerCase();
+  const cmd = cmdBase.includes('@') ? cmdBase.split('@')[0] : cmdBase;
   const args = rest;
   return { cmd, args };
 }
