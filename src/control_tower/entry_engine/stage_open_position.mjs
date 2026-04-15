@@ -337,6 +337,14 @@ export async function openPosition(cfg, conn, wallet, state, solUsd, pair, mcapU
   const executionRoute = routeHopCount <= 0
     ? 'Jupiter (no route metadata)'
     : (routeHopCount === 1 ? 'Jupiter single-hop' : `Jupiter multi-hop (${routeHopCount} hops)`);
+
+  // Persist execution route metadata so EXIT messages can display DEX consistently.
+  if (state.positions?.[mint]) {
+    state.positions[mint].executionDex = executionDex;
+    state.positions[mint].executionPool = executionPool;
+    state.positions[mint].executionRoute = executionRoute;
+  }
+
   const tokensReceivedLine = (fillOutTokens && Number.isFinite(Number(fillOutTokens)) && Number(fillOutTokens) > 0)
     ? Number(fillOutTokens).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })
     : 'n/a';

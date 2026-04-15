@@ -283,7 +283,7 @@ export async function closePosition({ getSolUsdPrice, cfg, conn, wallet, state, 
     Number.isFinite(Number(exitPriceUsd)) ? `💵 Exit price (per token): $${Number(exitPriceUsd).toFixed(10)}` : '💵 Exit price (per token): n/a',
     pnlLine,
     '',
-    `🔗 Dex: ${pos.pairUrl}`,
+x
     `🧾 Tx: https://solscan.io/tx/${res.signature}`,
   ].join('\n');
 
