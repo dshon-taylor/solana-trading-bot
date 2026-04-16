@@ -76,6 +76,20 @@ export function createScanCompactEventPusher({ counters, cfg, appendJsonl }) {
           event: { tMs: now, kind: 'shortlistSelected', reason: null, extra: { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) } },
         });
       } catch {}
+      return;
+    }
+
+    if (kind === 'shortlistDropped') {
+      if (!Array.isArray(w.shortlistDropped)) w.shortlistDropped = [];
+      w.shortlistDropped.push({ tMs: now, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0), reason: String(extra?.reason || 'unknown') });
+      while (w.shortlistDropped.length && Number(w.shortlistDropped[0]?.tMs || 0) < cutoff) w.shortlistDropped.shift();
+      try {
+        appendDiagEvent({
+          appendJsonl,
+          statePath: cfg.STATE_PATH,
+          event: { tMs: now, kind: 'shortlistDropped', reason: null, extra: { mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0), reason: String(extra?.reason || 'unknown') } },
+        });
+      } catch {}
     }
   };
 }

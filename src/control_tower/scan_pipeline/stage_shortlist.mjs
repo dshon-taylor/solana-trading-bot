@@ -101,15 +101,49 @@ export async function buildShortlistAndGates({
   const probeEnabled = !!(cfg.LIVE_CONVERSION_PROFILE_ENABLED && cfg.LIVE_PROBE_CONFIRM_ENABLED);
   scanPhase.shortlistMs += Math.max(0, Date.now() - _tShortlist);
 
-  const probeShortlist = probeEnabled
-    ? rawTopCandidates
-      .filter(({ pair }) => {
-        const liq = Number(pair?.liquidity?.usd || 0);
-        const tx1h = Number(pair?.txns?.h1?.buys || 0) + Number(pair?.txns?.h1?.sells || 0);
-        return liq >= cfg.LIVE_PROBE_MIN_LIQ_USD && tx1h >= cfg.LIVE_PROBE_MIN_TX1H;
-      })
-      .slice(0, cfg.LIVE_PROBE_MAX_CANDIDATES)
+  if (typeof pushScanCompactEvent === 'function') {
+    for (const c of preCandidates.slice(cfg.LIVE_CANDIDATE_SHORTLIST_N)) {
+      pushScanCompactEvent('shortlistDropped', {
+        mint: c?.mint,
+        liqUsd: Number(c?.snapshot?.liquidityUsd ?? c?.pair?.liquidity?.usd ?? 0),
+        reason: 'shortlistCap',
+      });
+    }
+  }
+
+  const probeEligible = probeEnabled
+    ? rawTopCandidates.filter(({ pair }) => {
+      const liq = Number(pair?.liquidity?.usd || 0);
+      const tx1h = Number(pair?.txns?.h1?.buys || 0) + Number(pair?.txns?.h1?.sells || 0);
+      return liq >= cfg.LIVE_PROBE_MIN_LIQ_USD && tx1h >= cfg.LIVE_PROBE_MIN_TX1H;
+    })
     : rawTopCandidates;
+
+  if (probeEnabled && typeof pushScanCompactEvent === 'function') {
+    for (const c of rawTopCandidates) {
+      const liq = Number(c?.pair?.liquidity?.usd || c?.snapshot?.liquidityUsd || 0);
+      const tx1h = Number(c?.pair?.txns?.h1?.buys || 0) + Number(c?.pair?.txns?.h1?.sells || 0);
+      if (liq < cfg.LIVE_PROBE_MIN_LIQ_USD) {
+        pushScanCompactEvent('shortlistDropped', { mint: c?.mint, liqUsd: liq, reason: 'probeMinLiq' });
+      } else if (tx1h < cfg.LIVE_PROBE_MIN_TX1H) {
+        pushScanCompactEvent('shortlistDropped', { mint: c?.mint, liqUsd: liq, reason: 'probeMinTx1h' });
+      }
+    }
+  }
+
+  const probeShortlist = probeEnabled
+    ? probeEligible.slice(0, cfg.LIVE_PROBE_MAX_CANDIDATES)
+    : rawTopCandidates;
+
+  if (probeEnabled && typeof pushScanCompactEvent === 'function') {
+    for (const c of probeEligible.slice(cfg.LIVE_PROBE_MAX_CANDIDATES)) {
+      pushScanCompactEvent('shortlistDropped', {
+        mint: c?.mint,
+        liqUsd: Number(c?.snapshot?.liquidityUsd ?? c?.pair?.liquidity?.usd ?? 0),
+        reason: 'probeCap',
+      });
+    }
+  }
 
   if (typeof pushScanCompactEvent === 'function') {
     for (const c of probeShortlist) {

@@ -39,6 +39,7 @@ const PERSIST_KINDS = new Set([
   'candidateLiquiditySeen',
   'shortlistPreCandidate',
   'shortlistSelected',
+  'shortlistDropped',
   'preHotFlow',
 ]);
 
@@ -63,7 +64,7 @@ const FAMILY_KIND_SETS = {
   provider: new Set(['providerHealth']),
   confirm: new Set(['confirmReached', 'confirmPassed', 'postMomentumFlow']),
   execution: new Set(['attempt', 'fill']),
-  scanner: new Set(['scanCycle', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'shortlistPreCandidate', 'shortlistSelected']),
+  scanner: new Set(['scanCycle', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'shortlistPreCandidate', 'shortlistSelected', 'shortlistDropped']),
 };
 
 const STORE_BY_PATH = new Map();
@@ -375,6 +376,7 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     candidateLiquiditySeen: [],
     shortlistPreCandidate: [],
     shortlistSelected: [],
+    shortlistDropped: [],
     repeatSuppressed: [],
     providerHealth: [],
     hotBypass: [],
@@ -428,6 +430,10 @@ export function buildCompactWindowFromDiagEvents({ events = [], cutoffMs = 0 } =
     }
     if (kind === 'shortlistSelected') {
       pushObj(w.shortlistSelected, { tMs, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0) }, cutoffMs);
+      continue;
+    }
+    if (kind === 'shortlistDropped') {
+      pushObj(w.shortlistDropped, { tMs, mint: String(extra?.mint || 'unknown'), liqUsd: Number(extra?.liqUsd || 0), reason: String(extra?.reason || 'unknown') }, cutoffMs);
       continue;
     }
     if (kind === 'scanCycle') {

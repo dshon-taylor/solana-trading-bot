@@ -80,7 +80,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
           });
           const arrKeys = [
             'momentumRecent', 'momentumEval', 'momentumPassed', 'confirmReached', 'confirmPassed', 'attempt', 'fill',
-            'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'shortlistPreCandidate', 'shortlistSelected', 'watchlistSeen', 'watchlistEvaluated',
+            'scanCycles', 'candidateSeen', 'candidateRouteable', 'candidateLiquiditySeen', 'shortlistPreCandidate', 'shortlistSelected', 'shortlistDropped', 'watchlistSeen', 'watchlistEvaluated',
             'postMomentumFlow', 'momentumLiqValues', 'stalkableSeen', 'repeatSuppressed', 'momentumFailChecks', 'providerHealth', 'hotBypass', 'preHotFlow',
           ];
           const durableCount = arrKeys.reduce((a, k) => a + Number((durableCompactWindow?.[k] || []).length || 0), 0);
@@ -123,6 +123,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
       const candidateLiquiditySeenWin = inWindowObj(compactWindow.candidateLiquiditySeen || []);
       const shortlistPreCandidateWin = inWindowObj(compactWindow.shortlistPreCandidate || []);
       const shortlistSelectedWin = inWindowObj(compactWindow.shortlistSelected || []);
+      const shortlistDroppedWin = inWindowObj(compactWindow.shortlistDropped || []);
       const postFlowWin = inWindowObj(compactWindow.postMomentumFlow || []);
       const momentumAgeWin = inWindowObj(compactWindow.momentumAgeSamples || []);
       const agePresentWin = momentumAgeWin.filter(x => Number.isFinite(x?.ageMin)).length;
@@ -1570,25 +1571,35 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         shortlistSelectedByBand[band] = Number(shortlistSelectedByBand[band] || 0) + 1;
       }
       const shortlistDroppedByBand = Object.fromEntries(bandKeys.map((k) => [k, Math.max(0, Number(shortlistPreByBand[k] || 0) - Number(shortlistSelectedByBand[k] || 0))]));
-
-      const trackedPreMomentumReasons = [
-        'precheck.cooldown',
-        'hot.mcapLow(<250000)',
-        'precheck.alreadyOpen',
-        'hot.mcapStaleData',
-      ];
-      const preMomentumBlockersByBand = Object.fromEntries(bandKeys.map((k) => [k, Object.fromEntries(trackedPreMomentumReasons.map((r) => [r, 0]))]));
-      for (const ev of blockersWin) {
-        const rawReason = String(ev?.reason || '');
-        const reason = trackedPreMomentumReasons.find((r) => rawReason.startsWith(r)) || null;
-        if (!reason) continue;
+      const shortlistDropReasonByBand = Object.fromEntries(bandKeys.map((k) => [k, {}]));
+      for (const ev of shortlistDroppedWin) {
         const band = liqBandKey(ev?.liqUsd);
         if (!band) continue;
+        const r = String(ev?.reason || 'unknown');
+        shortlistDropReasonByBand[band][r] = Number(shortlistDropReasonByBand[band][r] || 0) + 1;
+      }
+      const shortlistDropTopReasonByBand = Object.fromEntries(bandKeys.map((k) => {
+        const top = Object.entries(shortlistDropReasonByBand[k] || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0];
+        return [k, top ? `${top[0]}:${top[1]}` : 'none'];
+      }));
+
+      const trackedPreMomentumReasons = ['precheck.cooldown', 'precheck.alreadyOpen', 'hot.mcapStaleData'];
+      const preMomentumBlockersByBand = Object.fromEntries(bandKeys.map((k) => [k, { 'precheck.cooldown': 0, mcapLowAny: 0, 'precheck.alreadyOpen': 0, 'hot.mcapStaleData': 0 }]));
+      for (const ev of blockersWin) {
+        const rawReason = String(ev?.reason || '');
+        const band = liqBandKey(ev?.liqUsd);
+        if (!band) continue;
+        if (rawReason.startsWith('hot.mcapLow(')) {
+          preMomentumBlockersByBand[band].mcapLowAny = Number(preMomentumBlockersByBand[band].mcapLowAny || 0) + 1;
+          continue;
+        }
+        const reason = trackedPreMomentumReasons.find((r) => rawReason.startsWith(r)) || null;
+        if (!reason) continue;
         preMomentumBlockersByBand[band][reason] = Number(preMomentumBlockersByBand[band][reason] || 0) + 1;
-      };
+      }
       const preMomentumBlockersByBandText = Object.fromEntries(bandKeys.map((k) => {
         const row = preMomentumBlockersByBand[k] || {};
-        return [k, `cooldown=${Number(row['precheck.cooldown'] || 0)} mcapLow=${Number(row['hot.mcapLow(<250000)'] || 0)} alreadyOpen=${Number(row['precheck.alreadyOpen'] || 0)} mcapStale=${Number(row['hot.mcapStaleData'] || 0)}`];
+        return [k, `cooldown=${Number(row['precheck.cooldown'] || 0)} mcapLow=${Number(row.mcapLowAny || 0)} alreadyOpen=${Number(row['precheck.alreadyOpen'] || 0)} mcapStale=${Number(row['hot.mcapStaleData'] || 0)}`];
       }));
 
       const blockerTop5 = Object.entries(blockerCounts1h)
@@ -1726,6 +1737,7 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         shortlistPreByBand,
         shortlistSelectedByBand,
         shortlistDroppedByBand,
+        shortlistDropTopReasonByBand,
         downstreamShort,
         examples,
       });
