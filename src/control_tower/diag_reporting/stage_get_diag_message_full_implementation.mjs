@@ -1665,6 +1665,22 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         ? `momentumEvaluated=0 (downstream idle)`
         : `momentum=${cumulativeMomentumEvaluated}/${cumulativeMomentumPassed} confirm=${cumulativeConfirmReached}/${cumulativeConfirmPassed} attempt=${cumulativeAttempt} fill=${cumulativeFill}`;
 
+      const reserveObserved = Number(counters?.watchlist?.executionReserveObserved || 0);
+      const reserveBlocked = Number(counters?.watchlist?.executionReserveBlocked || 0);
+      const targetUsdTooSmallLife = Number(counters?.watchlist?.executionTargetUsdTooSmall || 0);
+      const reserveReasonTop = Object.entries(counters?.watchlist?.executionReserveReasons || {})
+        .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+        .slice(0, 3)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(', ') || 'none';
+      const reserveBlockedReasonTop = Object.entries(counters?.watchlist?.executionReserveBlockedReasons || {})
+        .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+        .slice(0, 3)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(', ') || 'none';
+      const targetUsdTooSmallWin = Number(blockersWin.filter((x) => String(x?.reason || '') === 'execution.targetUsdTooSmall').length || 0);
+      const reserveBlockedWin = Number(blockersWin.filter((x) => String(x?.reason || '') === 'execution.reserveBlocked').length || 0);
+
       const examples = [];
       if (recentMomo.length) {
         examples.push(...recentMomo.slice(-5).map(x => `${x} stage=momentum`));
@@ -1738,6 +1754,13 @@ export function createGetDiagSnapshotMessageFull({ state, getCounters, cfg, fmtC
         shortlistSelectedByBand,
         shortlistDroppedByBand,
         shortlistDropTopReasonByBand,
+        reserveObserved,
+        reserveBlocked,
+        reserveBlockedWin,
+        targetUsdTooSmallLife,
+        targetUsdTooSmallWin,
+        reserveReasonTop,
+        reserveBlockedReasonTop,
         downstreamShort,
         examples,
       });
