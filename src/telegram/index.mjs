@@ -4,7 +4,7 @@ import { TELEGRAM_COMMANDS } from './commands.mjs';
 const tgRetryQueue = [];
 let tgRetryTimer = null;
 const TG_RETRY_MAX_ATTEMPTS = 6;
-const TG_RETRY_BASE_MS = 5_000;
+const TG_RETRY_BASE_MS = 10_000;
 const TG_RETRY_MAX_MS = 120_000;
 const TG_RETRY_QUEUE_MAX = 200;
 
