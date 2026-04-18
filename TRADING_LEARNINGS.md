@@ -107,6 +107,42 @@ Proposed tweaks (do NOT change live trading params automatically)
 
 Notes / next actions
 - No live parameters changed by this update.
-- Recommend resolving execution confirmations before changing risk parameters. I can extract failing confirmation lines and open an issue, or run the paper A/B test if you want.
+- I can extract failing confirmation lines and open an issue, or run the paper A/B test if you want.
 
-(End of 2026-04-17 entry)
+---
+
+2026-04-18 — Daily upkeep
+
+What I checked
+- Reviewed TRADING_LEARNINGS.md and the last 24h of available data under state/candidates, state/track/results.jsonl, state/trades.jsonl, and state/paper_live_attempts.jsonl.
+- Confirmed there are NO new records in the last 24 hours; the most recent telemetry in these files remains from Feb–Mar 2026.
+
+Summary
+- No fresh trading or execution telemetry in the past 24h. This entry consolidates continuing patterns from the historical logs and previous daily notes.
+
+What worked
+- Trailing-stop logic consistently captured the largest winners in historical runs (multiple examples with pnlPct >> 0.3 when trailActivated=true).
+- The candidate pipeline still surfaces high-ret candidates and attempts swaps in paper mode (paper_live_attempts contains many ok:swap_submitted entries historically).
+
+What failed / problems observed
+- Execution confirmations still appear as the largest operational failure mode in historical data (websocket_err, http_timeout, http_status_err). Consequence: many attempted swaps lack signatures and no fills are recorded in trades.jsonl.
+- Stop-loss exits continue to cluster around ~-18% pnlPct across many samples, indicating that stop sizing or entry signal noise is a persistent drawdown driver.
+
+Parameter observations
+- Trailing stops: positive effect on winners' realized returns when activated; preserve during experiments.
+- Stop-loss level: the recurring -18% exits suggest current stop sizing is systematically removing many runs before they can recover.
+- Execution path: multiple distinct failure classes point to the confirmation/bridge layer (network/RPC/timeouts) as the operational bottleneck rather than signal generation.
+
+Proposed tweaks (do NOT change live trading params automatically)
+1) Repair execution confirmation pipeline (confidence: high)
+   - Add better retry/backoff, capture full error payloads in logs, and add failover RPC endpoints. If confirmation timeouts persist, temporarily route confirmations through an alternative RPC provider for diagnostics.
+2) Paper A/B test: stop sizing (confidence: medium)
+   - Run a controlled paper experiment comparing current stop (~18%) vs wider stops (22–25%) and/or require a minimum liquidity/volatility threshold at entry. Track stop-hit rate and net pnl over a fixed sample size.
+3) Preserve trailing stops; small trail-tuning in paper (confidence: low)
+   - Keep trailing stops enabled; in paper mode test small changes to activation threshold or trail step to try capturing more runups while limiting early tightening.
+
+Notes / next actions
+- No live parameters were changed by this update.
+- Recommendation order: fix execution confirmations first (highest impact), then run the paper A/B on stop sizing. I can extract the recent failing confirmation lines and open an issue, or I can schedule and run the paper A/B experiment and report back with results.
+
+(End of 2026-04-18 entry)

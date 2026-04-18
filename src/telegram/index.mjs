@@ -149,17 +149,38 @@ export async function tgSetMyCommands(cfg) {
     commands: TELEGRAM_COMMANDS,
   };
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const t = await res.text().catch(() => '');
-      throw new Error(`Telegram setMyCommands failed: ${res.status} ${t.slice(0, 200)}`);
+  // Try a few times with a short abort timeout to avoid long-hanging fetches.
+  const attempts = 3;
+  const baseTimeoutMs = 10_000;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutMs = baseTimeoutMs * attempt; // small backoff
+    const to = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(to);
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        console.error('[telegram.commands]', `setMyCommands failed (attempt ${attempt}): ${res.status} ${String(t).slice(0,200)}`);
+        // If last attempt, return.
+        if (attempt === attempts) return;
+        // Otherwise small delay before retrying
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+        continue;
+      }
+      // success
+      return;
+    } catch (e) {
+      console.error('[telegram.commands]', safeErr(e));
+      if (attempt === attempts) return;
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    } finally {
+      clearTimeout(to);
     }
-  } catch (e) {
-    console.error('[telegram.commands]', safeErr(e));
   }
 }
