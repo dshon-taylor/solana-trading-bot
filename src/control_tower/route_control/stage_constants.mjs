@@ -1,6 +1,6 @@
 const AGGRESSIVE_BOOT_MODE = (process.env.AGGRESSIVE_MODE ?? 'false') === 'true';
 const NO_PAIR_RETRY_ATTEMPTS = Math.max(1, Number(process.env.NO_PAIR_RETRY_ATTEMPTS || 5));
-export const NO_PAIR_RETRY_BASE_MS = Math.max(50, Number(process.env.NO_PAIR_RETRY_BASE_MS || (AGGRESSIVE_BOOT_MODE ? 90 : 300)));
+export const NO_PAIR_RETRY_BASE_MS = Math.max(50, Number(process.env.NO_PAIR_RETRY_BASE_MS || (AGGRESSIVE_BOOT_MODE ? 90 : 200)));
 export const NO_PAIR_RETRY_MAX_BACKOFF_MS = Math.max(NO_PAIR_RETRY_BASE_MS, Number(process.env.NO_PAIR_RETRY_MAX_BACKOFF_MS || (AGGRESSIVE_BOOT_MODE ? 900 : 4_000)));
 export const NO_PAIR_RETRY_TOTAL_BUDGET_MS = Math.max(NO_PAIR_RETRY_BASE_MS, Number(process.env.NO_PAIR_RETRY_TOTAL_BUDGET_MS || (AGGRESSIVE_BOOT_MODE ? 1_500 : 6_000)));
 const NO_PAIR_RETRY_ATTEMPTS_CAP = Math.max(1, Number(process.env.NO_PAIR_RETRY_ATTEMPTS_CAP || 10));

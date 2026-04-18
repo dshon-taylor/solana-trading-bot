@@ -1,0 +1,504 @@
+[TAILING] Tailing last 500 lines for [solana-momentum-bot] process (change the value with --lines option)
+/home/dshontaylor/.pm2/logs/solana-momentum-bot-error.log last 500 lines:
+/home/dshontaylor/.pm2/logs/solana-momentum-bot-out.log last 500 lines:
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 7,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [hb] 2026-04-18T00:01:42.575Z open_positions=0
+4|solana-m | [memory] { rss_mb: 496, heap_used_mb: 203, heap_total_mb: 264, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 10,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 502, heap_used_mb: 220, heap_total_mb: 265, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 5,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 496, heap_used_mb: 216, heap_total_mb: 259, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 485, heap_used_mb: 208, heap_total_mb: 246, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 11,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈960 queueSize=0 snapshotFailures=0 projectedDailyCu=30240 activeRunners=0
+4|solana-m | [memory] { rss_mb: 486, heap_used_mb: 217, heap_total_mb: 251, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 10,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [hb] 2026-04-18T00:06:47.469Z open_positions=0
+4|solana-m | [memory] { rss_mb: 483, heap_used_mb: 219, heap_total_mb: 268, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 461, heap_used_mb: 182, heap_total_mb: 227, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 451, heap_used_mb: 208, heap_total_mb: 239, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 11,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 446, heap_used_mb: 213, heap_total_mb: 238, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈1020 queueSize=0 snapshotFailures=0 projectedDailyCu=30240 activeRunners=0
+4|solana-m | [memory] { rss_mb: 427, heap_used_mb: 136, heap_total_mb: 161, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 6,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 553, heap_used_mb: 156, heap_total_mb: 287, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 5,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 11,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [hb] 2026-04-18T00:12:06.953Z open_positions=0
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 525, heap_used_mb: 234, heap_total_mb: 285, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 10,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 478, heap_used_mb: 220, heap_total_mb: 263, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 6,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 18,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 490, heap_used_mb: 223, heap_total_mb: 272, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈1080 queueSize=0 snapshotFailures=0 projectedDailyCu=44640 activeRunners=0
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 422, heap_used_mb: 139, heap_total_mb: 172, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 10,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 0,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 533, heap_used_mb: 265, heap_total_mb: 291, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 5,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [hb] 2026-04-18T00:17:24.597Z open_positions=0
+4|solana-m | [memory] { rss_mb: 442, heap_used_mb: 155, heap_total_mb: 197, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 4,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 494, heap_used_mb: 212, heap_total_mb: 233, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 6,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 7,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 443, heap_used_mb: 169, heap_total_mb: 201, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈2160 queueSize=0 snapshotFailures=0 projectedDailyCu=31680 activeRunners=0
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 473, heap_used_mb: 214, heap_total_mb: 246, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 467, heap_used_mb: 200, heap_total_mb: 243, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 5,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [hb] 2026-04-18T00:22:26.726Z open_positions=0
+4|solana-m | [memory] { rss_mb: 467, heap_used_mb: 194, heap_total_mb: 249, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 468, heap_used_mb: 197, heap_total_mb: 216, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 1,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 476, heap_used_mb: 204, heap_total_mb: 244, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 6,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈1800 queueSize=0 snapshotFailures=0 projectedDailyCu=31680 activeRunners=0
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 471, heap_used_mb: 197, heap_total_mb: 233, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 6,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 590, heap_used_mb: 198, heap_total_mb: 224, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [hb] 2026-04-18T00:27:40.519Z open_positions=0
+4|solana-m | [memory] { rss_mb: 588, heap_used_mb: 202, heap_total_mb: 271, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 612, heap_used_mb: 242, heap_total_mb: 270, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 620, heap_used_mb: 240, heap_total_mb: 284, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 8,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 8,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈2100 queueSize=0 snapshotFailures=0 projectedDailyCu=31680 activeRunners=0
+4|solana-m | [global_cache] Cleaned up 4 expired entries
+4|solana-m | [memory] { rss_mb: 520, heap_used_mb: 205, heap_total_mb: 256, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 470, heap_used_mb: 319, heap_total_mb: 351, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [hb] 2026-04-18T00:32:53.133Z open_positions=0
+4|solana-m | [memory] { rss_mb: 427, heap_used_mb: 202, heap_total_mb: 230, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 10,
+4|solana-m |   hotQueue: 5,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 397, heap_used_mb: 165, heap_total_mb: 223, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | OBSERVABILITY ─ entries/hour≈2040 queueSize=0 snapshotFailures=0 projectedDailyCu=31680 activeRunners=0
+4|solana-m | [memory] { rss_mb: 429, heap_used_mb: 190, heap_total_mb: 251, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 8,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [memory] { rss_mb: 462, heap_used_mb: 227, heap_total_mb: 275, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 10,
+4|solana-m |   hotQueue: 8,
+4|solana-m |   routeCache: 19,
+4|solana-m |   mintCreatedAtCache: 9,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 9,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 433, heap_used_mb: 204, heap_total_mb: 259, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 10,
+4|solana-m |   hotQueue: 7,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 10,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 10,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [hb] 2026-04-18T00:37:59.234Z open_positions=0
+4|solana-m | [memory] { rss_mb: 466, heap_used_mb: 236, heap_total_mb: 297, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 10,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 10,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+4|solana-m | [memory] { rss_mb: 531, heap_used_mb: 299, heap_total_mb: 358, external_mb: 4 }
+4|solana-m | [mem-debug] {
+4|solana-m |   trackedMints: 9,
+4|solana-m |   hotQueue: 0,
+4|solana-m |   routeCache: 0,
+4|solana-m |   mintCreatedAtCache: 10,
+4|solana-m |   confirmTxCarryByMint: 1,
+4|solana-m |   confirmLiqTrack: 0,
+4|solana-m |   momentumRepeatFail: 10,
+4|solana-m |   wsmgrDiag: 0,
+4|solana-m |   birdEyeSubscribed: 0
+4|solana-m | }
+4|solana-m | [global_cache] Cleaned up 2 expired entries
+

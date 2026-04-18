@@ -234,7 +234,7 @@ export function getConfig() {
   const COLD_EVAL_MIN_MS = Math.max(15_000, Number(process.env.COLD_EVAL_MIN_MS || 15000));
   const COLD_EVAL_MAX_MS = Math.max(COLD_EVAL_MIN_MS, Number(process.env.COLD_EVAL_MAX_MS || 30000));
   const CONFIRM_DELAY_MIN_MS = Math.max(200, Number(process.env.CONFIRM_DELAY_MIN_MS || 200));
-  const CONFIRM_DELAY_MAX_MS = Math.max(CONFIRM_DELAY_MIN_MS, Number(process.env.CONFIRM_DELAY_MAX_MS || 400));
+  const CONFIRM_DELAY_MAX_MS = Math.max(CONFIRM_DELAY_MIN_MS, Number(process.env.CONFIRM_DELAY_MAX_MS || 600));
   const ROUTE_CACHE_ENABLED = (process.env.ROUTE_CACHE_ENABLED ?? 'true') === 'true';
   const ROUTE_CACHE_TTL_MS = Math.max(500, Number(process.env.ROUTE_CACHE_TTL_MS || 12_000));
   const ROUTE_CACHE_MAX_SIZE = Math.max(8, Number(process.env.ROUTE_CACHE_MAX_SIZE || 512));
@@ -359,7 +359,7 @@ export function getConfig() {
   const LIVE_TWO_STAGE_SLIPPAGE_RETRY_BPS = Math.max(10, Math.min(400, Number(process.env.LIVE_TWO_STAGE_SLIPPAGE_RETRY_BPS ?? 80)));
   const LIVE_TWO_STAGE_SLIPPAGE_MAX_BPS = Math.max(50, Math.min(2000, Number(process.env.LIVE_TWO_STAGE_SLIPPAGE_MAX_BPS ?? 400)));
   const LIVE_PROBE_CONFIRM_ENABLED = (process.env.LIVE_PROBE_CONFIRM_ENABLED ?? 'false') === 'true';
-  const LIVE_PROBE_MAX_CANDIDATES = Math.max(1, Math.min(30, Number(process.env.LIVE_PROBE_MAX_CANDIDATES ?? 12)));
+  const LIVE_PROBE_MAX_CANDIDATES = Math.max(1, Math.min(30, Number(process.env.LIVE_PROBE_MAX_CANDIDATES ?? 10)));
   const LIVE_PROBE_MIN_LIQ_USD = Math.max(0, Number(process.env.LIVE_PROBE_MIN_LIQ_USD ?? 8000));
   const LIVE_PROBE_MIN_TX1H = Math.max(0, Number(process.env.LIVE_PROBE_MIN_TX1H ?? 8));
   const LIVE_CONFIRM_MIN_LIQ_USD = Math.max(0, Number(process.env.LIVE_CONFIRM_MIN_LIQ_USD ?? 10000));
@@ -399,7 +399,7 @@ export function getConfig() {
   const BIRDEYE_LITE_CACHE_TTL_MS = Math.max(0, Number(process.env.BIRDEYE_LITE_CACHE_TTL_MS ?? 45_000));
   const BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS = Math.max(0, Number(process.env.BIRDEYE_LITE_PER_MINT_MIN_INTERVAL_MS ?? 25_000));
   // WS subscription TTL for late-pipeline mints (momentum/confirm/execution). 30 s floor.
-  const BIRDEYE_WATCHLIST_SUB_TTL_MS = Math.max(30_000, Number(process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS ?? 120_000));
+  const BIRDEYE_WATCHLIST_SUB_TTL_MS = Math.max(30_000, Number(process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS ?? 300_000));
   // Used for synchronous (bounded) entry price hydration when an otherwise-eligible entry is missing a safe snapshot.
   const BIRDEYE_ENTRY_FETCH_TIMEOUT_MS = Math.max(250, Number(process.env.BIRDEYE_ENTRY_FETCH_TIMEOUT_MS || 2500));
 

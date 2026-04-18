@@ -4,15 +4,15 @@ import cache from '../../lib/cache/global_cache.mjs';
 const WS_URL = process.env.BIRDEYE_WS_URL || 'wss://public-api.birdeye.so/socket/solana';
 const API_KEY = process.env.BIRDEYE_API_KEY || '';
 const ENABLED = (process.env.BIRDEYE_WS_ENABLED || 'true') === 'true' && !!API_KEY;
-const POLL_MS = Math.max(250, Number(process.env.BIRDEYE_SUB_POLL_MS || 750));
+const POLL_MS = Math.max(500, Number(process.env.BIRDEYE_SUB_POLL_MS || 1500));
 
 class BirdEyeWS extends EventEmitter {
   constructor() {
     super();
     this.ws = null;
     this.status = 'CLOSED';
-    this.backoffMs = 1000;
-    this.maxBackoffMs = 30000;
+    this.backoffMs = 1500;
+    this.maxBackoffMs = 120000;
     this.subscribed = new Set();
     this.desired = new Set();
     this._timer = null;

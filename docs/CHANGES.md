@@ -1,0 +1,1 @@
+2026-04-17 - birdeye(ws): increased subscription poll and backoff defaults to reduce reconnect storms causing frequent ws closes and downstream telemetry/fetch errors. Change: default BIRDEYE_SUB_POLL_MS=1500, initial backoff=1500ms, maxBackoff=120000ms. Low-risk tuning. Monitor for two runs; auto-revert if worsening.
