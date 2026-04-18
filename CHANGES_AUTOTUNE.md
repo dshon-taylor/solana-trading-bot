@@ -1,9 +1,9 @@
-2026-04-18 CDT - run d2feac6d-b989-43b5-94f4-edeb3232011e
-- Applied low-risk tunings to reduce memory/WS pressure:
-  - TOP_N_HOT: 5 -> 4
-  - HOT_LIMIT_PER_MIN: 40 -> 30
-  - MAX_WS_CONNECTIONS: 50 -> 30
-- Reason: observed elevated RSS and websocket pool usage; aim to reduce concurrent tracked items and WS connections.
-- Actions: edited config/defaults.js, committed locally (no remote), restarted pm2 process.
-- Verification: bot restarted and is online; key env vars present (HELIUS, JUPITER, BIRDEYE, OPENAI).
-- Follow-up: monitor next 2 cycles for regressions; revert if performance degrades twice.
+2026-04-18 UTC - cron:e6e6c7e7 run
+- Applied low-risk tunings to reduce runtime load and candidate throughput:
+  - PAIR_FETCH_CONCURRENCY: 3 -> 1 (env override)
+  - LIVE_CANDIDATE_SHORTLIST_N: 18 -> 12 (env override)
+- Reason: diagnostics showed momentumRepeatFail ~9 and RSS spikes up to ~550MB; reduced fetch concurrency and shortlist size to lower CPU/memory and external request fanout.
+- Files changed: trading-bot/.env (env overrides; file is .gitignored)
+- Risk level: low (config/ops only, reversible)
+- Notes: .env is in .gitignore so change isn't committed; recorded here and in memory.
+
