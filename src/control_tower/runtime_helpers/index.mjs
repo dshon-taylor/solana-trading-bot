@@ -78,7 +78,7 @@ function writeLastSolUsdFallback(solUsd) {
 export function createSolUsdPriceResolver({ getTokenPairs, pickBestPair }) {
   return async function getSolUsdPrice() {
     try {
-      const pairs = await getTokenPairs('So11111111111111111111111111111111111111112');
+      const pairs = await getTokenPairs('solana', 'So11111111111111111111111111111111111111112');
       const best = pickBestPair(pairs);
       const solUsd = Number(best?.priceUsd || 0);
       if (Number.isFinite(solUsd) && solUsd > 0) {
