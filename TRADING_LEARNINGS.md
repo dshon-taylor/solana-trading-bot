@@ -71,7 +71,7 @@ Proposed tweaks (do NOT change live trading params automatically)
 
 Notes / next actions
 - No live parameter changes made by this update.
-- Recommend fixing execution confirmations before changing risk parameters. If you approve, I can (A) extract recent failing confirmation lines and open an issue, or (B) spin a short paper A/B with alternate stop levels and report back.
+- Recommend fixing execution confirmations before changing risk parameters. If you approve, I can (A) extract recent failing confirmation lines and open a diagnostic issue, or (B) spin a short paper A/B experiment with alternate stop levels and report back with results.
 
 ---
 
@@ -86,7 +86,7 @@ Summary
 
 What worked
 - Trailing-stop behavior remains a clear positive: when trailActivated=true, winners frequently produce large pnlPct gains (examples >0.3 in historical runs).
-- The pipeline surfaces high-momentum candidates and attempts swaps consistently in paper mode (many ok:swap_submitted entries).
+- The pipeline surfaces high-momentum candidates and attempts swaps for them in paper mode (many ok:swap_submitted entries historically).
 
 What failed / problems observed
 - Execution confirmations continue to fail frequently (websocket_err / http_timeout / http_status_err), resulting in attempted swaps with signature=null and no recorded fills.
@@ -101,12 +101,12 @@ Proposed tweaks (do NOT change live trading params automatically)
 1) Execution reliability first (confidence: high)
    - Add exponential-backoff retries for confirmations, capture full error payloads in logs, and add failover RPC endpoints. Consider temporarily routing confirmations through a different RPC cluster for diagnostics.
 2) Paper A/B test on stop sizing (confidence: medium)
-   - Run paper experiments comparing current ~18% stop vs 22–25% (and/or an entry volatility filter). Measure stop-hit rate and net pnl over a fixed N-window.
+   - Run paper experiments comparing current stop (~18%) vs 22–25% (and/or require a minimum liquidity/volatility threshold at entry). Measure stop-hit rate and net pnl over a fixed N-window.
 3) Preserve trailing stops, tweak activation/step in paper (confidence: low)
    - Test small changes to trail activation and step size in paper mode to see if runup capture improves without increasing drawdown.
 
 Notes / next actions
-- No live parameters changed by this update.
+- No live parameters were changed by this update.
 - I can extract failing confirmation lines and open an issue, or run the paper A/B test if you want.
 
 ---
@@ -122,7 +122,7 @@ Summary
 
 What worked
 - Trailing-stop logic consistently captured the largest winners in historical runs (multiple examples with pnlPct >> 0.3 when trailActivated=true).
-- The candidate pipeline still surfaces high-ret candidates and attempts swaps in paper mode (paper_live_attempts contains many ok:swap_submitted entries historically).
+- The candidate pipeline still surfaces high-ret candidates and issues swap attempts in paper mode (paper_live_attempts contains many ok:swap_submitted entries historically).
 
 What failed / problems observed
 - Execution confirmations still appear as the largest operational failure mode in historical data (websocket_err, http_timeout, http_status_err). Consequence: many attempted swaps lack signatures and no fills are recorded in trades.jsonl.
@@ -146,3 +146,122 @@ Notes / next actions
 - Recommendation order: fix execution confirmations first (highest impact), then run the paper A/B on stop sizing. I can extract the recent failing confirmation lines and open an issue, or I can schedule and run the paper A/B experiment and report back with results.
 
 (End of 2026-04-18 entry)
+
+---
+
+2026-04-19 — Daily upkeep
+
+What I checked
+- Reviewed state/track/results.jsonl, state/paper_live_attempts.jsonl, state/trades.jsonl, and the state/candidates directory for the last 24 hours.
+
+Summary
+- No new trading or execution telemetry in the last 24 hours; the latest actionable entries in the workspace logs remain from Feb–Mar 2026. Because there is no fresh 24h data, this update reconfirms the persistent patterns visible in the historical logs.
+
+What worked
+- Trailing-stop behavior continues to be the strongest positive: historical runs with trailActivated=true show several large winners (pnlPct > 0.3).
+- Candidate pipeline reliably surfaces high-ret candidates and issues swap attempts in paper mode (many ok:swap_submitted lines in paper_live_attempts historically).
+
+What failed / problems observed
+- Execution confirmations are still the primary operational failure: paper_live_attempts contains many attempted swaps that later record fail:swapError with websocket_err, http_timeout, or http_status_err and signature=null.
+- trades.jsonl remains effectively empty (no recorded filled trades), pointing to execution/confirmation failures or downstream recording problems.
+- Stop-loss exits keep clustering around ~-18% pnlPct across many samples, suggesting the stop sizing is frequently causing losses.
+
+Parameter observations
+- Trailing stops produce outsized winners when activated; preserve in experiments.
+- The ~18% stop-loss level is repeatedly hit in historical exits — a candidate for controlled testing.
+- Multiple failure modes for confirmations (websocket_err, http_timeout, http_status_err) make the execution path the highest-priority operational fix.
+
+Proposed tweaks (do NOT change live trading params automatically)
+1) Execution/confirmation hardening (confidence: high)
+   - Implement exponential-backoff retries, capture full confirmation error payloads to logs, and add failover RPC endpoints. If necessary, temporarily route confirmations through an alternative provider for diagnostics.
+2) Controlled paper A/B on stop sizing (confidence: medium)
+   - Compare current ~18% stop vs wider stops (22–25%) and/or add an entry volatility/liquidity filter. Measure stop-hit rate and net pnl over a fixed sample of paper trades.
+3) Trail tuning in paper (confidence: low)
+   - Keep trailing stops enabled; in paper mode test small changes to activation threshold and trail step size to try capturing more runups without excessive tightening.
+
+Notes / next actions
+- No live parameters were changed by this update.
+- Recommendation: fix confirmation reliability first, then run a paper A/B for stop sizing.
+- Next: if you want I can (A) extract the failing confirmation lines and open a diagnostic issue, or (B) schedule a short paper A/B experiment and report back with results.
+
+(End of 2026-04-19 entry)
+Sun Apr 19 17:10:06 UTC 2026 CT: Sun Apr 19 12:10:06 CDT 2026 - run d2feac6d: restarted pm2 with --update-env to ensure HELIUS_API_KEY loaded; monitoring for recurrence.
+
+---
+
+2026-04-20 — Daily upkeep
+
+What I checked
+- Reviewed the recent state files: state/track/results.jsonl and state/paper_live_attempts.jsonl (historical data present through Feb–Mar 2026) and state/trades.jsonl (empty). There were no new records in the last 24 hours.
+
+Summary
+- No fresh trading/execution telemetry in the last 24h. Historical logs reinforce two persistent observations: (1) trailing stops capture the largest winners when activated, and (2) execution confirmations are failing frequently, leaving many attempted swaps without signatures or recorded fills.
+
+What worked
+- Trailing-stop exits reliably produced strong winners in historical runs (multiple pnlPct > 0.3 examples when trailActivated=true).
+- Candidate pipeline and decision logic issue swap attempts consistently in paper mode (many ok:swap_submitted lines in paper_live_attempts).
+
+What failed / problems observed
+- Execution/confirmation failures dominate (websocket_err, http_timeout, http_status_err). Many attempted swaps show signature=null and fail:swapError entries in paper_live_attempts.
+- trades.jsonl is empty — suggests fills aren't being recorded (likely due to confirmations failing or a downstream recording/DB issue).
+- Stop-loss exits keep clustering around ~-18% pnlPct in results.jsonl, indicating stop sizing may be too tight for many assets.
+
+Parameter observations
+- Trailing stops: effective at locking in outsized winners when activated — keep enabled while testing other changes.
+- Stop-loss: repeated -18% exits imply the configured stop is often the limiting factor; consider testing wider stops or additional entry filters in paper mode.
+- Execution reliability: multiple distinct error types point to network/confirmation pipeline issues rather than strategy signal failures.
+
+Proposed tweaks (do NOT change live trading params automatically)
+1) Execution confirmations (confidence: high)
+   - Priority: add exponential-backoff retries, capture full error payloads in logs, and add failover RPC/websocket endpoints. Consider temporarily increasing confirmation timeouts while diagnosing.
+2) Paper A/B: stop sizing (confidence: medium)
+   - Run a short paper A/B comparing current ~18% stop vs 22–25% stops and/or require minimum liquidity/volatility at entry. Measure stop-hit rate and net pnl over a fixed sample (e.g., 100 paper attempts).
+3) Trail tuning (confidence: low)
+   - Preserve trailing stops; in paper mode test small changes to trail activation threshold and step size to try capturing more runups without excessive tightening.
+
+Notes / next actions
+- No live parameters were changed by this update.
+- I can (A) extract recent failing confirmation lines and open a diagnostic issue, or (B) schedule and run the paper A/B test and report back. Recommend fixing confirmations first.
+
+(End of 2026-04-20 entry)
+
+- 2026-04-20: Enabled BirdEye WS (BIRDEYE_WS_ENABLED=true) + increased WATCHLIST_EVAL_EVERY_MS to 3000 and HOT_EVAL_MAX_MS to 2000 to restore live subscriptions and reduce eval churn. See memory/2026-04-20-candle-carl-run-d2feac6d-2.md
+
+---
+
+2026-04-21 — Daily upkeep
+
+What I checked
+- Reviewed state/paper_live_attempts.jsonl (historical entries visible through Mar 2026), state/track/results.jsonl, state/trades.jsonl, and state/candidates for the last 24 hours.
+- Pulled a sample of paper_live_attempts lines from the historical window; many show attempted swaps with signature=null and explicit fail reasons (websocket_err, http_timeout, http_status_err).
+
+Summary
+- No new trading or execution telemetry in the past 24 hours. Historical and sampled lines confirm the same persistent patterns: trailing stops produce large winners when activated, while execution confirmations fail frequently and many exits cluster at the configured stop (~-18%).
+
+What worked
+- Trailing-stop behavior remains beneficial: examples in historical runs where trailActivated=true show winners with pnlPct > 0.3.
+- Candidate pipeline reliably surfaces high-ret candidates and issues swap submissions in paper mode (many ok:swap_submitted lines in the sampled logs).
+
+What failed / problems observed
+- Execution confirmations are still the dominant failure mode. Sampled paper_live_attempts lines from the logs show repeated Transaction confirmation failures (websocket_err / http_timeout / http_status_err) leaving signature=null and no fills recorded.
+- Stop-loss exits continue clustering around ~-18% pnlPct in the tracker results sample, indicating stop sizing or noisy-entry selection persist as drawdown drivers.
+
+Parameter observations
+- Trailing stops: effective at letting winners run; historically produce outsized returns when activated.
+- Stop-loss: -18% is repeatedly hit across assets — a systematic candidate for controlled testing in paper mode.
+- Execution path instability: the variety of failure reasons (websocket_err, http_timeout, http_status_err) point to confirmation/RPC layer instability rather than core strategy logic.
+
+Proposed tweaks (do NOT change live trading params automatically)
+1) Execution confirmation hardening (confidence: high)
+   - Action: add exponential-backoff retries for confirmations, record full error payloads and latencies in logs, and configure failover RPC/websocket endpoints. Temporarily increase confirmation timeouts for diagnostics and consider routing a small percentage of confirmations through an alternate RPC provider to measure delta.
+2) Paper A/B on stop sizing + entry filter (confidence: medium)
+   - Action: run a controlled paper experiment comparing current ~18% stop vs wider stops (22–25%) and introduce a minimum-liquidity or volatility filter at entry. Track stop-hit rate, win rate, and net pnl over a fixed sample (e.g., 100 paper attempts).
+3) Preserve trailing stops; small trail tuning in paper (confidence: low)
+   - Action: keep trailing stops enabled. In paper mode, test reducing activation threshold slightly or tightening trail step to capture more runups while limiting premature tightening.
+
+Notes / next actions
+- No live parameter changes were made.
+- Prioritize fix #1 (execution confirmations) before risk-parameter experiments.
+- If you want, I can (A) extract and open an issue with the sampled failing confirmation lines and suggested alternate RPC endpoints, or (B) schedule and run the paper A/B experiment and report results after the sample completes.
+
+(End of 2026-04-21 entry)

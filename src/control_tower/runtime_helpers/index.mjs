@@ -17,6 +17,26 @@ export { createRuntimeAdapters } from './stage_runtime_adapters.mjs';
 export { buildRuntimePipelines } from './stage_build_runtime_pipelines.mjs';
 export { runMainWithFatalReporting } from './stage_run_main_with_fatal_reporting.mjs';
 
+// Low-risk helper: small fetch retry wrapper to reduce transient network failures
+export async function fetchWithRetry(url, opts = {}, { retries = 3, backoffMs = 250 } = {}) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      const res = await fetch(url, opts);
+      if (!res.ok && res.status >= 500 && attempt < retries) {
+        lastErr = new Error(`http ${res.status}`);
+        await new Promise((r) => setTimeout(r, backoffMs * attempt));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) await new Promise((r) => setTimeout(r, backoffMs * attempt));
+    }
+  }
+  throw lastErr || new Error('fetchWithRetry: unknown error');
+}
+
 const execFileAsync = promisify(execFile);
 
 const CT_FORMATTER = new Intl.DateTimeFormat('en-US', {
