@@ -6,8 +6,14 @@ module.exports = {
     {
       name: 'solana-momentum-bot',
       cwd: ROOT,
+      // Start script is a shell script; run it under bash. Pass node flags via NODE_OPTIONS to avoid bash parsing node flags.
       script: 'scripts/ops/start_with_mock.sh',
+      // Use bash as the interpreter for .sh entrypoint
       interpreter: '/bin/bash',
+      interpreter_args: '',
+      // Set node options via env so node invoked by the script gets flags
+      // Do NOT set NODE_OPTIONS here. start_with_mock.sh manages node flags via NODE_MAX_OLD_SPACE_MB to avoid passing node flags to the bash interpreter.
+      env: Object.assign({}, process.env),
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,
