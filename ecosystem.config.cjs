@@ -7,12 +7,11 @@ module.exports = {
       name: 'solana-momentum-bot',
       cwd: ROOT,
       // Start script is a shell script; run it under bash. Pass node flags via NODE_OPTIONS to avoid bash parsing node flags.
-      script: 'scripts/ops/start_with_mock.sh',
-      // Use bash as the interpreter for .sh entrypoint
-      interpreter: '/bin/bash',
-      interpreter_args: '',
-      // Set node options via env so node invoked by the script gets flags
-      // Do NOT set NODE_OPTIONS here. start_with_mock.sh manages node flags via NODE_MAX_OLD_SPACE_MB to avoid passing node flags to the bash interpreter.
+      // Run Node directly to avoid bash parsing node flags (low-risk change).
+      script: 'src/index.mjs',
+      interpreter: '/usr/bin/node',
+      node_args: ['--no-warnings','--max-old-space-size=2048'],
+      // Preserve env passthrough
       env: Object.assign({}, process.env),
       exec_mode: 'fork',
       instances: 1,
@@ -31,18 +30,20 @@ module.exports = {
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
         BIRDEYE_WS_ENABLED: process.env.BIRDEYE_WS_ENABLED||'true',
-        BIRDEYE_WS_HOT_CAP: process.env.BIRDEYE_WS_HOT_CAP||'15',
+        BIRDEYE_WS_HOT_CAP: process.env.BIRDEYE_WS_HOT_CAP||'8',
         BIRDEYE_WS_HOT_K: process.env.BIRDEYE_WS_HOT_K||'4',
-        BIRDEYE_WS_STALE_MS: process.env.BIRDEYE_WS_STALE_MS||'1200',
+        BIRDEYE_WS_STALE_MS: process.env.BIRDEYE_WS_STALE_MS||'1500',
         BIRDEYE_WS_TRAILING_CONFIRM_MS: process.env.BIRDEYE_WS_TRAILING_CONFIRM_MS||'300',
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: process.env.BIRDEYE_WS_IMPACT_THRESHOLD_PCT||'3',
         BIRDEYE_SUB_POLL_MS: process.env.BIRDEYE_SUB_POLL_MS||'800',
         BIRDEYE_WATCHLIST_SUB_TTL_MS: process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS||'120000',
-        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'250',
+        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'150',
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
         BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000',
         // Slightly reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'4500'
+        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'6000',
+        // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
+        TELEGRAM_DISABLED: process.env.TELEGRAM_DISABLED||'true'
       },
 
 
