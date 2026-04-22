@@ -41,7 +41,8 @@ module.exports = {
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
         BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000',
         // Slightly reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'6000',
+        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'12000',
+        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'100',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
         TELEGRAM_DISABLED: process.env.TELEGRAM_DISABLED||'true'
       },
