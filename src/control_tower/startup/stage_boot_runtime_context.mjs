@@ -36,6 +36,19 @@ export async function bootRuntimeContext({
   const cfg = getConfig();
   console.log(summarizeConfigForBoot(cfg));
 
+  // Low-risk startup validations: warn explicitly about missing critical envs.
+  // We do NOT abort startup here (low-risk). If D'Shon wants fail-fast, we can escalate to medium-risk.
+  const missing = [];
+  const keypairPathEnv = String(process.env.KEYPAIR_PATH || '').trim();
+  const sopsWalletEnv = String(process.env.SOPS_WALLET_FILE || '').trim();
+  if (!cfg.TELEGRAM_BOT_TOKEN) missing.push('TELEGRAM_BOT_TOKEN');
+  if (!cfg.TELEGRAM_CHAT_ID) missing.push('TELEGRAM_CHAT_ID');
+  if (!cfg.SOLANA_RPC_URL) missing.push('SOLANA_RPC_URL');
+  if (!keypairPathEnv && !sopsWalletEnv) missing.push('KEYPAIR_PATH|SOPS_WALLET_FILE');
+  if (missing.length) {
+    console.warn('[startup.validation] missing critical env vars:', missing.join(', '));
+  }
+
   const wallet = loadWallet();
   const pub = getPublicKeyBase58(wallet);
   const conn = makeConnection(cfg.SOLANA_RPC_URL);

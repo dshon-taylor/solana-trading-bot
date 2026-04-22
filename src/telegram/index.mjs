@@ -14,6 +14,17 @@ let tgCooldownUntilMs = 0;
 let lastCooldownLogMs = 0;
 let lastSkipLogMs = 0;
 
+const TELEGRAM_DISABLED = String(process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true';
+let telegramDisabledNoticeLogged = false;
+function telegramDisabled(context = 'send') {
+  if (!TELEGRAM_DISABLED) return false;
+  if (!telegramDisabledNoticeLogged) {
+    console.warn('[telegram]', `disabled via TELEGRAM_DISABLED=true; skipping ${context}`);
+    telegramDisabledNoticeLogged = true;
+  }
+  return true;
+}
+
 function logCooldownOncePerMinute(msg) {
   const now = Date.now();
   if (now - lastCooldownLogMs < 60_000) return;
@@ -73,12 +84,20 @@ function ensureRetryLoop(cfg) {
 
 function enqueueRetry(cfg, text) {
   if (!text) return;
+  if (TELEGRAM_DISABLED) return;
+  // If we're currently in a cooldown window and the queue is already large,
+  // drop the message to prevent unbounded memory growth and noisy restarts.
+  if (Date.now() < tgCooldownUntilMs && tgRetryQueue.length >= Math.min(30, TG_RETRY_QUEUE_MAX)) {
+    logSkipOncePerHour('dropping telegram message (cooldown & queue saturation)');
+    return;
+  }
   if (tgRetryQueue.length >= TG_RETRY_QUEUE_MAX) tgRetryQueue.shift();
   tgRetryQueue.push({ text, attempt: 0, nextAtMs: Date.now() + TG_RETRY_BASE_MS });
   ensureRetryLoop(cfg);
 }
 
 export async function tgSend(cfg, text, opts = {}) {
+  if (telegramDisabled('send')) return false;
   if (!cfg?.TELEGRAM_BOT_TOKEN || !cfg?.TELEGRAM_CHAT_ID) return false;
 
   const fromRetryQueue = !!opts?.fromRetryQueue;
@@ -143,6 +162,8 @@ export async function tgSend(cfg, text, opts = {}) {
 }
 
 export async function tgSetMyCommands(cfg) {
+  if (telegramDisabled('setMyCommands')) return;
+  if (!cfg?.TELEGRAM_BOT_TOKEN) return;
   // This enables Telegram's UI command picker (/ menu) for the bot.
   const url = `https://api.telegram.org/bot${cfg.TELEGRAM_BOT_TOKEN}/setMyCommands`;
   const body = {
