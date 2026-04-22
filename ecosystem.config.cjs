@@ -12,7 +12,8 @@ module.exports = {
       interpreter: '/usr/bin/node',
       node_args: ['--no-warnings','--max-old-space-size=4096'],
       // Preserve env passthrough
-      env: Object.assign({}, process.env),
+      // (removed automatic passthrough of host process.env to allow env_file to be authoritative for bot config)
+      // env: Object.assign({}, process.env),
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,
@@ -41,9 +42,9 @@ module.exports = {
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
         BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000',
         // Slightly reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'60000',
+        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'120000',
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'12',
+        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'8',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
         TELEGRAM_DISABLED: process.env.TELEGRAM_DISABLED||'true'
       },
