@@ -25,12 +25,12 @@ module.exports = {
       // - exp_backoff_restart_delay increases restart delay after each crash (reduces dependency hammering).
       min_uptime: 10000,
       max_restarts: 20,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
+      restart_delay: 60000,
+      exp_backoff_restart_delay: 5000,
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
-        BIRDEYE_WS_ENABLED: process.env.BIRDEYE_WS_ENABLED||'true',
+        BIRDEYE_WS_ENABLED: process.env.BIRDEYE_WS_ENABLED||'false',
         // Reduce hot cap to lower simultaneous active subscriptions (low-risk)
         BIRDEYE_WS_HOT_CAP: process.env.BIRDEYE_WS_HOT_CAP||'6',
         BIRDEYE_WS_HOT_K: process.env.BIRDEYE_WS_HOT_K||'4',
@@ -42,9 +42,9 @@ module.exports = {
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
         BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000',
         // Slightly reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'120000',
+        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'600000',
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'8',
+        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'2',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
         TELEGRAM_DISABLED: process.env.TELEGRAM_DISABLED||'true'
       },
