@@ -27,7 +27,7 @@ module.exports = {
       max_restarts: 5,
       restart_delay: 60000,
       exp_backoff_restart_delay: 10000,
-      max_memory_restart: '512M',
+      max_memory_restart: '768M',
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
@@ -40,8 +40,8 @@ module.exports = {
         BIRDEYE_WS_TRAILING_CONFIRM_MS: '300',
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
         BIRDEYE_SUB_POLL_MS: '60000',
-        BIRDEYE_WATCHLIST_SUB_TTL_MS: '600000',
-        LOG_LEVEL: 'warn',
+        BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
+        LOG_LEVEL: 'error',
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
