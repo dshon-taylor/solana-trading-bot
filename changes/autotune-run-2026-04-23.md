@@ -1,0 +1,1 @@
+- Ran low-risk tuning: SCAN_EVERY_MS 20s→30s; ROUTE_CACHE_TTL_MS 12s→30s; PAIR_FETCH_CONCURRENCY default 2→1
