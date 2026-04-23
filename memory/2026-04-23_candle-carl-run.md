@@ -1,0 +1,11 @@
+2026-04-23T09:35Z UTC — Candle Carl autonomous optimization run
+- Diagnostics collected: pm2 status, solana-momentum-bot logs (mem-debug), pm2 env, .env snapshot.
+- Findings: intermittent high RSS spikes up to ~962MB; routeCache entries ~22; momentumRepeatFail increased to 2; observed memory fluctuation pattern correlating with watchlist / hotQueue activity.
+- Changes applied (low-risk, 3):
+  - ROUTE_CACHE_TTL_MS: 30000 -> 15000
+  - ROUTE_CACHE_MAX_SIZE: 64 -> 32
+  - WATCHLIST_MAX_SIZE: 300 -> 200
+- Tests: restarted process with pm2 restart --update-env; process online. Post-restart logs show normal startup and mem-debug continuing to emit; RSS still fluctuates but baseline sampling shows lower heap_used in some cycles.
+- Git branch: autotune/candle-carl-2026-04-23 commit de7efd8
+- No auto-revert required.
+- Next: monitor memory for 3 runs; if RSS spikes persist, consider reducing HOT_TTL_MS or adding periodic cache cleanup; profile heap if spike > 1GB.
