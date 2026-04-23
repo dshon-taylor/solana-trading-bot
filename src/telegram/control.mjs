@@ -225,6 +225,15 @@ function setPersistFlag(state) {
 }
 
 export async function handleTelegramControls({ cfg, state, counters, send, nowIso, onDiagRequest = null, onPositionsRequest = null }) {
+  // Quick guard: if telemetry/telegram is disabled via env, skip polling entirely to avoid
+  // noisy 404s when running in isolated/autonomous environments.
+  try {
+    if (String(process.env.TELEGRAM_DISABLED || '').toLowerCase() === 'true') {
+      return;
+    }
+  } catch (e) {
+    // ignore and continue if env access fails
+  }
   const allowedChatId = String(cfg.TELEGRAM_CHAT_ID);
   state.tg ||= { offset: null };
 

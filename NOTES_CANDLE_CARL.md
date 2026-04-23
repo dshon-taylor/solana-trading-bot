@@ -1,0 +1,1 @@
+2026-04-23: Applied low-risk tuning to conversionProfile to reduce concurrency and shortlist size (pairFetchConcurrency=3, fanoutN=2, shortlistN=12). Rationale: lower event-loop latency and reduce CPU/log IO spikes during pair fetch / rechecks. Commit 377e757. Monitor next runs; revert if metrics worsen consecutively.

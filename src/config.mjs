@@ -457,11 +457,11 @@ export function getConfig() {
 
   // Incident playbook: auto-shift to degraded mode on restart/error patterns, then self-recover.
   const PLAYBOOK_ENABLED = (process.env.PLAYBOOK_ENABLED ?? 'true') === 'true';
-  const PLAYBOOK_RESTART_THRESHOLD = Number(process.env.PLAYBOOK_RESTART_THRESHOLD ?? 3);
+  const PLAYBOOK_RESTART_THRESHOLD = Number(process.env.PLAYBOOK_RESTART_THRESHOLD ?? 6);
   const PLAYBOOK_RESTART_WINDOW_MS = Number(process.env.PLAYBOOK_RESTART_WINDOW_MS ?? 15 * 60_000);
   const PLAYBOOK_ERROR_THRESHOLD = Number(process.env.PLAYBOOK_ERROR_THRESHOLD ?? 8);
   const PLAYBOOK_ERROR_WINDOW_MS = Number(process.env.PLAYBOOK_ERROR_WINDOW_MS ?? 10 * 60_000);
-  const PLAYBOOK_STABLE_RECOVERY_MS = Number(process.env.PLAYBOOK_STABLE_RECOVERY_MS ?? 20 * 60_000);
+  const PLAYBOOK_STABLE_RECOVERY_MS = Number(process.env.PLAYBOOK_STABLE_RECOVERY_MS ?? 30 * 60_000);
 
   // Paper momentum trading (no live swaps; logs hypothetical entries/exits)
   const PAPER_ENABLED = (process.env.PAPER_ENABLED ?? 'false') === 'true';

@@ -1,0 +1,24 @@
+run_id: d2feac6d-b989-43b5-94f4-edeb3232011e
+timestamp_ct: 2026-04-23 06:08:00 AM CT (2026-04-23T11:08:00Z)
+summary: Autonomous optimization cycle run — diagnostics collected, no changes applied.
+
+diagnostics:
+- pm2 status: online; restarts=542; uptime=3m; event_loop_p95=679.85 ms
+- logs: frequent Telegram 404 errors earlier; TELEGRAM_DISABLED=true so not impacting execution
+- memory: rss range observed 237-844 MB; heap_used fluctuates 75-576 MB
+- observability: entries/hour≈0; activeRunners=0; open_positions=0
+- trackedMints/hotQueue: 0-1 (mostly 0) => scanner not finding candidates
+- config snapshot: live_momo=true, execution=true, scanEveryMs=60000, sources.rps=1, routeCache.maxSize=32
+
+reasoning:
+Dominant bottleneck is signal-generation/coverage: the scanner and sources produce few or no candidate mints (trackedMints=0, entries/hour≈0). Secondary concerns: occasional event-loop p95 spikes and elevated memory peaks but within acceptable bounds. Telegram errors are noise due to disabled setting.
+
+actions_taken: none
+reason_for_no_change: No actionable, low-risk parameter tweak judged necessary without further evidence. Changes to scanning cadence or source sampling were considered but deferred to avoid unintended increased exposure. Recommend collecting 2 more cycles of diagnostics and/or running simulated-scan with higher sample rate before tuning.
+
+next_steps_recommendations:
+1) TEMPORARY low-risk test: increase sources.rps from 1 -> 2 for 30 minutes to observe candidate rate (requires env change + pm2 restart). Mark as low-risk; request approval before applying.
+2) If still zero, run a simulated backfill run (paper mode) over recent blocks to verify filters (shortlistPrefilter.minLiqUsd/minTx1h) are not too strict.
+3) Monitor event-loop latency; if p95 >500ms persistently, investigate async blocking operations.
+
+notes: No git commits or restarts performed. No memory/docs updates required beyond this log.
