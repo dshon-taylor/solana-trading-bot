@@ -99,7 +99,7 @@ Parameter observations
 
 Proposed tweaks (do NOT change live trading params automatically)
 1) Execution reliability first (confidence: high)
-   - Add exponential-backoff retries for confirmations, capture full error payloads in logs, and add failover RPC endpoints. Consider temporarily routing confirmations through a different RPC cluster for diagnostics.
+   - Add exponential-backoff retries for confirmations, capture full error payloads in logs, and add failover RPC/websocket endpoints. Consider temporarily routing confirmations through a different RPC cluster for diagnostics.
 2) Paper A/B test on stop sizing (confidence: medium)
    - Run paper experiments comparing current stop (~18%) vs 22–25% (and/or require a minimum liquidity/volatility threshold at entry). Measure stop-hit rate and net pnl over a fixed N-window.
 3) Preserve trailing stops; small trail-tuning in paper (confidence: low)
@@ -135,17 +135,15 @@ Parameter observations
 
 Proposed tweaks (do NOT change live trading params automatically)
 1) Repair execution confirmation pipeline (confidence: high)
-   - Add better retry/backoff, capture full error payloads in logs, and add failover RPC endpoints. If confirmation timeouts persist, temporarily route confirmations through an alternative RPC provider for diagnostics.
+   - Add better retry/backoff, capture full error payloads in logs, and add failover RPC/websocket endpoints. If confirmation timeouts persist, temporarily route confirmations through an alternative RPC provider for diagnostics.
 2) Paper A/B test: stop sizing (confidence: medium)
-   - Run a controlled paper experiment comparing current stop (~18%) vs wider stops (22–25%) and/or require a minimum liquidity/volatility threshold at entry. Track stop-hit rate and net pnl over a fixed sample size.
+   - Run a controlled paper experiment comparing current stop (~18%) vs wider stops (22–25%) and/or require a minimum-liquidity or volatility filter at entry. Track stop-hit rate and net pnl over a fixed sample size.
 3) Preserve trailing stops; small trail tuning in paper (confidence: low)
    - Keep trailing stops enabled; in paper mode test small changes to trail activation threshold and step size to try capturing more runups while limiting early tightening.
 
 Notes / next actions
 - No live parameters were changed by this update.
-- Recommendation order: fix execution confirmations first (highest impact), then run the paper A/B on stop sizing. I can extract the recent failing confirmation lines and open an issue, or I can schedule and run the paper A/B experiment and report back with results.
-
-(End of 2026-04-18 entry)
+- Recommendation order: fix execution confirmations first (highest impact), then run the paper A/B on stop sizing. I can extract the recent failing confirmation lines and open a diagnostic issue, or I can schedule and run the paper A/B experiment and report back. 
 
 ---
 
@@ -180,7 +178,7 @@ Proposed tweaks (do NOT change live trading params automatically)
    - Keep trailing stops enabled; in paper mode test small changes to trail activation threshold and trail step size to try capturing more runups without excessive tightening.
 
 Notes / next actions
-- No live parameters were changed by this update.
+- No live parameter changes were made by this update.
 - Recommendation: fix confirmation reliability first, then run a paper A/B for stop sizing.
 - Next: if you want I can (A) extract the failing confirmation lines and open a diagnostic issue, or (B) schedule and run the paper A/B experiment and report back. 
 
@@ -217,7 +215,7 @@ Proposed tweaks (do NOT change live trading params automatically)
 2) Paper A/B: stop sizing (confidence: medium)
    - Run a short paper A/B comparing current ~18% stop vs 22–25% stops and/or require minimum liquidity/volatility at entry. Measure stop-hit rate and net pnl over a fixed sample (e.g., 100 paper attempts).
 3) Trail tuning (confidence: low)
-   - Preserve trailing stops; in paper mode test small changes to trail activation threshold and step size to try capturing more runups without excessive tightening.
+   - Preserve trailing stops; in paper mode test small changes to the trail activation threshold and trail step size to try capturing more runups without excessive tightening.
 
 Notes / next actions
 - No live parameters were changed by this update.
@@ -302,3 +300,41 @@ Notes / next actions
 - Next: run the paper A/B for stop sizing once confirmations are stable.
 
 (End of 2026-04-22 entry)
+
+---
+
+2026-04-23 — Daily upkeep
+
+What I checked
+- Reviewed state/candidates, state/track/results.jsonl, state/trades.jsonl, and state/paper_live_attempts.jsonl for the last 24 hours; pulled samples where available.
+
+Summary
+- No new trading or execution telemetry in the past 24 hours. The latest workspace telemetry still dates to Mar 2026. The historical patterns persist: trailing stops capture large winners when activated, while execution confirmations fail frequently and many exits cluster at the configured stop (~18%).
+
+What worked
+- Trailing-stop exits continue to be the clearest positive signal in historical runs: when trailActivated=true results often show large pnlPct winners (examples >0.3).
+- Candidate selection and the decision pipeline consistently surface high-ret candidates and attempt swaps in paper mode when enabled.
+
+What failed / problems observed
+- Execution confirmations remain the dominant operational failure. Paper attempts frequently show signature=null and explicit failures (websocket_err, http_timeout, http_status_err), which prevents fills from being recorded in trades.jsonl.
+- Stop-loss exits keep clustering around ~-18% pnlPct, indicating stop sizing or noisy entries are removing positions before they can recover.
+
+Parameter observations
+- Trailing stops: helpful and should be preserved during experiments (clear positive in historical wins).
+- Stop-loss at ~18%: repeatedly hit across many samples — candidate for controlled paper testing (wider stops or entry filters).
+- Execution/confirmation path instability: multiple distinct error types point to network/RPC or bridge-layer issues rather than core signal problems.
+
+Proposed tweaks (do NOT change live trading params automatically)
+1) Execution confirmation hardening (confidence: high)
+   - Add exponential-backoff retries, improved error payload logging, and configure failover RPC/websocket endpoints. Temporarily increase confirmation timeouts and route a small percentage of confirmations through an alternate provider to measure impact.
+2) Paper A/B test for stop sizing + entry filter (confidence: medium)
+   - Run a controlled paper experiment comparing current ~18% stop vs wider stops (22–25%) and add a minimum-liquidity or volatility filter at entry. Track stop-hit rate, win rate, and net pnl over a fixed sample (e.g., 100 paper attempts).
+3) Preserve trailing stops; small trail tuning in paper (confidence: low)
+   - Keep trailing stops enabled. In paper mode, test small changes to activation threshold and trail step size to try capturing more runups while limiting premature tightening.
+
+Notes / next actions
+- No live parameters were changed by this update.
+- Top-priority: fix execution confirmation reliability first (highest expected impact on recorded fills and PnL visibility).
+- If you want, I can (A) extract the recent failing confirmation lines and open a diagnostic issue with suggested RPC endpoints, or (B) schedule and run the paper A/B experiment and report back after the sample completes.
+
+(End of 2026-04-23 entry)

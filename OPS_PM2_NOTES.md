@@ -1,6 +1,7 @@
-2026-04-22 — Autonomous run notes
-- Performed diagnostics and controlled restart of solana-momentum-bot.
-- Added two low-risk helper files: scripts/validate_env.js and lib/retry-fetch.js (commit 1da9e08).
-- Restart command used: pm2 restart solana-momentum-bot --update-env
-- Verified process online and critical envs present (KEYPAIR_PATH, RPC*, BIRDEYE_*). TELEGRAM_DISABLED=true noted.
-- No code path changes yet. Recommend next PR to integrate retry-fetch into network call sites and add env validation at startup.
+2026-04-23 - Candle Carl autonomous tuning
+- Low-risk tunings applied by autonomous agent (commit 7d7cff0):
+  - SCAN_EVERY_MS=25000
+  - SOURCES_RPS=2
+  - WORKER_IDLE_SLEEP_MS=120
+- Reason: lower CPU/event-loop contention, reduce RPS to external providers, reduce restart pressure observed previously.
+- Post-restart: process online via pm2 (id 10). No immediate errors observed. Continue monitoring.

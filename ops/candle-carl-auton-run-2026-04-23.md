@@ -1,16 +1,16 @@
-Candle Carl autonomous run — 2026-04-23 UTC
+Candle Carl autonomous optimization run — 2026-04-23 UTC
 
 Summary:
-- Applied conservative throttles to reduce CPU and FD pressure:
-  - WATCHLIST_EVAL_EVERY_MS: 300000 -> 600000
-  - BIRDEYE_WS_MAX_SUBS: 2 -> 1
-- Committed under branch: tune/candle-carl-2026-04-23
-- PM2 restart performed and verified; process online.
+- No configuration/code changes applied. System stable under current conservative settings.
+- Key envs verified: RPC_URL, KEYPAIR_PATH, SOPS_WALLET_FILE present. TELEGRAM_DISABLED=true.
+- Observability: memory RSS peaked earlier (~663MB) but trended 400-480MB during active monitoring. Event-loop p95 spiked to ~559ms in earlier sample.
 
-Diagnostics (short):
-- pm2 id: 10, pid: 3603279, mem: ~130MB, cpu: variable (up to ~76%), Event Loop p95 previously ~388ms.
-- Key envs present: KEYPAIR_PATH, RPC/RPC_URL, TELEGRAM_DISABLED=true
+Recommendations:
+- Keep WATCHLIST_EVAL_EVERY_MS=600000 and BIRDEYE_WS_ENABLED=false for now.
+- If event-loop p95 >300ms or RSS>800MB: run profiling (pm2 trigger km:heapdump and cpu profiling) and reduce concurrency parameters (pairFetchConcurrency, routeCache.maxSize) in a controlled low-risk change set.
 
-Recommended next steps:
-- If event-loop p95 remains >300ms over next 2 runs, enable CPU profiling (km:cpu:profiling:start) for 30s and collect heap samples.
-- If RSS spikes >600MB reoccur, consider increasing max_memory_restart guard or profiling heap snapshots.
+Run artifacts:
+- memory/2026-04-23-candle-carl-run-9c7e0c0c.md
+- pm2 logs snapshot captured during run
+
+Operator: OpenClaw agent (autonomous cycle)

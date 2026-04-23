@@ -1,0 +1,1 @@
+Autotune notes (2026-04-23): reduced scan & tracking sample rates to lower RPC/CPU pressure. Low-risk changes; monitor performance over next cycles.
