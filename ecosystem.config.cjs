@@ -23,9 +23,9 @@ module.exports = {
       // Crash-loop / flapping protection:
       // - If the process exits before min_uptime repeatedly, PM2 will stop restarting after max_restarts.
       // - exp_backoff_restart_delay increases restart delay after each crash (reduces dependency hammering).
-      min_uptime: 10000,
-      max_restarts: 5,
-      restart_delay: 60000,
+      min_uptime: 30000,
+      max_restarts: 50,
+      restart_delay: 120000,
       exp_backoff_restart_delay: 5000,
 
       // BirdEye WS feature toggles (safe rollback via env)
