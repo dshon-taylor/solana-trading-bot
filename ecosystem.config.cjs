@@ -18,7 +18,7 @@ module.exports = {
       instances: 1,
       autorestart: true,
       // Auto-restart when process uses too much memory (soft safeguard).
-      max_memory_restart: '4096M',
+      max_memory_restart: '2048M',
 
       // Crash-loop / flapping protection:
       // - If the process exits before min_uptime repeatedly, PM2 will stop restarting after max_restarts.
@@ -30,24 +30,26 @@ module.exports = {
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
-        BIRDEYE_WS_ENABLED: process.env.BIRDEYE_WS_ENABLED||'false',
+        // Enforce conservative runtime defaults (hard-coded to ensure pm2 picks them up)
+        BIRDEYE_WS_ENABLED: 'false',
         // Reduce hot cap to lower simultaneous active subscriptions (low-risk)
-        BIRDEYE_WS_HOT_CAP: process.env.BIRDEYE_WS_HOT_CAP||'4',
-        BIRDEYE_WS_HOT_K: process.env.BIRDEYE_WS_HOT_K||'4',
-        BIRDEYE_WS_STALE_MS: process.env.BIRDEYE_WS_STALE_MS||'1500',
-        BIRDEYE_WS_TRAILING_CONFIRM_MS: process.env.BIRDEYE_WS_TRAILING_CONFIRM_MS||'300',
-        BIRDEYE_WS_IMPACT_THRESHOLD_PCT: process.env.BIRDEYE_WS_IMPACT_THRESHOLD_PCT||'3',
-        BIRDEYE_SUB_POLL_MS: process.env.BIRDEYE_SUB_POLL_MS||'800',
-        BIRDEYE_WATCHLIST_SUB_TTL_MS: process.env.BIRDEYE_WATCHLIST_SUB_TTL_MS||'120000',
-        BIRDEYE_WS_FRESHNESS_BYPASS_MS: process.env.BIRDEYE_WS_FRESHNESS_BYPASS_MS||'10000',
-        BIRDEYE_EARLY_SUB_TTL_MS: process.env.BIRDEYE_EARLY_SUB_TTL_MS||'90000',
+        BIRDEYE_WS_HOT_CAP: '4',
+        BIRDEYE_WS_HOT_K: '4',
+        BIRDEYE_WS_STALE_MS: '1500',
+        BIRDEYE_WS_TRAILING_CONFIRM_MS: '300',
+        BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
+        BIRDEYE_SUB_POLL_MS: '800',
+        BIRDEYE_WATCHLIST_SUB_TTL_MS: '120000',
+        BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
+        BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: process.env.WATCHLIST_EVAL_EVERY_MS||'900000',
+        WATCHLIST_EVAL_EVERY_MS: '600000',
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: process.env.BIRDEYE_WS_MAX_SUBS||'1',
+        BIRDEYE_WS_MAX_SUBS: '1',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
-        TELEGRAM_DISABLED: process.env.TELEGRAM_DISABLED||'true'
+        TELEGRAM_DISABLED: 'true'
       },
+
 
 
       env_file: path.join(ROOT, '.env'),
