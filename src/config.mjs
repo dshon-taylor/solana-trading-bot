@@ -25,7 +25,8 @@ function assertEndpointUrl(name, value, allowedProtocols, { optional = false } =
 
 function validateConfig(cfg) {
   // Catch the most common production foot-guns early.
-  assert(cfg.HELIUS_API_KEY, 'Missing HELIUS_API_KEY');
+  // HELIUS_API_KEY is optional in some deployments; warn but don't crash.
+  if (!cfg.HELIUS_API_KEY) console.warn('Missing HELIUS_API_KEY — helius-dependent features will be limited');
   assert(cfg.TELEGRAM_BOT_TOKEN, 'Missing TELEGRAM_BOT_TOKEN');
   assert(cfg.TELEGRAM_CHAT_ID, 'Missing TELEGRAM_CHAT_ID');
 
@@ -186,10 +187,12 @@ export function summarizeConfigForBoot(cfg) {
 }
 
 export function getConfig() {
-  const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
-  assert(HELIUS_API_KEY, 'Missing HELIUS_API_KEY');
+  const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '';
+  if (!HELIUS_API_KEY) {
+    console.warn('Missing HELIUS_API_KEY — running without Helius; helius-dependent features will be limited');
+  }
 
-  const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+  const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || (HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : '');
 
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -215,7 +218,7 @@ export function getConfig() {
 
   const DEFAULT_SLIPPAGE_BPS = 250; // 2.5%
 
-  const SCAN_EVERY_MS = Number(process.env.SCAN_EVERY_MS || 20_000);
+  const SCAN_EVERY_MS = Number(process.env.SCAN_EVERY_MS || 30_000);
   const SCAN_BACKOFF_MAX_MS = Number(process.env.SCAN_BACKOFF_MAX_MS || 5 * 60_000);
   const PAIR_CACHE_MAX_AGE_MS = Number(process.env.PAIR_CACHE_MAX_AGE_MS || 7 * 60_000);
   const WATCHLIST_TRIGGER_MODE = (process.env.WATCHLIST_TRIGGER_MODE ?? 'false') === 'true';
@@ -236,7 +239,7 @@ export function getConfig() {
   const CONFIRM_DELAY_MIN_MS = Math.max(200, Number(process.env.CONFIRM_DELAY_MIN_MS || 200));
   const CONFIRM_DELAY_MAX_MS = Math.max(CONFIRM_DELAY_MIN_MS, Number(process.env.CONFIRM_DELAY_MAX_MS || 600));
   const ROUTE_CACHE_ENABLED = (process.env.ROUTE_CACHE_ENABLED ?? 'true') === 'true';
-  const ROUTE_CACHE_TTL_MS = Math.max(500, Number(process.env.ROUTE_CACHE_TTL_MS || 12_000));
+  const ROUTE_CACHE_TTL_MS = Math.max(500, Number(process.env.ROUTE_CACHE_TTL_MS || 30_000));
   const ROUTE_CACHE_MAX_SIZE = Math.max(8, Number(process.env.ROUTE_CACHE_MAX_SIZE || 512));
   const DEBUG_CANARY_ENABLED = (process.env.DEBUG_CANARY_ENABLED ?? 'false') === 'true';
   const DEBUG_CANARY_VERBOSE = (process.env.DEBUG_CANARY_VERBOSE ?? 'true') === 'true';
@@ -346,7 +349,7 @@ export function getConfig() {
   const LIVE_REJECT_RECHECK_PASS_DELAY_MS_RAW = Math.max(10, Math.min(1000, Number(process.env.LIVE_REJECT_RECHECK_PASS_DELAY_MS ?? 80)));
 
   const LIVE_CONVERSION_PROFILE_ENABLED = LIVE_CONVERSION_PROFILE_ENABLED_RAW || AGGRESSIVE_MODE;
-  const PAIR_FETCH_CONCURRENCY_RAW = Math.max(1, Math.min(8, Number(process.env.PAIR_FETCH_CONCURRENCY ?? 2)));
+  const PAIR_FETCH_CONCURRENCY_RAW = Math.max(1, Math.min(8, Number(process.env.PAIR_FETCH_CONCURRENCY ?? 1)));
   const PAIR_FETCH_CONCURRENCY = AGGRESSIVE_MODE ? Math.max(PAIR_FETCH_CONCURRENCY_RAW, 5) : PAIR_FETCH_CONCURRENCY_RAW;
   const LIVE_PARALLEL_QUOTE_FANOUT_N = AGGRESSIVE_MODE ? Math.max(LIVE_PARALLEL_QUOTE_FANOUT_N_RAW, 6) : LIVE_PARALLEL_QUOTE_FANOUT_N_RAW;
   const LIVE_REJECT_RECHECK_BURST_ENABLED = LIVE_REJECT_RECHECK_BURST_ENABLED_RAW || AGGRESSIVE_MODE;
