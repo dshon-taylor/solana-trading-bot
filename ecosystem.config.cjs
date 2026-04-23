@@ -24,9 +24,10 @@ module.exports = {
       // - If the process exits before min_uptime repeatedly, PM2 will stop restarting after max_restarts.
       // - exp_backoff_restart_delay increases restart delay after each crash (reduces dependency hammering).
       min_uptime: 30000,
-      max_restarts: 50,
-      restart_delay: 120000,
-      exp_backoff_restart_delay: 5000,
+      max_restarts: 5,
+      restart_delay: 60000,
+      exp_backoff_restart_delay: 10000,
+      max_memory_restart: '1024M',
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
@@ -38,12 +39,12 @@ module.exports = {
         BIRDEYE_WS_STALE_MS: '1500',
         BIRDEYE_WS_TRAILING_CONFIRM_MS: '300',
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
-        BIRDEYE_SUB_POLL_MS: '2000',
+        BIRDEYE_SUB_POLL_MS: '5000',
         BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: '600000',
+        WATCHLIST_EVAL_EVERY_MS: '900000',
         // Reduce max WS subs to lower memory/FD usage (low-risk).
         BIRDEYE_WS_MAX_SUBS: '1',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
