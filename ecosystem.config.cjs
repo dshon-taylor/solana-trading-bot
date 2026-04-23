@@ -38,8 +38,8 @@ module.exports = {
         BIRDEYE_WS_STALE_MS: '1500',
         BIRDEYE_WS_TRAILING_CONFIRM_MS: '300',
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
-        BIRDEYE_SUB_POLL_MS: '800',
-        BIRDEYE_WATCHLIST_SUB_TTL_MS: '120000',
+        BIRDEYE_SUB_POLL_MS: '2000',
+        BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
