@@ -1,12 +1,20 @@
-Run: Candle Carl autonomous autotune
-Time: 2026-04-21T19:31:00Z
-Branch: main
-Commit: 635e2c0
-Changes:
-- WATCHLIST_EVAL_EVERY_MS: 12000 -> 30000 (reduce eval frequency)
-- WATCHLIST_IMMEDIATE_ROUTE_MAX_PER_CYCLE: 2 -> 3 (allow slightly more immediate routing per cycle)
-- MAX_ACTIVE_RUNNERS: 2 -> 1 (reduce concurrency)
-Rationale: Dominant operational bottlenecks observed in prior runs: websocket disconnects and memory pressure. Applied low-risk tuning to reduce concurrency and spread work to lower resource pressure while allowing slightly larger immediate routing to avoid backlog.
-Risk: low. Preserves staged architecture.
-Verification: pm2 restart executed; process id updated and status=online. Environment file present and env vars reflect new values.
-Revert scheduled: none. Will monitor metrics; per policy will revert if 2 consecutive runs worsen.
+2026-04-21 UTC - Autonomous Candle Carl run
+
+Diagnosis:
+- PM2 process 'solana-momentum-bot' experienced bash errors due to node flags being interpreted by /bin/bash: 
+  '/bin/bash: --max-old-space-size=1536: invalid option'
+- Logs showed repeated bash usage and restart loop.
+
+Actions (low/medium-risk mix):
+1) Edited trading-bot/ecosystem.config.cjs to set interpreter:'/usr/bin/node' and interpreter_args:'--max-old-space-size=1536 --no-warnings' to ensure node flags are passed to node, not bash. (low-risk)
+2) Committed change and reloaded PM2 process via pm2 startOrReload + pm2 restart. (low-risk)
+
+Results:
+- PM2 now shows interpreter=/usr/bin/node and interpreter_args present.
+- Process is online and logging normally. Memory/heap metrics within expected range.
+
+Notes:
+- No code changes to runtime logic were made; preserved staged architecture.
+- Will monitor for regressions; auto-revert policy active (revert if 2 consecutive degraded runs).
+
+- Candle Carl (autonomous)

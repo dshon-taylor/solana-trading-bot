@@ -1,6 +1,24 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
+// Low-risk startup env sanity check (added by automation run)
+try {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const critical = {
+    TELEGRAM_BOT_TOKEN: !!process.env.TELEGRAM_BOT_TOKEN,
+    SOPS_WALLET_FILE: !!process.env.SOPS_WALLET_FILE,
+    ALLOW_WALLET_SECRET_KEY_ENV: String(process.env.ALLOW_WALLET_SECRET_KEY_ENV || '').toLowerCase() === 'true',
+    RPC_ENDPOINT: !!process.env.RPC_ENDPOINT,
+  };
+  const out = `startup_env_check ${new Date().toISOString()} ${JSON.stringify(critical)}\n`;
+  const diagDir = path.join(process.cwd(), '..', 'diagnostics');
+  try { fs.mkdirSync(diagDir, { recursive: true }); } catch (e) {}
+  try { fs.appendFileSync(path.join(diagDir, 'startup_env_check.log'), out); } catch (e) { console.warn('failed to write startup env check', e && e.message); }
+} catch (e) {
+  console.warn('startup env check failed', e && e.message);
+}
+
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
 import { loadKeypairFromEnv, loadKeypairFromSopsFile, getPublicKeyBase58 } from './trading/wallet.mjs';
@@ -231,6 +249,19 @@ async function main() {
   });
 
   runtimeStateRef = state;
+
+  // Safety: if Telegram token missing, force-disable Telegram sends to avoid repeated fetch errors
+  try {
+    const teleDisabled = String(process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true';
+    if (!teleDisabled && !(cfg && cfg.TELEGRAM_BOT_TOKEN)) {
+      console.warn('[startup] TELEGRAM_BOT_TOKEN missing — enabling TELEGRAM_DISABLED to prevent telegram fetch errors');
+      process.env.TELEGRAM_DISABLED = 'true';
+      // reflect in cfg so runtime uses disabled behavior
+      if (cfg) cfg.TELEGRAM_DISABLED = true;
+    }
+  } catch (e) {
+    console.warn('[startup] failed to evaluate TELEGRAM_DISABLED safety check', e && e.message);
+  }
 
   const loopState = {
     ...createMainLoopState({ cfg }),

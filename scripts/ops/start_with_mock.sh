@@ -14,4 +14,4 @@ else
 fi
 
 NODE_MAX_OLD_SPACE_MB="${NODE_MAX_OLD_SPACE_MB:-4096}"
-exec node --max-old-space-size="$NODE_MAX_OLD_SPACE_MB" --no-warnings src/index.mjs
+exec node --max-old-space-size="$NODE_MAX_OLD_SPACE_MB" src/index.mjs

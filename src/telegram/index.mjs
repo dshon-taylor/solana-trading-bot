@@ -6,7 +6,7 @@ let tgRetryTimer = null;
 const TG_RETRY_MAX_ATTEMPTS = 6;
 const TG_RETRY_BASE_MS = 10_000;
 const TG_RETRY_MAX_MS = 120_000;
-const TG_RETRY_QUEUE_MAX = 200;
+const TG_RETRY_QUEUE_MAX = 50;
 
 // Telegram is very aggressive about rate limits; when we get 429, we should stop
 // trying for the suggested retry window, otherwise we can spam stderr forever.

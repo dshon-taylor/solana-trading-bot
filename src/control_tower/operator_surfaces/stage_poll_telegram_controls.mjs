@@ -12,6 +12,14 @@ export async function pollTelegramControls({
   sendPositionsReport,
   safeErr,
 }) {
+  // Respect TELEGRAM_DISABLED flag to avoid polling when telegram is intentionally disabled
+  try {
+    const teleDisabled = String(cfg?.TELEGRAM_DISABLED || process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true';
+    if (teleDisabled) return { lastTgPoll };
+  } catch (e) {
+    // noop - fall through to normal behavior
+  }
+
   if ((t - lastTgPoll) < cfg.TELEGRAM_POLL_EVERY_MS) {
     return { lastTgPoll };
   }

@@ -1,0 +1,1 @@
+2026-04-22 UTC: Reloaded environment into PM2 for solana-momentum-bot and restarted process to resolve missing HELIUS_API_KEY/KEYPAIR warnings. No code changes. Symptoms: repeated restarts and fatal Missing HELIUS_API_KEY assertion. Fix: pm2 restart --update-env; verified normal operation (memory logs, observability).
