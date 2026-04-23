@@ -10,7 +10,7 @@ module.exports = {
       // Run Node directly to avoid bash parsing node flags (low-risk change).
       script: 'src/index.mjs',
       interpreter: '/usr/bin/node',
-      node_args: ['--no-warnings','--max-old-space-size=4096'],
+      node_args: ['--no-warnings','--max-old-space-size=2048'],
       // Preserve env passthrough
       // (removed automatic passthrough of host process.env to allow env_file to be authoritative for bot config)
       // env: Object.assign({}, process.env),
