@@ -10,7 +10,7 @@ module.exports = {
       // Run Node directly to avoid bash parsing node flags (low-risk change).
       script: 'src/index.mjs',
       interpreter: '/usr/bin/node',
-      node_args: ['--no-warnings','--max-old-space-size=1536'],
+      node_args: ['--no-warnings','--max-old-space-size=2048'],
       // Preserve env passthrough
       // (removed automatic passthrough of host process.env to allow env_file to be authoritative for bot config)
       // env: Object.assign({}, process.env),
@@ -24,10 +24,10 @@ module.exports = {
       // - If the process exits before min_uptime repeatedly, PM2 will stop restarting after max_restarts.
       // - exp_backoff_restart_delay increases restart delay after each crash (reduces dependency hammering).
       min_uptime: 30000,
-      max_restarts: 5,
-      restart_delay: 60000,
-      exp_backoff_restart_delay: 10000,
-      max_memory_restart: '768M',
+      max_restarts: 10,
+      restart_delay: 120000,
+      exp_backoff_restart_delay: 60000,
+      max_memory_restart: '1G',
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
