@@ -10,7 +10,7 @@ module.exports = {
       // Run Node directly to avoid bash parsing node flags (low-risk change).
       script: 'src/index.mjs',
       interpreter: '/usr/bin/node',
-      node_args: ['--no-warnings','--max-old-space-size=2048'],
+      node_args: ['--no-warnings','--max-old-space-size=1536'],
       // Preserve env passthrough
       // (removed automatic passthrough of host process.env to allow env_file to be authoritative for bot config)
       // env: Object.assign({}, process.env),
@@ -27,7 +27,7 @@ module.exports = {
       max_restarts: 10,
       restart_delay: 120000,
       exp_backoff_restart_delay: 60000,
-      max_memory_restart: '1G',
+      max_memory_restart: '600M',
 
       // BirdEye WS feature toggles (safe rollback via env)
       env: {
@@ -48,6 +48,10 @@ module.exports = {
         WATCHLIST_EVAL_EVERY_MS: '1200000',
         // Reduce max WS subs to lower memory/FD usage (low-risk).
         BIRDEYE_WS_MAX_SUBS: '1',
+        // Ensure BirdEye Lite toggle is explicitly false here to avoid startup requirement for BIRDEYE_API_KEY
+        BIRDEYE_LITE_ENABLED: 'false',
+        // Ensure scan backoff is >= scan interval to avoid fatal validation errors
+        SCAN_BACKOFF_MAX_MS: '1200000',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
         TELEGRAM_DISABLED: 'true'
       },
