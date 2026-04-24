@@ -10,7 +10,7 @@ module.exports = {
       // Run Node directly to avoid bash parsing node flags (low-risk change).
       script: 'src/index.mjs',
       interpreter: '/usr/bin/node',
-      node_args: ['--no-warnings','--max-old-space-size=1024'],
+      node_args: ['--no-warnings','--max-old-space-size=1536'],
       // Preserve env passthrough
       // (removed automatic passthrough of host process.env to allow env_file to be authoritative for bot config)
       // env: Object.assign({}, process.env),
@@ -41,7 +41,7 @@ module.exports = {
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
         BIRDEYE_SUB_POLL_MS: '60000',
         BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
-        LOG_LEVEL: 'error',
+        LOG_LEVEL: 'warn',
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
