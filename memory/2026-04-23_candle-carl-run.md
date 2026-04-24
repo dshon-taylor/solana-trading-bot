@@ -1,11 +1,22 @@
-2026-04-23T09:35Z UTC — Candle Carl autonomous optimization run
-- Diagnostics collected: pm2 status, solana-momentum-bot logs (mem-debug), pm2 env, .env snapshot.
-- Findings: intermittent high RSS spikes up to ~962MB; routeCache entries ~22; momentumRepeatFail increased to 2; observed memory fluctuation pattern correlating with watchlist / hotQueue activity.
-- Changes applied (low-risk, 3):
-  - ROUTE_CACHE_TTL_MS: 30000 -> 15000
-  - ROUTE_CACHE_MAX_SIZE: 64 -> 32
-  - WATCHLIST_MAX_SIZE: 300 -> 200
-- Tests: restarted process with pm2 restart --update-env; process online. Post-restart logs show normal startup and mem-debug continuing to emit; RSS still fluctuates but baseline sampling shows lower heap_used in some cycles.
-- Git branch: autotune/candle-carl-2026-04-23 commit de7efd8
-- No auto-revert required.
-- Next: monitor memory for 3 runs; if RSS spikes persist, consider reducing HOT_TTL_MS or adding periodic cache cleanup; profile heap if spike > 1GB.
+2026-04-23T21:30Z UTC — Candle Carl autonomous run (cron:1cdee4b2-1b09-4220-b25e-4736574b4115)
+
+Summary:
+- Collected diagnostics: pm2 status, last 200 lines logs, /healthz (initially reachable, then briefly unreachable after restart). Logs show repeated Telegram getUpdates 404 errors earlier, but TELEGRAM_DISABLED=true so sends are skipped. Memory usage stable ~380-420MB; no active open positions. Observability entries/hour≈0.
+- Dominant bottlenecks: no runtime bottleneck detected; previous high restart counts exist historically (↺ 591), but current uptime and mem show stable process. Telegram errors are informational (disabled).
+
+Actions taken (risk budget: none/tiny):
+- Backed up trading-bot/.env and ecosystem.config.cjs to .bak.<timestamp> before committing.
+- Committed current repo changes (branch: tune/candle-carl-autotune-2026-04-23). Commit: d871a9b (pushed).
+- Restarted pm2 process with --update-env and verified PM2 reports process online. Attempted /healthz; initial reply succeeded earlier in run, immediate post-restart probe failed to connect but process logs show boot and effective config; will continue monitoring.
+
+Artifacts & locations:
+- Commit: trading-bot d871a9b
+- Backups: trading-bot/.env.bak.<timestamp>, trading-bot/ecosystem.config.cjs.bak.<timestamp>
+- PM2 status: solana-momentum-bot id=10 status=online mem≈~400MB
+- Recent logs: /home/dshontaylor/.pm2/logs/solana-momentum-bot-*.log
+
+Follow-up recommendations:
+- Monitor for further SIGINT/shutdown entries in logs (restarts history high); if restarts increase again, schedule deeper investigation into external signals and PM2 lifecycle triggers.
+- Consider cleaning up high restart count (playbook restart thresholds) if false positives.
+
+Run notes saved to trading-bot/memory/2026-04-23_candle-carl-run.md

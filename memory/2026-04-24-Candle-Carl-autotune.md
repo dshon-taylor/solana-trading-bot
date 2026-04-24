@@ -1,27 +1,17 @@
-2026-04-24T15:46Z UTC — Candle Carl autonomous optimization run
-
-Actions taken:
-- Collected diagnostics: pm2 status, pm2 show, recent logs (tail of pm2 out log).
-- Observations: high restart count historically (↺=~666), p95 event-loop latency spikes (~663ms), snapshotFailures=1820 in logs, memory varying between ~400-700MB, activeRunners=0, entries/hour low, open_positions=0.
-- Applied low-risk runtime changes to reduce flapping and memory pressure:
-  - Increased node --max-old-space-size to 2048 (from 1536)
-  - Increased PM2 max_memory_restart to 1G (from 768M)
-  - Increased PM2 restart/backoff thresholds: max_restarts=10, restart_delay=120000ms, exp_backoff_restart_delay=60000ms
-- Restarted/reloaded PM2 with updated ecosystem and verified process is online.
-- Verified critical env values present: KEYPAIR_PATH, RPC_URL, RPC, OPENAI_API_KEY (presence only, secret values not exported here).
-
-Reasoning summary:
-- Dominant bottlenecks were memory pressure leading to restarts and frequent process restarts (flapping) contributing to snapshot failures and elevated event-loop p95. Conservative increases to memory limits and restart/backoff settings should reduce churn while preserving staged architecture.
-
-Revert policy:
-- This run made only low-risk changes. If metrics worsen for 2 consecutive runs, schedule to auto-revert the latest change set (manual monitoring required).
-
-Files changed:
-- ecosystem.config.cjs (PM2/node settings)
-
-Git: committed locally (branch: tune/candle-carl-autotune-2026-04-23). Attempted push may be required by user.
-
-Next suggested steps:
-- Monitor logs and event-loop latency for 2-4 hours.
-- If event-loop p95 remains high, investigate blocking I/O or expensive synchronous ops in src/ for hotspots (cpu profiler).
-- Consider enabling playbook restart guard or reducing diagnostic retention if storage pressure appears.
+run_id: 060ed2a1-c95b-4634-b7d5-3c4fb2abd0dc
+timestamp_ct: 2026-04-24 10:09:04 CDT
+actions:
+  - identified dominant bottlenecks: high snapshotFailures (~2000), entries/hour≈0, activeRunners=0, earlier fatal validation errors in logs (BIRDEYE_LITE_ENABLED and SCAN_BACKOFF mismatch) now resolved by env defaults.
+  - low-risk changes applied:
+    - lowered WATCHLIST_EVAL_EVERY_MS from 1200000 to 120000 (increase eval frequency)
+    - set LOG_LEVEL from warn to info (increase observability)
+  - files edited: trading-bot/.env, trading-bot/ecosystem.config.cjs
+  - git: committed changes on branch tune/candle-carl-2026-04-23 (commit e6faf8afd3e80cb85a1c4cd67a11b85c068062d0)
+  - pm2: restarted solana-momentum-bot with --update-env; verified pm2 env shows WATCHLIST_EVAL_EVERY_MS=120000 and LOG_LEVEL=info
+notes:
+  - attempted to fetch /diag endpoints on 127.0.0.1:8080 but connection refused; health endpoint on 8787 also unreachable
+  - PM2 logs indicate snapshotFailures ~2000 and entries/hour≈0; memory usage ~400MB RSS; event-loop p95 ~537ms earlier
+next_steps:
+  - monitor metrics for next 2 runs; if metrics worsen for 2 consecutive runs, auto-revert latest change set
+  - consider enabling health port in code or confirm which diagnostics endpoints are exposed; user approval required before more invasive changes
+status: changes applied (low-risk).
