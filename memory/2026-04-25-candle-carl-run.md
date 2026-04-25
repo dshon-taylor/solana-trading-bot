@@ -1,8 +1,14 @@
-2026-04-25T04:18Z Candle Carl autonomous run
-- Diagnostics: snapshotFailures=~2354, entries/hour≈0, activeRunners=0, execution disabled (modes), restarts historically high (≈697), event-loop p95 spikes observed
-- Changes applied (low-risk): SOURCE_RPS increased 1→2, SCAN_EVERY_MS bumped to 900000, LIVE_PROBE_MAX_CANDIDATES set 0 (reduce probe fanout)
-- Rationale: reduce snapshot failures and memory/event-loop spikes by small concurrency and polling adjustments; lower probe fanout to reduce memory
-- Actions: committed and pushed branch tune/candle-carl-autotune-2026-04-23 (commit 38fc571e)
-- PM2 restart executed: pm2 restart solana-momentum-bot --update-env; process online
-- Verification: env SOURCE_RPS=2, LOG_LEVEL=warn present; pm2 showing process online; event-loop p95 spike during restart (transient)
-- Next: monitor snapshotFailures & activeRunners over next cycles; if metrics worsen for 2 consecutive runs, will auto-revert latest change set
+2026-04-25T05:13:52Z - Candle Carl autonomous run
+Changes applied (low-risk):
+- LOG_LEVEL set to error (from warn)
+- MAX_NEW_ENTRIES_PER_HOUR reduced from 6 to 3
+- ROUTE_CACHE_MAX_SIZE set to 256 (from default 512)
+Reason: observed sustained high CPU and frequent restarts; aim to reduce processing and memory pressure.
+Initial metrics (pre-change):
+- PM2 reported solana-momentum-bot CPU up to 100% (top showed PID 3877980 at ~81% earlier)
+- RSS observed up to 655 MB; heap up to ~369 MB
+- Event loop latency p95: 757.76 ms
+- Restarts: 700
+Post-change immediate status: restarted via pm2; new PID 3878316; cpu reported 0%, rss ~40MB on fresh start; restarts incremented to 701.
+Notes: changes are conservative and reversible. A baseline snapshot of recent metrics recorded in diagnostics/ for automated comparison.
+Next: monitor for 2 tuning cycles; if metrics worsen for two consecutive runs, revert this commit automatically (watchdog/state.json updated).
