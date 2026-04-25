@@ -1,12 +1,14 @@
-Autonomous Candle Carl notes (2026-04-25)
+Candle Carl — autonomous optimization notes (2026-04-25)
 
-Actions taken:
-- Lowered LOG_LEVEL to error to reduce verbose telemetry.
-- Reduced MAX_NEW_ENTRIES_PER_HOUR to 3 to lower processing load.
-- Set ROUTE_CACHE_MAX_SIZE=256 to reduce memory usage.
+Summary:
+- Collected runtime diagnostics; found snapshotFailures high (2438), activeRunners=0, entries/hour≈0.
+- Observed config/autotune_overrides.json present (rps=4, scanEveryMs=30000) but not reflected in effective runtime config (rps=1, scanEveryMs=900000).
+- Likely cause: process not reloaded with updated env/config or runtime not loading autotune_overrides.json.
 
-Rationale:
-Observed high CPU and memory spikes, frequent pm2 restarts. All changes are low-risk parameter tweaks designed to reduce workload without altering architecture.
+Action items:
+- Confirm pm2 restart with --update-env to ensure .env.* is reloaded.
+- If overrides still not applied, add explicit loading of config/autotune_overrides.json in boot path (low-risk patch: read and merge on startup).
+- Monitor snapshotFailures and activeRunners; aim to reduce snapshotFailures below 100 within next 24h before enabling execution=true.
 
-Rollback policy:
-If tracked metrics (CPU p95, RSS, event-loop p95, restart count) worsen for two consecutive Candle Carl runs after this change set, the system will revert these changes automatically. Monitoring will compare diagnostics in diagnostics/ and watchdog/state.json.
+Notes:
+- No high-risk changes applied during this run. Restart executed and notes committed.
