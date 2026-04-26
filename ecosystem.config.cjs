@@ -24,9 +24,9 @@ module.exports = {
       // - If the process exits before min_uptime repeatedly, PM2 will stop restarting after max_restarts.
       // - exp_backoff_restart_delay increases restart delay after each crash (reduces dependency hammering).
       min_uptime: 30000,
-      max_restarts: 10,
+      max_restarts: 5,
       restart_delay: 120000,
-      exp_backoff_restart_delay: 60000,
+      exp_backoff_restart_delay: 120000,
       max_memory_restart: '700M',
 
       // BirdEye WS feature toggles (safe rollback via env)
@@ -41,20 +41,25 @@ module.exports = {
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
         BIRDEYE_SUB_POLL_MS: '60000',
         BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
-        LOG_LEVEL: 'info', // raised verbosity for better observability (low-risk)
+        LOG_LEVEL: 'info', // reduced to restore observability entries (autonomous low-risk)
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: '120000', // lowered by Candle Carl (low-risk)
+        WATCHLIST_EVAL_EVERY_MS: '300000', // increased to 5m by Candle Carl (low-risk)
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: '1',
+        BIRDEYE_WS_MAX_SUBS: '2',
+        // Lower hot cap to reduce concurrent subscription bursts (low-risk)
+        BIRDEYE_WS_HOT_CAP: '2',
         // Ensure BirdEye Lite toggle is explicitly false here to avoid startup requirement for BIRDEYE_API_KEY
         BIRDEYE_LITE_ENABLED: 'false',
         // Ensure scan backoff is >= scan interval to avoid fatal validation errors
         SCAN_BACKOFF_MAX_MS: '1200000',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
-        TELEGRAM_DISABLED: 'true'
+        TELEGRAM_DISABLED: 'true',
+        // Ensure a fallback SOLANA RPC URL so process can start even if env_file parsing fails.
+        SOLANA_RPC_URL: 'https://api.mainnet-beta.solana.com'
       },
+
 
 
 
