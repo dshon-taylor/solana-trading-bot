@@ -45,11 +45,11 @@ module.exports = {
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
-        WATCHLIST_EVAL_EVERY_MS: '300000', // increased to 5m by Candle Carl (low-risk)
+        WATCHLIST_EVAL_EVERY_MS: '600000', // increased to 10m by Candle Carl (low-risk)
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: '2',
+        BIRDEYE_WS_MAX_SUBS: '1',
         // Lower hot cap to reduce concurrent subscription bursts (low-risk)
-        BIRDEYE_WS_HOT_CAP: '2',
+        BIRDEYE_WS_HOT_CAP: '1',
         // Ensure BirdEye Lite toggle is explicitly false here to avoid startup requirement for BIRDEYE_API_KEY
         BIRDEYE_LITE_ENABLED: 'false',
         // Ensure scan backoff is >= scan interval to avoid fatal validation errors
