@@ -1,14 +1,6 @@
-Candle Carl — autonomous optimization notes (2026-04-25)
-
-Summary:
-- Collected runtime diagnostics; found snapshotFailures high (2438), activeRunners=0, entries/hour≈0.
-- Observed config/autotune_overrides.json present (rps=4, scanEveryMs=30000) but not reflected in effective runtime config (rps=1, scanEveryMs=900000).
-- Likely cause: process not reloaded with updated env/config or runtime not loading autotune_overrides.json.
-
-Action items:
-- Confirm pm2 restart with --update-env to ensure .env.* is reloaded.
-- If overrides still not applied, add explicit loading of config/autotune_overrides.json in boot path (low-risk patch: read and merge on startup).
-- Monitor snapshotFailures and activeRunners; aim to reduce snapshotFailures below 100 within next 24h before enabling execution=true.
-
-Notes:
-- No high-risk changes applied during this run. Restart executed and notes committed.
+2026-04-26 — Autonomous run summary
+- Applied low-risk tuning to reduce RPC/CPU pressure and restore observability.
+- Files changed:
+  - .env: SCAN_EVERY_MS increased to 1200000; BIRDEYE_WS_ENABLED set to false; WATCHLIST_EVAL_EVERY_MS increased to 600000
+  - ecosystem.config.cjs: LOG_LEVEL set to 'info' to ensure pm2 picks up runtime logging level
+- Rationale: reduce snapshot/RPC load and disable websocket subscriptions to prevent subscription churn and snapshotFailures. Monitor snapshotFailures and entries/hour; revert if metrics degrade on 2 consecutive runs.
