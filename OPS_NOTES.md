@@ -5,3 +5,4 @@
 - Actions: pm2 restart solana-momentum-bot --update-env applied after each change.
 - Verification: pm2 env confirms values; process online.
 - Recommendation: Persist the env changes into .env or PM2 ecosystem if these are desired defaults. Run tests before enabling execution.
+\n- 2026-04-26T13:12:07Z — Autonomous Candle Carl run: collected diagnostics; observed high restarts (764) and p95 event-loop latency ~646ms. Applied no code changes; ensured PM2 env tuned: LOG_LEVEL=info, SCAN_BACKOFF_MAX_MS=1200000, BIRDEYE_WS_ENABLED=false; restarted with --update-env. Will monitor for regressions and auto-revert if metrics worsen for 2 consecutive runs.

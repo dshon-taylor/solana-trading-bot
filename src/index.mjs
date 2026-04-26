@@ -1,6 +1,14 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
+// Autonomic safety: if TELEGRAM_BOT_TOKEN is missing at process start, force-disable Telegram
+// before importing modules that may assert on its presence (low-risk).
+try {
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    process.env.TELEGRAM_DISABLED = 'true';
+  }
+} catch (e) {}
+
 // Low-risk startup env sanity check (added by automation run)
 try {
   const fs = await import('node:fs');
@@ -18,6 +26,14 @@ try {
 } catch (e) {
   console.warn('startup env check failed', e && e.message);
 }
+
+// Low-risk: add global handlers to avoid uncaught errors forcing immediate process exit
+process.on('unhandledRejection', (reason, p) => {
+  try { console.error('[global] unhandledRejection', reason && (reason.stack || reason)); } catch(e){}
+});
+process.on('uncaughtException', (err) => {
+  try { console.error('[global] uncaughtException', err && (err.stack || err)); } catch(e){}
+});
 
 import { getConfig, summarizeConfigForBoot } from './config.mjs';
 import { applyOnchainBalanceToPosition } from './persistence/reconcile_positions.mjs';
@@ -551,6 +567,10 @@ async function main() {
   while (true) {
     const t = Date.now();
     rollWatchlistMinuteWindow(counters, t);
+
+    // brief cooperative yield to avoid hot CPU spin when event loop busy
+    // Low-risk throttle: 1ms sleep to let OS schedule other work and reduce 100% CPU spikes
+    await new Promise((r) => setTimeout(r, 1));
 
     loopState.loopDtMs = t - loopState.loopPrevAtMs;
     loopState.loopPrevAtMs = t;

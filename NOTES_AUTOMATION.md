@@ -1,0 +1,2 @@
+2026-04-25 - Autonomous run: Restarted solana-momentum-bot to recover from high-CPU/busy-loop symptoms. No code changes. Observability showed high snapshotFailures and activeRunners=0; restart restored listeners and lowered CPU.
+Recommendation: If snapshotFailures continue to accumulate, add a temporary observability throttle or defensive check to avoid busy loops in snapshot runner. Prefer low-risk config toggles before code changes.

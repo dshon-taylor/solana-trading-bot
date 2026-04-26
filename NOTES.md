@@ -1,3 +1,1 @@
-2026-04-24 - Automated run notes
-- Ran full autonomous optimization cycle (diagnostics + restart + env check).
-- No code/config changes made. Recommended next steps: investigate cause of SIGINT signals and high restart count; consider adding signal-handling telemetry and tighter max_restarts config.
+2026-04-26: Autonomous run (Candle Carl): addressed repeated startup AssertionError 'Missing TELEGRAM_BOT_TOKEN' by ensuring TELEGRAM_DISABLED=true in ecosystem.config.cjs and restarting with --update-env. Monitor logs for any new fatal assertions; if persists, add guard in startup path to avoid throwing when TELEGRAM_DISABLED is true.

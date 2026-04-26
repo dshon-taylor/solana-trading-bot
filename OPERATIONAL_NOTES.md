@@ -11,3 +11,4 @@ Proposals (low-risk):
 3) Add graceful SIGINT handler in code to differentiate intended restarts from external interrupts.
 
 No code changes applied in this run to preserve staged architecture.
+- 2026-04-26: Candle Carl autonomous run: added SOLANA_RPC_URL placeholder to .env.candle_carl; reloaded PM2. Process online (check logs for remaining validation errors). Recommend secure deploy of SOLANA_RPC_URL & HELIUS_API_KEY and verify ecosystem.env_file loading.

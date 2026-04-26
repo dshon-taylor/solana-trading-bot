@@ -11,6 +11,21 @@ function assertEndpointUrl(name, value, allowedProtocols, { optional = false } =
     if (optional) return;
     throw new Error(`${name} must be a non-empty URL`);
   }
+  // Allow comma-separated lists (e.g. multiple RPC endpoints). Validate each entry if present.
+  if (raw.includes(',')) {
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.length) throw new Error(`${name} must be a non-empty URL list`);
+    for (const p of parts) {
+      let parsed;
+      try { parsed = new URL(p); } catch { throw new Error(`${name} contains an invalid URL`); }
+      const proto = String(parsed.protocol || '').toLowerCase();
+      if (!allowedProtocols.includes(proto)) {
+        throw new Error(`${name} must use one of: ${allowedProtocols.join(', ')}`);
+      }
+    }
+    return;
+  }
+
   let parsed;
   try {
     parsed = new URL(raw);
@@ -27,8 +42,11 @@ function validateConfig(cfg) {
   // Catch the most common production foot-guns early.
   // HELIUS_API_KEY is optional in some deployments; warn but don't crash.
   if (!cfg.HELIUS_API_KEY) console.warn('Missing HELIUS_API_KEY — helius-dependent features will be limited');
-  assert(cfg.TELEGRAM_BOT_TOKEN, 'Missing TELEGRAM_BOT_TOKEN');
-  assert(cfg.TELEGRAM_CHAT_ID, 'Missing TELEGRAM_CHAT_ID');
+  // Allow missing Telegram config when TELEGRAM_DISABLED=true (deployed without Telegram).
+  if (!cfg.TELEGRAM_DISABLED) {
+    assert(cfg.TELEGRAM_BOT_TOKEN, 'Missing TELEGRAM_BOT_TOKEN');
+    assert(cfg.TELEGRAM_CHAT_ID, 'Missing TELEGRAM_CHAT_ID');
+  }
 
   // Basic numeric sanity.
   for (const [k, v] of Object.entries(cfg)) {
@@ -196,8 +214,12 @@ export function getConfig() {
 
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-  assert(TELEGRAM_BOT_TOKEN, 'Missing TELEGRAM_BOT_TOKEN');
-  assert(TELEGRAM_CHAT_ID, 'Missing TELEGRAM_CHAT_ID');
+  const TELEGRAM_DISABLED = String(process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true';
+  // If Telegram is explicitly disabled in the environment, allow missing token/chat id.
+  if (!TELEGRAM_DISABLED) {
+    assert(TELEGRAM_BOT_TOKEN, 'Missing TELEGRAM_BOT_TOKEN');
+    assert(TELEGRAM_CHAT_ID, 'Missing TELEGRAM_CHAT_ID');
+  }
 
   // Trading rules
   const STARTING_CAPITAL_USDC = Number(process.env.STARTING_CAPITAL_USDC || 100);
