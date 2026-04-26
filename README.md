@@ -39,3 +39,9 @@ Notes (2026-04-26):
 - Next steps: inspect bot logs (pm2 logs solana-momentum-bot), verify process PID vs heartbeat write permissions, confirm binding to HEALTH_PORT, and monitor snapshotFailures metric for downward trend. If metrics worsen for 2 consecutive runs after this change set, auto-revert latest change set per policy.
 
 Autonomy note: changes were low-risk, non-destructive, preserved staged architecture. No external messages sent.
+
+Notes (2026-04-26 secondary run):
+- This runner environment lacked PM2 and network remote 'origin', so restart and push could not be executed here.
+- Actions taken locally: committed diagnostics, logs, and memory/trading-bot README updates to local branch tune/candle-carl-2026-04-23 (commit 96b69ee).
+- Push status: failed because no 'origin' remote is configured or reachable from this environment.
+- Recommendation: run the PM2 restart and git push from the deployment host or provide the runner with access to PM2 and git remotes.

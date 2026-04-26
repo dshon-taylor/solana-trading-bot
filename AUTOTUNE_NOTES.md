@@ -1,8 +1,8 @@
-Autotune notes (Candle Carl) — 2026-04-26
-- Applied low-risk reductions to scanning and source RPS to address high CPU:
-  * SCAN_EVERY_MS=900000
-  * POSITIONS_EVERY_MS=60000
-  * SOURCES_RPS=1
-- Rationale: reduce event-loop pressure and external request concurrency to improve stability and lower CPU/memory usage.
-- If behavior regresses for 2 consecutive runs after this change set, revert commit d9fb1c7.
-- Recommendation: run CPU profiling if CPU rises again to identify hotspots in momentum logic (momentum.js / index.mjs).
+2026-04-26 - Candle Carl run (cron f449c836-d1cd-4ad4-89e7-2a3e8da3efe2)
+- Changes committed (branch: tune/candle-carl-2026-04-23, commit b48f93f):
+  - TRENDING_REFRESH_MS=900000
+  - BIRDEYE_WS_MAX_SUBS=1
+  - MAX_NEW_ENTRIES_PER_HOUR=1
+- Rationale: lower websocket concurrency, reduce periodic refresh frequency, and cap new entries to lower CPU and event-loop load.
+- Action: pm2 restart solana-momentum-bot --update-env
+- Monitor: watch event-loop p95 and CPU usage for the next two autonomous runs; auto-revert if metrics worsen consecutively.

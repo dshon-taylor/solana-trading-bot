@@ -14,7 +14,7 @@ let tgCooldownUntilMs = 0;
 let lastCooldownLogMs = 0;
 let lastSkipLogMs = 0;
 
-const TELEGRAM_DISABLED = String(process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true';
+const TELEGRAM_DISABLED = String(process.env.TELEGRAM_DISABLED || '').trim().toLowerCase() === 'true' || String(process.env.TELEGRAM_BOT_TOKEN || '').includes('DISABLED');
 let telegramDisabledNoticeLogged = false;
 function telegramDisabled(context = 'send') {
   if (!TELEGRAM_DISABLED) return false;

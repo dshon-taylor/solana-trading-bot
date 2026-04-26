@@ -56,6 +56,9 @@ module.exports = {
         SCAN_BACKOFF_MAX_MS: '1200000',
         // Default to disabling Telegram in production unless explicitly enabled (prevents unhandled fetch errors).
         TELEGRAM_DISABLED: 'true',
+        // Provide a harmless placeholder TELEGRAM_BOT_TOKEN to satisfy runtime assertions when telegram is disabled.
+        // This is a low-risk, non-secret placeholder; real token should be provided via .env when enabling Telegram.
+        TELEGRAM_BOT_TOKEN: 'TELEGRAM_DISABLED_PLACEHOLDER',
         // Ensure a fallback SOLANA RPC URL so process can start even if env_file parsing fails.
         SOLANA_RPC_URL: 'https://api.mainnet-beta.solana.com'
       },
