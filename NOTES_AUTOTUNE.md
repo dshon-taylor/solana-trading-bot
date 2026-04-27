@@ -1,5 +1,6 @@
-2026-04-25T10:48Z — Autonomous Candle Carl optimization cycle run.
-- Diagnostics collected: pm2 status/show/env, recent logs.
-- Observations: repeated SIGINTs causing restarts; OBSERVABILITY snapshotFailures=2498, entries/hour≈0.
-- Action taken: no code/config changes applied (risk-averse). Performed pm2 restart with --update-env and verified key envs present (RPC, RPC_URL, KEYPAIR_PATH, TELEGRAM_DISABLED, OPENAI_API_KEY).
-- Recommendation: investigate source of SIGINTs and snapshotFailures; consider temporarily disabling observability snapshotting if instability continues.
+2026-04-27T01:13:30Z - Candle Carl autonomous run
+- Low-risk changes applied to reduce event-loop load and websocket churn:
+  - LOG_LEVEL set from warn -> error to reduce logging volume
+  - BIRDEYE_WS_STALE_MS increased from 800 -> 5000 to reduce websocket reconnects/stale handling frequency
+- Commit: f97d422
+- Monitoring: track event-loop p95 and CPU; revert if metrics worsen for two consecutive runs.
