@@ -41,13 +41,13 @@ module.exports = {
         BIRDEYE_WS_IMPACT_THRESHOLD_PCT: '3',
         BIRDEYE_SUB_POLL_MS: '60000',
         BIRDEYE_WATCHLIST_SUB_TTL_MS: '300000',
-        LOG_LEVEL: 'info', // reduced to restore observability entries (autonomous low-risk)
+        LOG_LEVEL: 'warn', // lowered to reduce logging overhead (autonomous low-risk)
         BIRDEYE_WS_FRESHNESS_BYPASS_MS: '10000',
         BIRDEYE_EARLY_SUB_TTL_MS: '90000',
         // Reduce watchlist eval frequency to lower CPU and memory pressure (low-risk).
         WATCHLIST_EVAL_EVERY_MS: '600000', // increased to 10m by Candle Carl (low-risk)
         // Reduce max WS subs to lower memory/FD usage (low-risk).
-        BIRDEYE_WS_MAX_SUBS: '1',
+        BIRDEYE_WS_MAX_SUBS: '0',
         // Lower hot cap to reduce concurrent subscription bursts (low-risk)
         BIRDEYE_WS_HOT_CAP: '1',
         // Ensure BirdEye Lite toggle is explicitly false here to avoid startup requirement for BIRDEYE_API_KEY
